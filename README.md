@@ -4,6 +4,8 @@
 >
 > **依赖版本未锁定，当前不可称为可复现交付。** 本仓库尚未提供许可证；公开发布前由组长确认授权方式。
 
+开发文档：[组员操作手册](docs/onboarding.md) · [全程路线图](docs/roadmap.md) · [九人 AI 提示词](docs/ai_prompts.md)。
+
 ## 范围与责任
 
 Python 目标版本为 3.11/3.12。`src/g15/` 各模块目前是空占位；模块负责人按 `docs/development.md` 与各自 Issue 实现，不能将结构烟测当成功能验收。Ubuntu 24.04 LTS / RHEL 9 的安装运行尚未验证。
