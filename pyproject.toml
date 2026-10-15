@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "g15-predictive-maintenance"
+version = "0.0.0"
+description = "G15 predictive-maintenance sandbox skeleton (Issue #1 only)"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy",  # TODO: 待锁定；本轮仅初始化
+    "PyYAML",  # TODO: 待锁定；本轮仅初始化
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311", "py312"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pylint.main]
+source-roots = ["src"]
+
+[tool.pylint.format]
+max-line-length = 88

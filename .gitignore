@@ -1,0 +1,38 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# Generated data and large datasets
+runs/
+data/raw/
+datasets/
+*.npz
+*.npy
+*.parquet
+*.feather
+*.sqlite
+*.sqlite3
+*.db
+*.log
+
+# Credentials and personal/workstation files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+*.p12
+.obsidian/
+.idea/
+.DS_Store
+Thumbs.db
