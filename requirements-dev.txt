@@ -1,0 +1,5 @@
+# TODO: 待锁定。未固定版本，当前不可称为可复现交付。
+-r requirements.txt
+black
+pylint
+pytest
