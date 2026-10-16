@@ -1,6 +1,6 @@
 # G15 九位成员 AI 提示词手册
 
-> 本文状态：草案／待评审；适用对象：A、B1、B2、C1–C6 及各自使用的 AI；更新日期：2026-10-15。
+> 本文状态：草案／待评审；适用对象：A、B1、B2、C1–C6 及各自使用的 AI；更新日期：2026-10-16。
 >
 > **现状**：Issue #1 只交付骨架与包导入烟测；#2–#11 共十个 Issue、九位负责人，C4 负责 #3 和 #11。`docs/interface.md`、`docs/development.md` 均待评审，公共函数签名、Schema、配置键、CLI 都不是已实现/已冻结事实。`src/g15/__main__.py` 的 CLI 实测以 `1` 报“未实现”，脚本也报“未实现”并退出 `1`；契约中 `validate` 退出 `0/2` 是未来目标，性能、检出率、双 Linux 均未实测。依赖版本尚未锁定。**提示词只能帮助负责人做一个 Issue，AI 不代替人负责。**
 
@@ -53,7 +53,7 @@
 
 ```text
 你是 G15 的 A（工程治理）。只处理 Issue #2「需求、架构与 ADR 文档 + 接口评审记录」；本轮先回报、不要动文件。请先实际读 AGENTS.md、docs/development.md、members/A/AGENT.md、Issue #2 正文、docs/interface.md §0、§2、§4–§6、§10、§13–§14 和现有待写文档。看不到材料就请求粘贴，不能猜测。
-本次只允许修改：docs/requirements.md、docs/architecture.md、docs/feasibility.md、docs/adr/*。
+本次只允许修改：docs/feasibility.md、docs/requirements.md、docs/architecture.md、docs/adr/*。
 你的角色长期白名单见 members/A/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 使命与输入/输出契约：以 docs/interface.md §0、§2、§14 的需求/组件/追踪目标为输入，结合 §4 配置、§5 NPZ/Manifest、§6 公共接口、§10 CLI 及 §13 变更流程写用户故事、架构与 ADR；输出有版本和责任人的需求—验收映射与真实接口评审记录。不得宣称 §4–§10 已冻结、业务闭环已实现或性能已通过。
 边界：≥8 用户故事、≥3 里程碑、≥3 风险及一份真实评审记录；若会议尚未举行，只提供“待评审草稿”，不伪造参会人/结论。不得代写其他角色算法或改 CI/README/公共签名。
@@ -79,11 +79,11 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 B1（退化趋势 + 噪声仿真）。只处理 Issue #5；本轮先回报、不要动文件。读 AGENTS.md、docs/development.md、members/B1/AGENT.md、Issue #5 正文、docs/interface.md §4、§5.1、§6、§7、现有 simulation 文件和测试；没有文件访问能力就请求粘贴。
-本次只允许修改：src/g15/simulation/engine.py、src/g15/simulation/degradation.py、src/g15/simulation/noise.py。
+本次只允许修改：src/g15/simulation/engine.py、src/g15/simulation/degradation.py、src/g15/simulation/noise.py、tests/unit/test_simulation*.py、tests/performance/test_simulation_benchmark.py、docs/adr/0001-simulation-model-and-determinism.md、docs/adr/b1-issue5-report.md。
 你的角色长期白名单见 members/B1/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§4 校验后的场景参数与 seed；§6 simulate_chunk 的拟定输入/返回；§7 趋势、噪声、分片和百万点计时口径；§5.1 的 seq/timestamp_ns/vibration/temperature 目标类型与单位。公共类型位置待 A/C3/C4 评审，不能自行给别人模块补签名。
-必须实现：同配置同 seed 逐点一致，最后不足分片、零噪声、非法输入明确失败；向量化而非逐点 Python 百万次循环。第 1 天先拿出百万点基准脚本方案；脚本若落在 tests/performance/（当前只占位）须由 A 先授权纳入本 Issue，标为“本 Issue 内新建”，不得擅改 C6 的 scripts/benchmark.sh。算法计时不能充当含写盘+Manifest 的正式 <60s 验收。
-必须补测试：seed 重复/变更、双信号 dtype 与单位、起止 seq、尾块、无效参数；tests/unit/test_simulation*.py、tests/performance/ 用例目前不存在，先申请本 Issue 测试路径授权，再在本 Issue 内新建。
+必须实现：同配置同 seed 逐点一致，最后不足分片、零噪声、非法输入明确失败；向量化而非逐点 Python 百万次循环。第 1 天先拿出百万点基准脚本方案；已明确授权的基准落点为 tests/performance/test_simulation_benchmark.py；其他性能文件仍须另列范围，不得擅改 C6 的 scripts/benchmark.sh。算法计时不能充当含写盘+Manifest 的正式 <60s 验收。
+必须补测试：seed 重复/变更、双信号 dtype 与单位、起止 seq、尾块、无效参数；tests/unit/test_simulation*.py 原已授权。A 于 2026-10-16 明确补充 tests/performance/test_simulation_benchmark.py 和两份点名 ADR/报告路径；只按 Issue 当前完整范围实施，不泛化为整个 tests/performance/ 或 docs/adr/ 均获授权。ADR 仍为待评审草稿。
 本地验收命令：按本手册 §0 的所属平台执行 Black、Pylint、pytest 三项；就绪后由 C4/C5 协作测含落盘真实基准，未运行/未接通明确记录。
 终端质量命令（先按 §0 安装虚拟环境；在仓库根目录仅复制本机对应的三行，Windows Git Bash/PowerShell 通用；如本 Issue 不涉及源码也需如实说明是否运行）：
 Windows Git Bash/PowerShell（仅复制以下三行）：
@@ -104,11 +104,11 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 B2。只处理 Issue #7「特征 / 健康评分 / 告警」；先回报，不修改。实际读取 AGENTS.md、docs/development.md、members/B2/AGENT.md、Issue #7、docs/interface.md §4、§6、§8、§9 和现有分析模块/规则配置；读不到就请我粘贴。
-本次只允许修改：src/g15/analysis/*、configs/health_rules.yaml。
+本次只允许修改：src/g15/analysis/features.py、src/g15/analysis/health.py、src/g15/analysis/alarms.py、configs/health_rules.yaml、tests/unit/test_analysis*.py。
 你的角色长期白名单见 members/B2/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§6 extract_features/score_health/evaluate_alarm 拟定接口；§8 窗口、至少 5 项特征、健康分 [0,100]、黄红级告警与状态；§4 消费配置和规则文件；§9 的 alarm_states 是待评审候选，与 C2 约定后交 A 审，不能单方面当成已定结构。
 必须实现：常值/全零窗口不产生 NaN/Inf；非有限值/空窗明确失败；规则版本和告警原因可追踪；消费者/analysis 不读 private_truth、场景 fault_generation 或事件位置；不能把所有窗口判为故障、不能自改评分阈值以制造检出率。
-必须补测试：已知数组手算参考、至少 5 特征、常值窗口、评分范围与边界、连续 N 窗口/恢复；tests/unit/test_features.py、test_health.py、test_alarms.py 目前不存在，先申请加入本 Issue 修改范围，再标注“本 Issue 内新建”。
+必须补测试：已知数组手算参考、至少 5 特征、常值窗口、评分范围与边界、连续 N 窗口/恢复；在已授权的 tests/unit/test_analysis*.py 下新建，例如 test_analysis_features.py、test_analysis_health.py、test_analysis_alarms.py；不要另用不匹配该 glob 的测试文件名。
 本地验收命令：按本手册 §0 运行所属平台 Black/Pylint/pytest，记录真实退出码；未接好 C3/C2 接口时说明未能验证的部分。
 终端质量命令（先按 §0 安装虚拟环境；在仓库根目录仅复制本机对应的三行，Windows Git Bash/PowerShell 通用；如本 Issue 不涉及源码也需如实说明是否运行）：
 Windows Git Bash/PowerShell（仅复制以下三行）：
@@ -129,11 +129,11 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 C1。只做 Issue #6「故障注入（spike/step/burst）」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C1/AGENT.md、Issue #6、docs/interface.md §4、§5.3、§6、§7 和现有 faults.py；无法访问请我粘贴。
-本次只允许修改：src/g15/simulation/faults.py。
+本次只允许修改：src/g15/simulation/faults.py、tests/unit/test_faults*.py。
 你的角色长期白名单见 members/C1/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§4 events 的 event_id/type/start_seq/duration_points/amplitude；§6 inject_faults 的拟定签名；§7 的 spike、step、burst/叠加策略；§5.3 真值按半开区间且仅供验证器，不得塞进公开 NPZ/Manifest 供消费者读。
 边界：起点、时长、幅度可指定；首尾点/跨片/事件重叠/空事件/非法类型均明确处理；跨片同 event_id 在一次 run 的真值清单里不能重复。不能改 B1 仿真公式或 B2 阈值，也不能写死事件一定产生告警。
-必须补测试：spike/step/burst 数值断言和事件区间、跨片、叠加、非法事件；tests/unit/test_faults.py 和小样例 fixtures 当前不存在，先请 A 把必要测试路径加入 Issue，再在本 Issue 内新建。
+必须补测试：spike/step/burst 数值断言和事件区间、跨片、叠加、非法事件；tests/unit/test_faults*.py 已授权，可在本 Issue 内新建。额外的独立 fixtures 路径若不在 Issue 范围，再向 A 申请。
 本地验收命令：本手册 §0 的所属平台 Black/Pylint/pytest；真值写盘由 C4 生产入口负责，未联调则标未运行。
 终端质量命令（先按 §0 安装虚拟环境；在仓库根目录仅复制本机对应的三行，Windows Git Bash/PowerShell 通用；如本 Issue 不涉及源码也需如实说明是否运行）：
 Windows Git Bash/PowerShell（仅复制以下三行）：
@@ -154,11 +154,11 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 C2。只做 Issue #8「消费入口与 SQLite 存储」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C2/AGENT.md、Issue #8、docs/interface.md §4、§5、§6、§8–§9 与当前 consumer/storage；看不到请我粘贴。
-本次只允许修改：src/g15/pipeline/consumer.py、src/g15/storage/*。
+本次只允许修改：src/g15/pipeline/consumer.py、src/g15/storage/database.py、src/g15/storage/repository.py、tests/unit/test_consumer*.py。
 你的角色长期白名单见 members/C2/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§4 consumer.yaml 只能配置窗口/规则，不能有故障位置；§5 只读 status=complete 的 Manifest 与经 SHA 验证的 NPZ（不读 private_truth）；§6 consume_run 拟定接口；§8 特征/告警；§9 SQLite 外键、唯一键、事务与待评审 alarm_states。
 边界：feature_windows、alarms、processed_chunks 与审定告警状态同一事务提交；重复相同 SHA 跳过、同 part_id 不同 SHA 明确报错；kill -9 只能在 Linux 验证，Windows 做等价进程终止方案时不可冒称 kill -9 已实测；未完成清单/坏哈希不得产生部分可信结果。B2/C2 状态持久化方案必须先交 A 审。
-必须补测试：两次消费行数相等、事务中断回滚/恢复、坏哈希、外键、未完成清单与真值隔离；tests/unit/test_storage.py、tests/integration/test_consumer.py、tests/fault_injection/test_recovery.py 当前不存在，如需改动先把路径列入 Issue 授权，本 Issue 内新建，并同 C5 协调归属。
+必须补测试：两次消费行数相等、事务中断回滚/恢复、坏哈希、外键、未完成清单与真值隔离；在已授权的 tests/unit/test_consumer*.py 下新建，例如 test_consumer_storage.py。跨模块集成与真实进程终止测试由 C5 协调；拟改 tests/integration/ 或 tests/fault_injection/ 时另行明确 Issue 授权。
 本地验收命令：本手册 §0 的 Black/Pylint/pytest；Linux kill -9 重放在联调完成后单独留命令/行数证据，未运行写未运行。
 终端质量命令（先按 §0 安装虚拟环境；在仓库根目录仅复制本机对应的三行，Windows Git Bash/PowerShell 通用；如本 Issue 不涉及源码也需如实说明是否运行）：
 Windows Git Bash/PowerShell（仅复制以下三行）：
@@ -179,11 +179,11 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 C3。只做 Issue #4「配置加载校验 + validate 命令」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C3/AGENT.md、Issue #4、docs/interface.md §4、§6、§10，及现有 config.py、cli.py、__main__.py、configs/*.yaml；无访问能力请我粘贴。
-本次只允许修改：src/g15/config.py、configs/*.yaml、src/g15/cli.py、src/g15/__main__.py。
+本次只允许修改：src/g15/config.py、configs/*.yaml、src/g15/cli.py、src/g15/__main__.py、tests/unit/test_config.py。
 你的角色长期白名单见 members/C3/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§4 场景配置与不含故障位置的 consumer.yaml；§6 load_config/validate_config/load_consumer_config 拟定接口；§10 CLI 入口/退出码。当前 validate 实测报“CLI 未实现”退出 1；合法 0、非法配置 2 是未来目标，不是当前结果。
 必须实现：安全加载 YAML、未知字段拒收，负噪声/无效概率/缺文件/坏日期给准确错误；消费配置不向分析层传 fault_generation；CLI 只解析/分派/映射错误码，未实现其他子命令仍非零失败；公共键名/命令参数先由 A/C4 审查，configs/health_rules.yaml 的业务规则归 B2，虽在本次 configs/*.yaml 范围内也不能单改评分内容。
-必须补测试：合法/非法/未知键/错类型/缺文件/CLI 非法参数和 --help；tests/unit/test_config.py、tests/integration/test_cli.py 当前不存在，先向 A 申请明确纳入本 Issue 范围，再在本 Issue 内新建，并与 C5 对齐。
+必须补测试：合法/非法/未知键/错类型/缺文件/CLI 非法参数和 --help；tests/unit/test_config.py 已授权，可在本 Issue 内新建，并在该文件测试配置与 validate 入口。若需要新增 tests/integration/test_cli.py，再向 A 申请或由 C5 负责。
 本地验收命令：本手册 §0 的平台 Black/Pylint/pytest；实现后验证 python -m g15 validate --config configs/default.yaml 的实际退出码 0，以及非法配置实际退出码 2；在实现前不可把此命令标为成功。
 终端质量命令（先按 §0 安装虚拟环境；在仓库根目录仅复制本机对应的三行，Windows Git Bash/PowerShell 通用；如本 Issue 不涉及源码也需如实说明是否运行）：
 Windows Git Bash/PowerShell（仅复制以下三行）：
@@ -206,7 +206,7 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 C4，本次只做 Issue #3「NPZ 分片与 Manifest 序列化契约」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C4/AGENT.md、Issue #3、docs/interface.md §4–§6、§11、当前 schema.py/serialization.py/测试；看不到就请求粘贴。
-本次只允许修改：src/g15/pipeline/schema.py、src/g15/pipeline/serialization.py、tests/unit/test_serialization.py（当前不存在；本 Issue 内新建）。
+本次只允许修改：src/g15/pipeline/schema.py、src/g15/pipeline/serialization.py、tests/unit/test_serialization.py。
 你的角色长期白名单见 members/C4/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§5.1 四个等长数组的 dtype/seq/单位、§5.2 Manifest 字段/status/parts/SHA；§6 write_chunk_atomic/read_chunk 拟定接口；§11 run_dir。公共类型归属/签名须 A 评审，不得擅改 docs/interface.md、CLI 或配置键。
 必须实现：同目录临时文件与原子替换、SHA-256、np.load(..., allow_pickle=False)、坏哈希/缺字段/dtype 不对/seq 不连续/路径逃逸拒收、失败不发布 complete；np.savez 用已打开的二进制文件句柄，防临时文件名被自动加 .npz。
@@ -229,11 +229,11 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 C4，本次只做 Issue #11「仿真生产入口 producer」；不要把 #3 的文件带进本次提交，先回报不要修改。读 AGENTS.md、docs/development.md、members/C4/AGENT.md、Issue #11、docs/interface.md §4–§7、§11，以及已合并的 #3/#5 实际代码；看不到就请求粘贴。
-本次只允许修改：src/g15/pipeline/producer.py。
+本次只允许修改：src/g15/pipeline/producer.py、tests/unit/test_producer*.py。
 你的角色长期白名单见 members/C4/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§6 produce_run(config, output_root) -> run_dir 拟定接口；§4 生产者配置/seed；§5 NPZ、完整 Manifest 与仅供验证器的 private_truth；§7 调用 B1 仿真及 C1 故障，§11 run_dir。依赖 #3、#5；#6 对突发场景也要联调，不在 producer 重写别人的算法。
 边界：全分片生成后才原子发布完整 Manifest；parts 行数合计与 total_points 一致；真值去重并单独存放；写入失败不得留下被误认为 complete 的状态；不能改 schema.py/serialization.py、CLI 或任何他人模块。
-必须补测试：成功 run_dir、末尾不满分片、失败不发布、真值不进公开数据；本 Issue 的文件范围没有列测试路径，先向 A 请求明确授权后才在本 Issue 内新建必要生产入口测试，当前不存在，不偷改 #3 的测试。
+必须补测试：成功 run_dir、末尾不满分片、失败不发布、真值不进公开数据；恢复后的 Issue #11 已授权 tests/unit/test_producer*.py，可在本 Issue 内新建，不改 #3 的测试。生产入口调用 C1 的场景还依赖 #6，正常无故障场景可先联通。
 本地验收命令：本手册 §0 的所属平台 Black/Pylint/pytest；依赖模块未合并则写“未运行/阻塞”，不可声称链路已通。
 终端质量命令（先按 §0 安装虚拟环境；在仓库根目录仅复制本机对应的三行，Windows Git Bash/PowerShell 通用；如本 Issue 不涉及源码也需如实说明是否运行）：
 Windows Git Bash/PowerShell（仅复制以下三行）：
@@ -254,7 +254,7 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 C5。只处理 Issue #9「独立验证与报告」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C5/AGENT.md、Issue #9、docs/interface.md §5.3–§5.4、§8.5、§9、§11、§14 和现有 reporting/tests/docs；看不到请我粘贴。
-本次只允许修改：src/g15/reporting/*、tests/integration/*、tests/fault_injection/*、docs/test_plan.md、docs/test_report.md。
+本次只允许修改：src/g15/reporting/builder.py、src/g15/reporting/metrics.py、tests/integration/*、tests/fault_injection/*、docs/test_plan.md、docs/test_report.md。
 你的角色长期白名单见 members/C5/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：仅独立验证器在计算预设故障事件检出率时读 §5.3 真值；§5.4/§11 要输出 reports/summary.json 和 summary.md；§8.5 按事先确定的事件匹配窗口统计检出率、漏报/误报；§9 的消费数据由 C2 提供。未知值写 null，不写假 0/100%。
 边界：消费者与分析层绝不能看到真值；健康样本须计误报；未经实测不填耗时与系统证明；不能删失败测试、私调阈值或改别人模块。≥15 单元测试由全组实现者共同提供，C5 汇总而非代写全部。
@@ -279,7 +279,7 @@ Linux（仅复制以下三行）：
 
 ```text
 你是 G15 的 C6。只做 Issue #10「部署脚本与双 Linux 准备」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C6/AGENT.md、Issue #10、docs/interface.md §10–§12、当前 scripts/* 与部署/运维文档；看不到请我粘贴。
-本次只允许修改：scripts/*、docs/deployment.md、docs/operations.md。
+本次只允许修改：scripts/setup.sh、scripts/demo.sh、scripts/verify.sh、scripts/benchmark.sh、scripts/clean.sh、docs/deployment.md、docs/operations.md。
 你的角色长期白名单见 members/C6/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
 输入/输出契约：§10 将来 CLI 的命令和退出码，§11 的 run_dir，§12 Ubuntu 24.04 LTS 与 RHEL 9 全新克隆部署和故障恢复。当前脚本全是退出 1 的“未实现”占位、Git 索引为 100644；不能直接 ./scripts/setup.sh，不得把设计文档的未来命令写成已通过。
 边界：第 1 天先起两台 VM 并确认 Python 3.11/3.12；setup.sh 建 .venv，demo/verify/benchmark 以后在各系统实跑并留安装/命令/退出码证据；强杀恢复按真实平台测试；clean.sh 不默认删用户数据；不改业务代码、CI、README 或依赖列表（需 A 单独批准）。依赖未锁定时明确不能称可复现交付。

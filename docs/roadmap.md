@@ -1,10 +1,10 @@
 # G15 项目开发全程指南（九人、十项 Issue）
 
-> 本文状态：草案／待评审；适用对象：组长 A 与 B1、B2、C1–C6；更新日期：2026-10-15。
+> 本文状态：草案／待评审；适用对象：组长 A 与 B1、B2、C1–C6；更新日期：2026-10-16。
 >
-> D1–D14 为**相对工作日排期模板**，不是已确定的日历截止日期。Issue #1 已合并且关闭；截至 2026-10-15，#2–#11 已创建且均 open；**指派情况会随邀请被接受而变化，请以 Issue 页面为准**。本页写的是目标和门禁，**不是已实现/已通过记录**。当前项目仅有骨架及包导入烟测；`docs/interface.md` 与 `docs/development.md` 待评审，功能、性能、受控检出率和双 Linux 均未实测。依赖尚未锁定，不能称为可复现交付。
+> D1–D14 为**相对工作日排期模板**，不是已确定的日历截止日期。Issue #1 已合并且关闭；截至 2026-10-16，#2–#13 已创建且仍待关闭；#12 由 PR #14 跟踪，#13 跟踪脚本文件模式；**指派情况会随邀请被接受而变化，请以 Issue 页面为准**。本页写的是目标和门禁，**不是已实现/已通过记录**。当前项目仅有骨架及包导入烟测；`docs/interface.md` 与 `docs/development.md` 待评审，功能、性能、受控检出率和双 Linux 均未实测。依赖尚未锁定，不能称为可复现交付。
 
-**术语**：波次是按依赖安排的并行开发批次；里程碑是某一天必须拿出可核对证据的阶段目标；门禁是达不到就暂停进入下一阶段的条件；Schema 是约定数据有哪些字段、类型和规则的协议；Manifest 是记录分片位置、行数和校验摘要的清单；NPZ 是存 NumPy 数组的压缩文件；stub 是为了确认模块能接通而临时使用的最小占位实现，**不是完成业务功能**；ADR 是记录架构选择及取舍的决策文件。PR 是合并前的审查请求，CI 是自动检查。
+**术语**：波次是按依赖安排的并行开发批次；里程碑是某一天必须拿出可核对证据的阶段目标；门禁是达不到就暂停进入下一阶段的条件；Schema 是约定数据有哪些字段、类型和规则的协议；Manifest 是记录分片位置、行数和校验摘要的清单；NPZ 是保存多个 NumPy 数组的归档格式；np.savez 不压缩，压缩写入是另一种选项；stub 是为了确认模块能接通而临时使用的最小占位实现，**不是完成业务功能**；ADR 是记录架构选择及取舍的决策文件。PR 是合并前的审查请求，CI 是自动检查。
 
 **命令约定**：除特别说明，下面的 `git` 命令在 Windows Git Bash、Windows PowerShell 与 Linux 终端相同，且需在仓库根目录执行。Windows 与 Linux 的 Python 虚拟环境解释器分别是 `.venv/Scripts/python.exe`、`.venv/bin/python`。当前 `scripts/*.sh` **全为未实现占位**且 Git 索引权限 `100644`：Linux 克隆后不可直接执行；未来即便脚本实现，文档和部署命令仍写 `bash scripts/setup.sh`、`bash scripts/demo.sh` 等，不写 `./scripts/*.sh`。脚本可执行位问题已由 A 单独开 Issue 交 C6 用 `git update-index --chmod=+x scripts/*.sh` 修复，本次文档不修改索引。
 
@@ -54,24 +54,24 @@
 
    ✅ 成功标志：`main` 已更新且无未处理冲突；工作区有改动时先保留并查明来源，不强制切分支。
 
-## 2. 九人 Issue 清单（#2–#11 共十项）
+## 2. 九人业务 Issue 清单（#2–#11 共十项，另有 #12 文档与 #13 文件模式任务）
 
-以下“允许修改”是 **Issue 本次任务**范围；`members/<角色>/AGENT.md` 是该角色**长期**文件边界，两层都要看。表中的相对文件名都以仓库为根；`analysis/*` 等指对应 `src/g15/` 下的目录。表格的验收条件均是**将来必须提供的证据**，当前没有这些通过结果。业务测试文件例如 `tests/unit/test_serialization.py`、`test_config.py`、`tests/integration/test_cli.py`、`tests/performance/` 下用例目前不存在，写作“本 Issue 内新建”，不能误认现成。
+以下“允许修改”是 **Issue 本次任务**范围；`members/<角色>/AGENT.md` 是该角色**长期**文件边界，两层都要看。表中的相对文件名都以仓库为根；`analysis/*` 等指对应 `src/g15/` 下的目录。表格的验收条件均是**将来必须提供的证据**，当前没有这些通过结果。测试路径按每个 Issue 正文逐项列明；已授权但不存在的文件可以在该 Issue 中新建。PR #15 已提交仿真测试但尚未合入 main，不能把主分支没有文件等同于未获授权。额外路径仍需明确授权。
 
 | # | 标题 | 负责人 | 允许修改的文件（本次 Issue） | 验收命令／条件（未来目标） | 依赖 |
 |---|---|---|---|---|---|
-| #2 | 需求、架构与 ADR 文档 + 接口评审记录 | A | `docs/requirements.md`、`docs/architecture.md`、`docs/feasibility.md`、`docs/adr/*` | ≥8 用户故事、≥3 里程碑、≥3 风险；一份评审记录 | 无 |
-| #3 | NPZ 分片与 Manifest 序列化契约 | C4 | `src/g15/pipeline/schema.py`、`serialization.py`、`tests/unit/test_serialization.py`（本 Issue 内新建） | 原子落盘、SHA-256 校验、`allow_pickle=False`、坏哈希被拒 | 无 |
-| #4 | 配置加载校验 + validate 命令 | C3 | `src/g15/config.py`、`configs/*.yaml`、`src/g15/cli.py`、`src/g15/__main__.py` | `validate` 合法配置退出码 0；非法配置退出码 2；未知字段被拒；**当前 CLI 未实现，实测为 1** | 无 |
-| #5 | 仿真内核（退化趋势 + 噪声） | B1 | `src/g15/simulation/engine.py`、`degradation.py`、`noise.py` | 同 seed 逐点一致；第 1 天先出百万点基准脚本（计入正式测量时须含写盘） | #3 |
-| #6 | 故障注入（spike/step/burst） | C1 | `src/g15/simulation/faults.py` | 可指定起点/时长/幅度；真值清单一致 | #5 |
-| #7 | 特征 / 健康评分 / 告警 | B2 | `src/g15/analysis/*`、`configs/health_rules.yaml` | ≥5 特征；健康分 ∈[0,100]；常值窗口不产生 NaN/Inf | #4 |
-| #8 | 消费入口与 SQLite 存储 | C2 | `src/g15/pipeline/consumer.py`、`src/g15/storage/*` | 同一事务提交；重复消费不重复入库；`kill -9` 可重放 | #3、#7 |
-| #9 | 独立验证与报告 | C5 | `src/g15/reporting/*`、`tests/integration/*`、`tests/fault_injection/*`、`docs/test_plan.md`、`docs/test_report.md` | 仅验证器读真值；报告给检出率与误报数；输出 `summary.json`/`.md` | #6、#8 |
-| #10 | 部署脚本与双 Linux 准备 | C6 | `scripts/*`、`docs/deployment.md`、`docs/operations.md` | `setup.sh` 建 `.venv`；demo/verify/benchmark 可执行；第 1 天先起两台虚拟机 | 无 |
-| #11 | 仿真生产入口 producer | C4 | `src/g15/pipeline/producer.py` | 产出完整 `run_dir`（分片 + 完整 Manifest） | #3、#5 |
+| #2 | 需求、架构与 ADR 文档 + 接口评审记录 | A | `docs/feasibility.md`、`docs/requirements.md`、`docs/architecture.md`、`docs/adr/*` | ≥8 用户故事、≥3 里程碑、≥3 风险；一份评审记录 | 无 |
+| #3 | NPZ 分片与 Manifest 序列化契约 | C4 | `src/g15/pipeline/schema.py`、`src/g15/pipeline/serialization.py`、`tests/unit/test_serialization.py` | 原子落盘、SHA-256 校验、`allow_pickle=False`、坏哈希被拒 | 无 |
+| #4 | 配置加载校验 + validate 命令 | C3 | `src/g15/config.py`、`configs/*.yaml`、`src/g15/cli.py`、`src/g15/__main__.py`、`tests/unit/test_config.py` | `validate` 合法配置退出码 0；非法配置退出码 2；未知字段被拒；**当前 CLI 未实现，实测为 1** | 无 |
+| #5 | 仿真内核（退化趋势 + 噪声） | B1 | `src/g15/simulation/engine.py`、`src/g15/simulation/degradation.py`、`src/g15/simulation/noise.py`、`tests/unit/test_simulation*.py`、`tests/performance/test_simulation_benchmark.py`、`docs/adr/0001-simulation-model-and-determinism.md`、`docs/adr/b1-issue5-report.md` | 同 seed 逐点一致；第 1 天先出百万点基准脚本（计入正式测量时须含写盘） | #3 |
+| #6 | 故障注入（spike/step/burst） | C1 | `src/g15/simulation/faults.py`、`tests/unit/test_faults*.py` | 可指定起点/时长/幅度；真值清单一致 | #5 |
+| #7 | 特征 / 健康评分 / 告警 | B2 | `src/g15/analysis/features.py`、`src/g15/analysis/health.py`、`src/g15/analysis/alarms.py`、`configs/health_rules.yaml`、`tests/unit/test_analysis*.py` | ≥5 特征；健康分 ∈[0,100]；常值窗口不产生 NaN/Inf | #4 |
+| #8 | 消费入口与 SQLite 存储 | C2 | `src/g15/pipeline/consumer.py`、`src/g15/storage/database.py`、`src/g15/storage/repository.py`、`tests/unit/test_consumer*.py` | 同一事务提交；重复消费不重复入库；`kill -9` 可重放 | #3、#7 |
+| #9 | 独立验证与报告 | C5 | `src/g15/reporting/builder.py`、`src/g15/reporting/metrics.py`、`tests/integration/*`、`tests/fault_injection/*`、`docs/test_plan.md`、`docs/test_report.md` | 仅验证器读真值；报告给检出率与误报数；输出 `summary.json`/`.md` | #6、#8 |
+| #10 | 部署脚本与双 Linux 准备 | C6 | `scripts/setup.sh`、`scripts/demo.sh`、`scripts/verify.sh`、`scripts/benchmark.sh`、`scripts/clean.sh`、`docs/deployment.md`、`docs/operations.md` | `setup.sh` 建 `.venv`；demo/verify/benchmark 可执行；第 1 天先起两台虚拟机 | 无 |
+| #11 | 仿真生产入口 producer | C4 | `src/g15/pipeline/producer.py`、`tests/unit/test_producer*.py` | 产出完整 `run_dir`（分片 + 完整 Manifest） | #3、#5 |
 
-**测试文件如何补**：实现者应按角色指令编写本模块测试；若对应文件未列入该 Issue 的“修改范围”，先在 Issue/PR 留言请 A 确认本次授权，**不能因为它在长期白名单内就直接越权提交**。#5 的“基准脚本”也应先明确该 Issue 实际允许的落点：`tests/performance/` 是角色长期白名单但未必是 #5 本次范围；需 A 确认后本 Issue 内新建，绝不为满足一句话偷偷改 #10 的脚本。跨角色协作同理，改 `docs/interface.md`、评分公式或公共 CLI 需单独审批。
+**测试文件如何补**：实现者应按角色指令编写本模块测试；若对应文件未列入该 Issue 的“修改范围”，先在 Issue/PR 留言请 A 确认本次授权，**不能因为它在长期白名单内就直接越权提交**。A 于 2026-10-16 明确把 PR #15 的点名性能测试与两份 ADR/报告加入 #5；该补充不等于整个 tests/performance/ 或 docs/adr/ 获得任意修改权。ADR 定稿由 A 负责，B1 在 #5 只草拟点名仿真文件，不修改 #10 的脚本。跨角色协作同理，改 `docs/interface.md`、评分公式或公共 CLI 需单独审批。
 
 ## 3. 高风险项：第 1 天就开跑准备，不等第 3 波
 
