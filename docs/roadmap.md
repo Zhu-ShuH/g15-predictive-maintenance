@@ -1,12 +1,14 @@
 # G15 项目开发全程指南（九人、十项 Issue）
 
+> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
+
 > 本文状态：草案／待评审；适用对象：组长 A 与 B1、B2、C1–C6；更新日期：2026-10-16。
 >
 > D1–D14 为**相对工作日排期模板**，不是已确定的日历截止日期。Issue #1 已合并且关闭；截至 2026-10-16，#2–#13 已创建且仍待关闭；#12 由 PR #14 跟踪，#13 跟踪脚本文件模式；**指派情况会随邀请被接受而变化，请以 Issue 页面为准**。本页写的是目标和门禁，**不是已实现/已通过记录**。当前项目仅有骨架及包导入烟测；`docs/interface.md` 与 `docs/development.md` 待评审，功能、性能、受控检出率和双 Linux 均未实测。依赖尚未锁定，不能称为可复现交付。
 
 **术语**：波次是按依赖安排的并行开发批次；里程碑是某一天必须拿出可核对证据的阶段目标；门禁是达不到就暂停进入下一阶段的条件；Schema 是约定数据有哪些字段、类型和规则的协议；Manifest 是记录分片位置、行数和校验摘要的清单；NPZ 是保存多个 NumPy 数组的归档格式；np.savez 不压缩，压缩写入是另一种选项；stub 是为了确认模块能接通而临时使用的最小占位实现，**不是完成业务功能**；ADR 是记录架构选择及取舍的决策文件。PR 是合并前的审查请求，CI 是自动检查。
 
-**命令约定**：除特别说明，下面的 `git` 命令在 Windows Git Bash、Windows PowerShell 与 Linux 终端相同，且需在仓库根目录执行。Windows 与 Linux 的 Python 虚拟环境解释器分别是 `.venv/Scripts/python.exe`、`.venv/bin/python`。当前 `scripts/*.sh` **全为未实现占位**且 Git 索引权限 `100644`：Linux 克隆后不可直接执行；未来即便脚本实现，文档和部署命令仍写 `bash scripts/setup.sh`、`bash scripts/demo.sh` 等，不写 `./scripts/*.sh`。脚本可执行位问题已由 A 单独开 Issue 交 C6 用 `git update-index --chmod=+x scripts/*.sh` 修复，本次文档不修改索引。
+**命令约定**：除特别说明，下面的 `git` 命令在 Windows Git Bash、Windows PowerShell 与 Linux 终端相同，且需在仓库根目录执行。Windows 与 Linux 的 Python 虚拟环境解释器分别是 `python`、`python`。当前 `scripts/*.sh` **全为未实现占位**且 Git 索引权限 `100644`：Linux 克隆后不可直接执行；未来即便脚本实现，文档和部署命令仍写 `bash scripts/setup.sh`、`bash scripts/demo.sh` 等，不写 `./scripts/*.sh`。脚本可执行位问题已由 A 单独开 Issue 交 C6 用 `git update-index --chmod=+x scripts/*.sh` 修复，本次文档不修改索引。
 
 ## 0. 先认清基线、边界与判定方法
 
@@ -68,14 +70,14 @@
 | #7 | 特征 / 健康评分 / 告警 | B2 | `src/g15/analysis/features.py`、`src/g15/analysis/health.py`、`src/g15/analysis/alarms.py`、`configs/health_rules.yaml`、`tests/unit/test_analysis*.py` | ≥5 特征；健康分 ∈[0,100]；常值窗口不产生 NaN/Inf | #4 |
 | #8 | 消费入口与 SQLite 存储 | C2 | `src/g15/pipeline/consumer.py`、`src/g15/storage/database.py`、`src/g15/storage/repository.py`、`tests/unit/test_consumer*.py` | 同一事务提交；重复消费不重复入库；`kill -9` 可重放 | #3、#7 |
 | #9 | 独立验证与报告 | C5 | `src/g15/reporting/builder.py`、`src/g15/reporting/metrics.py`、`tests/integration/*`、`tests/fault_injection/*`、`docs/test_plan.md`、`docs/test_report.md` | 仅验证器读真值；报告给检出率与误报数；输出 `summary.json`/`.md` | #6、#8 |
-| #10 | 部署脚本与双 Linux 准备 | C6 | `scripts/setup.sh`、`scripts/demo.sh`、`scripts/verify.sh`、`scripts/benchmark.sh`、`scripts/clean.sh`、`docs/deployment.md`、`docs/operations.md` | `setup.sh` 建 `.venv`；demo/verify/benchmark 可执行；第 1 天先起两台虚拟机 | 无 |
+| #10 | 部署脚本与双 Linux 准备 | C6 | `scripts/setup.sh`、`scripts/demo.sh`、`scripts/verify.sh`、`scripts/benchmark.sh`、`scripts/clean.sh`、`docs/deployment.md`、`docs/operations.md` | `setup.sh` 按 `environment.yml` 创建或复用 `pp03`（Python 3.12）；demo/verify/benchmark 可执行；第 1 天先起两台虚拟机 | 无 |
 | #11 | 仿真生产入口 producer | C4 | `src/g15/pipeline/producer.py`、`tests/unit/test_producer*.py` | 产出完整 `run_dir`（分片 + 完整 Manifest） | #3、#5 |
 
 **测试文件如何补**：实现者应按角色指令编写本模块测试；若对应文件未列入该 Issue 的“修改范围”，先在 Issue/PR 留言请 A 确认本次授权，**不能因为它在长期白名单内就直接越权提交**。A 于 2026-10-16 明确把 PR #15 的点名性能测试与两份 ADR/报告加入 #5；该补充不等于整个 tests/performance/ 或 docs/adr/ 获得任意修改权。ADR 定稿由 A 负责，B1 在 #5 只草拟点名仿真文件，不修改 #10 的脚本。跨角色协作同理，改 `docs/interface.md`、评分公式或公共 CLI 需单独审批。
 
 ## 3. 高风险项：第 1 天就开跑准备，不等第 3 波
 
-1. **B1：百万点基准脚本**。先与 C4/C5 核对 #3 数据协议、计时范围和脚本归属，再在获准的本 Issue 路径准备测量。正式验收暂按 1,000,000 个 `seq` 采样点，计生成 **+ NPZ 分片写盘 + 完整 Manifest 落盘**；同时记录双信号的标量值数，计时起止点和教师最终口径仍待确认。检查现有占位脚本，而不是报一个不存在的成绩：
+1. **B1：百万点基准脚本**。先与 C4/C5 核对 #3 数据协议、计时范围和脚本归属，再在获准的本 Issue 路径准备测量。正式验收暂按 1,000,000 个 `seq` 采样点，计生成 **+ NPZ 分片写盘 + 完整 Manifest 落盘**；同时记录双信号的标量值数，计时起止点以 docs/acceptance.md 为准。检查现有占位脚本，而不是报一个不存在的成绩：
 
    ```sh
    git ls-files 'configs/benchmark_1m.yaml' 'scripts/benchmark.sh' 'tests/performance/*'
@@ -87,7 +89,7 @@
 
    ```sh
    git --version
-   python3.11 --version
+   conda run -n pp03 python --version
    # 机器只装 3.12 时，把上一行改成 python3.12 --version
    ```
 
@@ -102,22 +104,22 @@
 | M3（第 10 天） | 百万点基准、检出率、误报、幂等、`kill -9` 恢复有真实证据 | 性能环境与计时、预设受控故障真值匹配、正常误报数、重复消费行数、强杀重启对照 | 不声明验收通过，保留失败记录，集中修复 |
 | M4（第 14 天） | Ubuntu + RHEL 全新克隆跑通、文档齐全、答辩演练完成 | 两台机器分别的安装/运行命令、退出码、运行结果、演练记录 | 暂停发布，补可复核证据；实际日期由组长另行确认 |
 
-这些是**未来目标**，不是当前状态。教师的百万点 <60 秒与预设受控事件 100% 捕获要求要真实测试；小组将“生成 + 落盘”列为**暂定加严计时口径**，不写成教师规定了落盘边界。受控测试集的 100% 不能推广为真实工业设备无漏报。`docs/interface.md` §10 的合法配置退出 `0`、非法配置退出 `2` 为待实现的契约；当前 `validate` 实测退出 `1`、报 CLI 未实现。`status=complete` 的 Manifest、`summary.json`、`summary.md` 都是待实现产物，不提供现在声称可成功的闭环命令。
+这些是**未来目标**，不是当前状态。教师的百万点 <60 秒与预设受控事件 100% 捕获要求要真实测试；小组将“生成 + 落盘”列为**组长确认的计时口径**，不写成教师规定了落盘边界。受控测试集的 100% 不能推广为真实工业设备无漏报。`docs/interface.md` §10 的合法配置退出 `0`、非法配置退出 `2` 为待实现的契约；当前 `validate` 实测退出 `1`、报 CLI 未实现。`status=complete` 的 Manifest、`summary.json`、`summary.md` 都是待实现产物，不提供现在声称可成功的闭环命令。
 
-1. 每个门禁复核真实检查命令。在完成本地 `.venv` 安装后，Windows Git Bash / PowerShell：
+1. 每个门禁复核真实检查命令。在完成 pp03 安装并激活后，Windows Git Bash / PowerShell：
 
    ```sh
-   .venv/Scripts/python.exe -m black --check src tests
-   .venv/Scripts/python.exe -m pylint src/g15 --fail-under=8.5
-   .venv/Scripts/python.exe -m pytest -q
+   python -m black --check src tests
+   python -m pylint src/g15 --fail-under=8.5
+   python -m pytest -q
    ```
 
    Linux：
 
    ```sh
-   .venv/bin/python -m black --check src tests
-   .venv/bin/python -m pylint src/g15 --fail-under=8.5
-   .venv/bin/python -m pytest -q
+   python -m black --check src tests
+   python -m pylint src/g15 --fail-under=8.5
+   python -m pytest -q
    ```
 
    ✅ 成功标志：**只执行所属平台一组**，逐条记录退出码；`0` 只证明对应命令完成，骨架期就算全绿也不能替代 M1–M4 的业务、性能、双系统证据。未亲自运行写“未运行”，不能编数字。
@@ -143,7 +145,7 @@
 
 | 风险 | 最早信号 | 负责人／止损 |
 |---|---|---|
-| 性能口径不清或百万点含写盘超时 | 只有算法耗时，没有落盘和环境记录 | B1 + C4 + C5：第 1 天提出脚本与计时口径；教师口径待确认，正式结果双 Linux 留证 |
+| 性能口径不清或百万点含写盘超时 | 只有算法耗时，没有落盘和环境记录 | B1 + C4 + C5：第 1 天提出脚本与计时口径；小组口径已确认，正式结果双 Linux 留证 |
 | Schema/CLI/配置键未评审先各自实现 | 不同 PR 用不同字段、退出码 | A + C3 + C4：先记录接口评审和兼容测试，冻结后才扩大并行 |
 | 真值泄漏造成虚假 100% | consumer/analysis 接触 `private_truth` 或故障事件位置 | B2 + C2 + C5：仅独立验证器读真值；报告同时披露正常误报与检测延迟 |
 | 事务/告警状态恢复不完整 | `kill -9` 后漏窗、重警或只靠内存记状态 | B2 + C2：先审跨分片状态方案，再做同事务重放测试 |

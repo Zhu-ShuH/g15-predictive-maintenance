@@ -1,5 +1,7 @@
 # G15 组员一步一步操作手册
 
+> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
+
 > 本文状态：草案／待评审；适用对象：A、B1、B2、C1–C6（包括第一次使用 Git 的组员）；更新日期：2026-10-16。
 >
 > 当前仅 Issue #1 仓库骨架已合并。业务模块、可用场景配置、CLI 与部署脚本尚未实现；以下步骤是开发协作流程，不表示端到端功能现在能运行。`docs/interface.md` 和 `docs/development.md` 是待组内评审的设计基线，不能称为已冻结。依赖版本未锁定，不能称为可复现交付。
@@ -10,25 +12,15 @@
 
 ## 0. 开始之前：装工具、配置身份、克隆仓库
 
-1. 从官方发行渠道安装 **Git** 与 **Python 3.11 或 3.12**；Windows 另安装 **GitHub Desktop**，它是可视化查看改动的辅助工具，终端命令仍以本手册为准。Linux 按本手册使用 Git 终端，不要求 GitHub Desktop。Windows 安装 Git 时启用 Git Bash；Linux 的 Git 和 Python 用对应发行版软件源安装，先确认发行版可提供符合要求的 Python，不能假设 RHEL 默认具备所需解释器。安装后验证：
+1. 安装 Git 与课程 Anaconda；Windows 可选 GitHub Desktop，并从开始菜单打开 **Anaconda Prompt**；Linux 使用已初始化 Conda 的终端。在该终端检查：
 
    ```sh
-   # Windows Git Bash / PowerShell
    git --version
-   py -3.11 --version
-   # 若只安装了 3.12，则把上一行改为：py -3.12 --version
+   conda --version
+   conda env list
    ```
 
-   ```sh
-   # Linux
-   git --version
-   python3.11 --version
-   # 若只安装了 3.12，则把上一行改为：python3.12 --version
-   ```
-
-   ✅ 成功标志：Git 显示版本号；所选 Python 命令显示 `3.11.x` 或 `3.12.x`。Windows 上 GitHub Desktop 能打开；Linux 只需终端工具。
-
-   如果 Windows 报 `No suitable Python runtime found`，先运行 `py -0` 查看实际注册的解释器，使用列表中真实可用的 Python 3.11/3.12 命令；没有符合版本的解释器时先安装，不反复照抄不存在的 `py -3.11`。
+   ✅ 成功标志：Git、Conda 均显示版本，能够查看环境列表。此时还不要求 pp03 存在。若普通 PowerShell 找不到 conda，先使用 Anaconda Prompt，无需自行修改系统 PATH。后续 PowerShell 示例仅用于 Git；环境命令在已能使用 Conda 的终端执行。
 
 2. 设置自己的 Git 作者身份。Windows Git Bash / Linux：
 
@@ -130,29 +122,30 @@
 
    ✅ 成功标志：当前分支显示 `feat/5-simulation-engine`，而不是 `main`；做别的 Issue 时替换编号和短描述，**绝不直接向 `main` 推代码**。
 
-## 4. 建本地虚拟环境 `.venv` 并装依赖
+## 4. 创建或复用 Conda `pp03` 并安装项目依赖
 
-虚拟环境是只给当前项目用的一套 Python 包，不与系统 Python 混用。`requirements-dev.txt` 引用 `requirements.txt` 并包含 Black、Pylint、pytest；目前**没有锁版本**，安装结果不能称为可复现交付。
+先阅读 [environment.md](environment.md)。以下在仓库根目录、可使用 Conda 的终端执行；不能在 pp03 内再创建 .venv。
 
-1. Windows Git Bash / PowerShell（以 Python 3.11 为例，只装 3.12 就把 `-3.11` 改为 `-3.12`）：
-
-   ```sh
-   py -3.11 -m venv .venv
-   .venv/Scripts/python.exe -m pip install -e . -r requirements-dev.txt
-   .venv/Scripts/python.exe -c "import g15"
-   ```
-
-   ✅ 成功标志：存在 `.venv/`、安装命令退出 `0`、导入命令退出 `0`；这是**包结构导入**，不是业务可用证明。这里直接调用虚拟环境解释器，不要求激活。
-
-2. Linux（下面示例用 3.11；只有 3.12 时换成 `python3.12`）：
+1. 检查环境；仅在列表没有 pp03 时创建：
 
    ```sh
-   python3.11 -m venv .venv
-   .venv/bin/python -m pip install -e . -r requirements-dev.txt
-   .venv/bin/python -c "import g15"
+   conda env list
+   conda env create -f environment.yml
    ```
 
-   ✅ 成功标志：同上。缺少 `venv` 模块时先安装对应发行版的 Python venv 包，再重试；不要假定 `bash scripts/setup.sh` 现在能代劳，它目前是退出 `1` 的占位脚本。
+   ✅ 成功标志：列表已有 pp03 时跳过创建，不删除旧环境。已有 pp03 但版本不符时按 environment.md 处理，不自行覆盖。
+
+2. 激活并确认解释器，显示 3.12.x 后安装：
+
+   ```sh
+   conda activate pp03
+   python --version
+   python -c "import sys; print(sys.executable)"
+   python -m pip install -e . -r requirements-dev.txt
+   python -c "import g15"
+   ```
+
+   ✅ 成功标志：Python 为 3.12.x，解释器属于 pp03，安装和导入退出 0。当前依赖未锁版本，导入成功只证明包结构可用；脚本与闭环仍未实现。
 
 ## 5. 写代码与测试：只改这次获准的文件
 
@@ -175,15 +168,15 @@
 
 ## 6. 本地质量门禁：逐项运行、记录真实退出码
 
-以下示例默认步骤 4 已建立 `.venv`。Windows Git Bash / PowerShell 使用 `.venv/Scripts/python.exe`，Linux 使用 `.venv/bin/python`；下文 Windows 和 Linux 各列一套，不能混用解释器。`--fail-under=8.5` 是当前 Pylint 门槛，未经审批不得放宽。
+以下示例默认步骤 4 已完成且当前终端激活 pp03。Windows 与 Linux 均使用该环境的 `python`；`--fail-under=8.5` 是当前 Pylint 门槛，未经审批不得放宽。
 
 1. 检查 Black 格式（`--check` 只检查，不改文件）：
 
    ```sh
    # Windows Git Bash / PowerShell
-   .venv/Scripts/python.exe -m black --check src tests
+   python -m black --check src tests
    # Linux
-   .venv/bin/python -m black --check src tests
+   python -m black --check src tests
    ```
 
    ✅ 成功标志：**只运行所属平台一行**且退出码 `0`；报 `would reformat` 时，在自己获准的文件上运行对应解释器的 `-m black <获准文件>`，看 diff 后重跑检查，不能顺手格式化别人的模块。
@@ -192,9 +185,9 @@
 
    ```sh
    # Windows Git Bash / PowerShell
-   .venv/Scripts/python.exe -m pylint src/g15 --fail-under=8.5
+   python -m pylint src/g15 --fail-under=8.5
    # Linux
-   .venv/bin/python -m pylint src/g15 --fail-under=8.5
+   python -m pylint src/g15 --fail-under=8.5
    ```
 
    ✅ 成功标志：所属平台命令退出 `0`；非 `0` 时读输出中的**文件、行号和规则**，修获准文件；问题来自他人模块则记录并通知负责人，不擅自改别人文件或降门槛。
@@ -203,9 +196,9 @@
 
    ```sh
    # Windows Git Bash / PowerShell
-   .venv/Scripts/python.exe -m pytest -q
+   python -m pytest -q
    # Linux
-   .venv/bin/python -m pytest -q
+   python -m pytest -q
    ```
 
    ✅ 成功标志：所属平台命令退出 `0` 且失败数为零；当前仅有结构烟测，即使通过也**不能**写成功能、性能、双 Linux 或闭环通过。非 `0` 看第一处失败的断言与 traceback（错误调用栈），先复现再修复；没运行就在 PR 写“未运行”及原因。
@@ -316,7 +309,7 @@ git status --short --branch
 | `! [rejected] main -> main (fetch first)` | 曾试图推送主分支且远端已有新提交。**停止推 main**，保留本地改动、向 A 报告并在任务分支继续；不要强推，别用硬重置丢改动。 |
 | `remote origin already exists` | 本地已有名为 `origin` 的远端。先 `git remote -v` 看地址是否正确；正确就不要重复添加，错误先向 A 核实再修改。 |
 | CI 变红 | 在 PR 的 Checks 点红色 job → 失败 step → 日志第一处具体错误；用 §6 对应命令本地复现，记录命令、退出码、文件和行号，再修自己有权限的文件。 |
-| `pytest` 找不到 `g15` 包 | 确认位于仓库根目录、使用了步骤 4 的 `.venv`，执行本平台 `...python -m pip install -e . -r requirements-dev.txt` 后重试；不要借改测试或私自增 `sys.path` 掩盖安装失败。 |
+| `pytest` 找不到 `g15` 包 | 确认位于仓库根目录、已激活步骤 4 的 pp03，执行本平台 `python -m pip install -e . -r requirements-dev.txt` 后重试；不要借改测试或私自增 `sys.path` 掩盖安装失败。 |
 | Black `would reformat` | 在获准文件上使用本平台 `...python -m black <获准文件>`，检查 diff 后重跑 `--check`；无权修改的文件向负责人报告。 |
 | `bash scripts/verify.sh` 或 `python -m g15` 报“未实现” | 这是当前骨架的**预期占位失败（退出码 1）**，不能报告成验收通过；等待相应 Issue 实现。**在可执行位修复前**，一律以 `bash scripts/xxx.sh` 调用（不要用 `./scripts/xxx.sh`）；修复后两种方式均可，但文档仍以 `bash` 形式为准，跨平台更稳。 |
 
