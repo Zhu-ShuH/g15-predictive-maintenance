@@ -1,5 +1,7 @@
 # G15 系统架构与接口评审草案
 
+> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
+
 > Issue #2；负责人 A；2026-10-16；待团队评审。模块目录已建立，以下为目标结构；PR #15 的仿真实现待合并，其余主链尚未联通。
 
 ## 1. 组件与数据流
@@ -49,8 +51,8 @@ flowchart TB
     GH[公开 GitHub 仓库 + 固定提交/发布版本]
     GH --> U[Ubuntu 24.04 LTS 虚拟机]
     GH --> R[RHEL 9 虚拟机]
-    U --> UV[Python 3.11/3.12 + venv]
-    R --> RV[Python 3.11/3.12 + venv]
+    U --> UV[Conda pp03 + Python 3.12]
+    R --> RV[Conda pp03 + Python 3.12]
     UV --> UR[本地文件 + SQLite + 日志/报告]
     RV --> RR[本地文件 + SQLite + 日志/报告]
 ```
