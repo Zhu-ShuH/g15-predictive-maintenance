@@ -1,0 +1,150 @@
+{
+  "checked_at": "2026-10-16",
+  "purpose": "G15开发参考；非依赖锁或上游运行认证",
+  "sources": [
+    {
+      "id": "R01",
+      "name": "退化模型组织",
+      "repository": "nasa/progpy",
+      "path": "templates/prog_model_template.py",
+      "commit": "7c2688a44603ccb0c0994e51d611e931d3695ac0",
+      "url": "https://github.com/nasa/progpy/blob/7c2688a44603ccb0c0994e51d611e931d3695ac0/templates/prog_model_template.py",
+      "license": "NOSA: README 标识；具体许可PDF未复核",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "仅参考模型输入/状态/输出与参数组织"
+    },
+    {
+      "id": "R02",
+      "name": "异常评估原型",
+      "repository": "numenta/NAB",
+      "path": "nab/scorer.py",
+      "commit": "ea702d75cc2258d9d7dd35ca8e5e2539d71f3140",
+      "url": "https://github.com/numenta/NAB/blob/ea702d75cc2258d9d7dd35ca8e5e2539d71f3140/nab/scorer.py",
+      "license": "MIT",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "参考标签与检测结果分离、TP/FN/FP；不采用NAB分数替代G15指标"
+    },
+    {
+      "id": "R03",
+      "name": "子随机流",
+      "repository": "numpy/numpy",
+      "path": "doc/source/reference/random/parallel.rst",
+      "commit": "999d3a011d6a417c73f78c1da6a98b73ee282728",
+      "url": "https://github.com/numpy/numpy/blob/999d3a011d6a417c73f78c1da6a98b73ee282728/doc/source/reference/random/parallel.rst",
+      "license": "BSD-3-Clause（LICENSE.txt）",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "稳定子流映射仍按#17评审"
+    },
+    {
+      "id": "R04",
+      "name": "数值文件",
+      "repository": "numpy/numpy",
+      "path": "doc/source/user/how-to-io.rst",
+      "commit": "999d3a011d6a417c73f78c1da6a98b73ee282728",
+      "url": "https://github.com/numpy/numpy/blob/999d3a011d6a417c73f78c1da6a98b73ee282728/doc/source/user/how-to-io.rst",
+      "license": "BSD-3-Clause（LICENSE.txt）",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "NPZ读写依据，不替代G15原子发布和Manifest"
+    },
+    {
+      "id": "R05",
+      "name": "FFT解释",
+      "repository": "numpy/numpy",
+      "path": "numpy/fft/__init__.py",
+      "commit": "999d3a011d6a417c73f78c1da6a98b73ee282728",
+      "url": "https://github.com/numpy/numpy/blob/999d3a011d6a417c73f78c1da6a98b73ee282728/numpy/fft/__init__.py",
+      "license": "BSD-3-Clause（LICENSE.txt）",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "频点与变换约定，去直流和归一化仍按项目规则"
+    },
+    {
+      "id": "R06",
+      "name": "参数化测试",
+      "repository": "pytest-dev/pytest",
+      "path": "doc/en/how-to/parametrize.rst",
+      "commit": "c9c19f8e62c12834ad83193a1869cc82fe9c700e",
+      "url": "https://github.com/pytest-dev/pytest/blob/c9c19f8e62c12834ad83193a1869cc82fe9c700e/doc/en/how-to/parametrize.rst",
+      "license": "MIT",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "边界输入与独立预期值"
+    },
+    {
+      "id": "R07",
+      "name": "临时文件测试",
+      "repository": "pytest-dev/pytest",
+      "path": "doc/en/how-to/tmp_path.rst",
+      "commit": "c9c19f8e62c12834ad83193a1869cc82fe9c700e",
+      "url": "https://github.com/pytest-dev/pytest/blob/c9c19f8e62c12834ad83193a1869cc82fe9c700e/doc/en/how-to/tmp_path.rst",
+      "license": "MIT",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "每例独立数据目录"
+    },
+    {
+      "id": "R08",
+      "name": "SQLite事务",
+      "repository": "python/cpython",
+      "path": "Doc/library/sqlite3.rst",
+      "commit": "58ed60b7415e218ce3d608302e39b5e55bfb0e88",
+      "url": "https://github.com/python/cpython/blob/58ed60b7415e218ce3d608302e39b5e55bfb0e88/Doc/library/sqlite3.rst",
+      "license": "PSF及历史条款（仓库LICENSE）",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "已选Python3.12分支快照"
+    },
+    {
+      "id": "R09",
+      "name": "CLI子命令",
+      "repository": "python/cpython",
+      "path": "Doc/library/argparse.rst",
+      "commit": "58ed60b7415e218ce3d608302e39b5e55bfb0e88",
+      "url": "https://github.com/python/cpython/blob/58ed60b7415e218ce3d608302e39b5e55bfb0e88/Doc/library/argparse.rst",
+      "license": "PSF及历史条款（仓库LICENSE）",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "已选Python3.12分支快照"
+    },
+    {
+      "id": "S01",
+      "name": "gh-fix-ci",
+      "repository": "openai/skills",
+      "path": "skills/.curated/gh-fix-ci/SKILL.md",
+      "commit": "49f948faa9258a0c61caceaf225e179651397431",
+      "url": "https://github.com/openai/skills/blob/49f948faa9258a0c61caceaf225e179651397431/skills/.curated/gh-fix-ci/SKILL.md",
+      "license": "Apache-2.0（该Skill的LICENSE.txt）",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "需gh CLI及登录；本机当前未找到gh"
+    },
+    {
+      "id": "S02",
+      "name": "gh-address-comments",
+      "repository": "openai/skills",
+      "path": "skills/.curated/gh-address-comments/SKILL.md",
+      "commit": "49f948faa9258a0c61caceaf225e179651397431",
+      "url": "https://github.com/openai/skills/blob/49f948faa9258a0c61caceaf225e179651397431/skills/.curated/gh-address-comments/SKILL.md",
+      "license": "Apache-2.0（该Skill的LICENSE.txt）",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "评论处理；不代替真实人工批准"
+    },
+    {
+      "id": "S03",
+      "name": "python-testing-patterns",
+      "repository": "wshobson/agents",
+      "path": "plugins/python-development/skills/python-testing-patterns/SKILL.md",
+      "commit": "044b4b21f083948e69ec878a7b07c8d0951a6ffa",
+      "url": "https://github.com/wshobson/agents/blob/044b4b21f083948e69ec878a7b07c8d0951a6ffa/plugins/python-development/skills/python-testing-patterns/SKILL.md",
+      "license": "MIT",
+      "reviewed": "已读取该文件；未安装或执行上游项目",
+      "notes": "优先手动参考；不整套安装插件或新增无关依赖"
+    },
+    {
+      "id": "D01",
+      "name": "Conda环境管理",
+      "url": "https://docs.conda.io/projects/conda/en/stable/user-guide/tasks/manage-environments.html",
+      "reviewed": "已读取官方文档；非GitHub固定快照"
+    },
+    {
+      "id": "D02",
+      "name": "Codex Skill发现与共享",
+      "url": "https://learn.chatgpt.com/docs/build-skills",
+      "reviewed": "已读取官方文档；工具间能力需分别核实"
+    }
+  ]
+}
