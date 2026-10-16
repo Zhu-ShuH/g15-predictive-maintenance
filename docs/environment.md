@@ -1,6 +1,6 @@
 # G15 环境规范与首次安装
 
-> 2026-10-16；A 根据组长决定与课程 Anaconda 指南制定。正式开发及演示：Conda `pp03`、Python 3.12；CI 的 Python 3.11 保留为兼容性检查。当前没有 Conda 安装或双 Linux 验收通过记录。
+> 2026-10-16；A 根据组长决定与课程 Anaconda 指南制定。正式开发及演示：Conda `pp03`、Python 3.12；CI 的 Python 3.11 保留为兼容性检查。已完成 Windows pp03 创建与骨架检查（见 §4）；双 Linux 和业务验收仍待实测。
 
 ## 1. 来源与选择
 
@@ -52,3 +52,21 @@ python -m pytest -q
 - Ubuntu 24.04 LTS 与 RHEL 9 各自安装 Conda/创建环境，无需替换操作系统 Python；仍须实际记录 Conda 发行版、版本、软件来源与系统架构。
 
 本文件规定目标行为；当前 scripts 下仍是未实现占位。脚本实现、真实安装、依赖锁定和虚拟机日志由相应 Issue 继续交付。
+
+## 4. Windows 本机验证记录（2026-10-16）
+
+A 实际执行 `conda env create -f environment.yml -y`（使用本 PR 同一份环境声明），创建 pp03，Python 3.12.15；实际安装项目与 requirements-dev.txt，退出 0。验证对象为指南分支提交 3309de0 的仓库骨架；仅文档与 main 不同，没有合入业务 PR。
+
+| 检查 | 真实结果 |
+|---|---|
+| 包与运行依赖导入 | 退出 0；NumPy 2.5.4、PyYAML 6.0.3、SQLite 3.53.4 |
+| Black --check src tests | 退出 0；30 files would be left unchanged |
+| Pylint src/g15 --fail-under=8.5 | 退出 0；10.00/10 |
+| pytest -q | 退出 0；1 passed in 0.07s，仅包导入结构测试 |
+| pip check | 退出 0；No broken requirements found |
+| environment.yml | 使用 PyYAML 实际解析，pp03/Python 3.12/pip 声明与预期一致 |
+| conda run -n pp03 python | 实际导入 g15，退出 0，解释器属于 pp03 |
+
+安装与检查日志、当次 pip freeze 已由 A 留档；不含机器路径的本节可供审查。上述版本是本次安装结果，不是已经完成的跨系统依赖锁。依赖精确锁定须经过后续 Linux 验证和独立变更，不直接拿本机 freeze 覆盖项目 requirements。
+
+本次仅 Windows 开发环境可用；业务闭环、百万点、受控故障检出及 Ubuntu/RHEL 仍未验收。没有执行或合并 C6 脚本实现。
