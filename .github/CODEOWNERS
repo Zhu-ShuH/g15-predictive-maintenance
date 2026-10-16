@@ -1,12 +1,34 @@
-# TODO: 待填写真实 GitHub 用户名或团队名；当前尚不能强制审查。
-# 以下均为负责人占位映射，不是生效的 CODEOWNERS 规则。
-# /docs/feasibility.md /docs/requirements.md /docs/architecture.md /docs/adr/ /.github/ -> A
-# /src/g15/simulation/engine.py /src/g15/simulation/degradation.py /src/g15/simulation/noise.py -> B1
-# /src/g15/simulation/faults.py /tests/fault_injection/ -> C1 (fault cases)
-# /src/g15/config.py /src/g15/cli.py /src/g15/__main__.py /configs/ -> C3
-# /src/g15/pipeline/schema.py /src/g15/pipeline/serialization.py /src/g15/pipeline/producer.py /docs/interface.md -> C4 (+ A review)
-# /src/g15/analysis/ -> B2
-# /src/g15/pipeline/consumer.py /src/g15/storage/ -> C2
-# /src/g15/reporting/ /tests/integration/ /docs/test_plan.md /docs/test_report.md -> C5
-# /scripts/ /docs/deployment.md /docs/operations.md -> C6
-# /src/g15/common/ /pyproject.toml /requirements*.txt /README.md -> A (initial governance)
+# G15 代码审查归属。每行多个 owner 表示候选审查者，不表示所有人均已批准。
+# 公共接口的 A 复审仍按团队流程人工核对；本文件不代替分支保护或真实 Review。
+* @Zhu-ShuH
+/src/g15/simulation/engine.py @kittywent
+/src/g15/simulation/degradation.py @kittywent
+/src/g15/simulation/noise.py @kittywent
+/tests/unit/test_simulation*.py @kittywent
+/src/g15/simulation/faults.py @wzs-1234
+/tests/unit/test_faults*.py @wzs-1234
+/src/g15/config.py @Www9191
+/src/g15/cli.py @Www9191
+/src/g15/__main__.py @Www9191
+/configs/ @Www9191
+/tests/unit/test_config.py @Www9191
+/src/g15/pipeline/schema.py @wxm-1
+/src/g15/pipeline/serialization.py @wxm-1
+/src/g15/pipeline/producer.py @wxm-1
+/tests/unit/test_serialization.py @wxm-1
+/tests/unit/test_producer*.py @wxm-1
+/docs/interface.md @Zhu-ShuH @wxm-1
+/src/g15/analysis/ @ryj-teach1
+/configs/health_rules.yaml @ryj-teach1
+/tests/unit/test_analysis*.py @ryj-teach1
+/src/g15/pipeline/consumer.py @zty-78
+/src/g15/storage/ @zty-78
+/tests/unit/test_consumer*.py @zty-78
+/src/g15/reporting/ @Gyy-yyy
+/tests/integration/ @Gyy-yyy
+/tests/fault_injection/ @Gyy-yyy
+/docs/test_plan.md @Gyy-yyy
+/docs/test_report.md @Gyy-yyy
+/scripts/ @Ran2149975600
+/docs/deployment.md @Ran2149975600
+/docs/operations.md @Ran2149975600
