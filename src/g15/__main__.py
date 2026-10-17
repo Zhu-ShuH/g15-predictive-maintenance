@@ -1,3 +1,6 @@
-"""Fail closed until the C3 CLI issue is implemented."""
+"""Package entrypoint for `python -m g15`"""
 
-raise SystemExit("g15 CLI 未实现：Issue #1 仅初始化仓库骨架")
+from .cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
