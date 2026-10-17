@@ -11,6 +11,7 @@ the configuration structurally, so both layouts are supported.
 
 from __future__ import annotations
 
+import copy
 import datetime as dt
 import math
 
@@ -146,11 +147,15 @@ def test_random_access_matches_sequential_access() -> None:
 def test_rng_argument_is_accepted_and_type_checked() -> None:
     """``rng`` keeps the frozen signature but must not influence the result."""
     generator = np.random.default_rng(7)
+    before = copy.deepcopy(generator.bit_generator.state)
     with_rng = simulate_chunk(DEFAULT_SCENARIO, 0, 512, generator)
+    after = copy.deepcopy(generator.bit_generator.state)
     without = simulate_chunk(DEFAULT_SCENARIO, 0, 512)
 
     assert np.array_equal(with_rng.vibration, without.vibration)
-    assert generator.bit_generator.state["state"]["state"] == 7 or True  # untouched
+    # The generator must be left exactly as handed over: not advanced, not reseeded.
+    # Comparing the whole state (not just one counter) fails if any draw happened.
+    assert after == before
 
     with pytest.raises(TypeError, match="numpy.random.Generator"):
         simulate_chunk(DEFAULT_SCENARIO, 0, 16, 12345)  # type: ignore[arg-type]
@@ -521,8 +526,22 @@ def test_high_degradation_rate_is_handled_without_overflow() -> None:
 
     assert bool(np.all(np.isfinite(chunk.vibration)))
     assert float(chunk.vibration[-1]) > float(chunk.vibration[0])
-    # Vibration may legitimately go negative; it must not be clamped.
-    assert float(chunk.vibration[0]) < 0.0 or True
+
+
+def test_negative_values_are_not_clamped() -> None:
+    """A negative baseline must survive untouched, not be clipped to zero."""
+    config = signals(
+        vibration={
+            "baseline": -2.0,
+            "degradation_rate_per_sample": 0.5,
+            "noise_std": 0.0,
+        }
+    )
+    chunk = simulate_chunk(config, 0, 4)
+
+    # Hand-computed: -2.0 + 0.5 * i for i in 0..3, with zero noise.
+    assert list(chunk.vibration) == [-2.0, -1.5, -1.0, -0.5]
+    assert bool(np.all(chunk.vibration < 0.0))
 
 
 # --------------------------------------------------------------------------- #

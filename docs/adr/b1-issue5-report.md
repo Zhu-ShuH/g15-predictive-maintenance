@@ -83,10 +83,10 @@ gh pr create --base main --head feat/5-simulation-kernel
 | --- | --- | --- |
 | `python -m black --check src tests` | **0** | `34 files would be left unchanged` |
 | `python -m pylint src/g15 --fail-under=8.5` | **0** | `9.97/10` |
-| `python -m pytest -q` | **0** | `81 passed, 6 skipped in 0.17s` |
-| `python -m pytest -q tests/unit/test_simulation*.py` | **0** | `80 passed in 0.17s`（Issue #5 验收命令） |
+| `python -m pytest -q` | **0** | `82 passed, 6 skipped in 0.21s` |
+| `python -m pytest -q tests/unit/test_simulation*.py` | **0** | `81 passed in 0.17s`（Issue #5 验收命令） |
 | `python -c "import g15"` | **0** | 无输出 |
-| `G15_RUN_BENCHMARK=1 python -m pytest -q -s tests/performance/test_simulation_benchmark.py` | **0** | `6 passed in 0.66s` |
+| `G15_RUN_BENCHMARK=1 python -m pytest -q -s tests/performance/test_simulation_benchmark.py` | **0** | `6 passed in 0.72s` |
 
 CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` 与 `skeleton (3.12)` **全部 pass**。
 
@@ -95,7 +95,7 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 | 口径 | 点数 | 分片 | 耗时 | 判定 |
 | --- | --- | --- | --- | --- |
 | 内核（趋势 + 噪声，**不含序列化与 Manifest**） | 1,000,000 | chunk_points 102,400 | **0.057 s** | PASS |
-| 内核 + `np.savez` 10 片写盘（32,010,200 字节） | 1,000,000 | 10 片 | **0.067 s** | PASS |
+| 内核 + `np.savez` 10 片写盘（32,010,200 字节） | 1,000,000 | 10 片 | **0.073 s** | PASS |
 
 两次都记录了 os / cpu / cpu_count / python / numpy / points / `scalar_values=2,000,000` / chunk_points / 计时范围。
 
@@ -151,6 +151,51 @@ NaN / Inf 抛出带**绝对样本序号**的 `ValueError`；**负值不钳位**�
 - `SimulationChunk` 定义在 `engine.py` 内
 - **C3 的 `config.py` 未实现不阻塞本 Issue**；若 A 决定迁往 `common/types.py`，只需改一处 import
 
+### 4.5 A 审查打回后的两条测试修正
+
+A 在 PR #15 的 `CHANGES_REQUESTED` 里点名两条恒真断言。两条都改了，并各自证明「断言失效时测试真的会红」。
+
+**修正 1：`rng` 未被消耗（原 `:153`）**
+
+原写法 `assert generator.bit_generator.state["state"]["state"] == 7 or True` 有两个毛病：`or True` 让它永远成立；而且只比较一个计数器字段，即便状态被部分推进也可能碰巧相等。
+
+改为在调用前后各深拷贝一份完整状态再比较：
+
+```python
+before = copy.deepcopy(generator.bit_generator.state)
+with_rng = simulate_chunk(DEFAULT_SCENARIO, 0, 512, generator)
+after = copy.deepcopy(generator.bit_generator.state)
+assert after == before
+```
+
+**证明它可证伪**（独立探针）：拿一个 `default_rng(7)`，抽 1 个标准正态数后再比较状态 →
+
+```
+state_unchanged_after_one_draw = False
+would_test_fail = True
+```
+
+即只要 `simulate_chunk` 动过生成器一次，这条断言就会失败。
+
+**修正 2：负值不钳位（原 `:525`）**
+
+原写法 `assert float(chunk.vibration[0]) < 0.0 or True` 靠「随机第一点是否小于零」来判断，既恒真又依赖随机性。
+
+改为明确的负 baseline + 零噪声 + 已知退化率，断言手算结果：
+
+```python
+config = signals(vibration={
+    "baseline": -2.0,
+    "degradation_rate_per_sample": 0.5,
+    "noise_std": 0.0,
+})
+chunk = simulate_chunk(config, 0, 4)
+assert list(chunk.vibration) == [-2.0, -1.5, -1.0, -0.5]
+assert bool(np.all(chunk.vibration < 0.0))
+```
+
+零噪声让结果完全可手算；若实现里有任何钳位（例如 `np.maximum(x, 0)`），四个值都会变成 0，断言立刻失败。
+
 ---
 
 ## 五、修过的问题（迭代记录）
@@ -164,8 +209,10 @@ NaN / Inf 抛出带**绝对样本序号**的 `ValueError`；**负值不钳位**�
 | 5 | 一个测试语义写错 | 把两通道字段拼进同一个扁平 dict，丢掉了通道区分 | 改为两个子 dict |
 | 6 | `SyntaxError`，pytest 收集失败 | `edit` 删空行时把两行拼成了一行 | 拆回两行 |
 | 7 | black 长时间无输出 | `.venv` 内 black 缓存损坏 | 清缓存后正常 |
+| 8 | 两条断言永远成立（A 审查打回） | 写了 `assert ... or True`，等价于没断言 | 见下方「4.5」 |
 
 > 教训记录：第 6 条是我自己的编辑事故——用 `edit` 改代码时 `old_string` / `new_string` 必须精确包含换行符。
+> 第 8 条是 A 在 PR #15 审查中点名的：`tests/unit/test_simulation_engine.py:153` 与 `:525` 两处 `assert ... or True` 恒真，等于没有测试。已改为可证伪的断言，见 4.5。
 
 ---
 
@@ -196,10 +243,11 @@ NaN / Inf 抛出带**绝对样本序号**的 `ValueError`；**负值不钳位**�
 
 ## 七、下一步
 
-1. 等 A（或任一 reviewer）审 PR #15，通过后由 A 合并。
-2. 合并后配合 C1（#6 故障注入）联测事件跨分片与重叠策略。
-3. 配合 C4（#11 producer）与 C5 做含落盘的正式百万点基准，在 Ubuntu 24.04 + RHEL 9 各跑一次并留证。
-4. 按 A 的裁决处理上述 4 项待决事项。
+1. A 已在 PR #15 提出 `CHANGES_REQUESTED`（2026-10-16T06:41:12Z），两条恒真断言已按上述修正并重跑门禁，请求复审。
+2. A 已明确：本 PR 点名的性能测试与两份 ADR/报告可保留；ADR-0001 留给仿真草稿，Issue #2 用 0002–0004，ADR 仍待评审。
+3. 共享类型与 RNG 行为由 **#17**（`refactor(contracts): 评审共享类型与 RNG 契约后迁移 SimulationChunk`，负责人 A，协作 B1/C4/C3/C1）跟踪。**本 PR 不擅自迁移 `common/types.py`**；`rng` 可选且不使用与原签名/行为的差异，待 #17 同步接口记录。
+4. 合并后配合 C1（#6 故障注入）联测事件跨分片与重叠策略。
+5. 配合 C4（#11 producer）与 C5 做含落盘的正式百万点基准，在 Ubuntu 24.04 + RHEL 9 各跑一次并留证。正式百万点须等完整生产入口及双 Linux 实测。
 
 **建议 PR 标题**：`feat(sim): 实现仿真内核（退化趋势 + 噪声）(#5)`（已使用）
 
