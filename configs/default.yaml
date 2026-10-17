@@ -1,1 +1,9 @@
-# TODO: 待 C3 按评审后的接口填写；目前不是可运行配置。
+schema_version: "1.0"
+record_fields:
+  - seq
+  - timestamp_ns
+  - vibration
+  - temperature
+manifest:
+  require_complete: true
+checksum_field: sha256
