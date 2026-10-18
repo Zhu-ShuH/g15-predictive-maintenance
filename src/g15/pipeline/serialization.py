@@ -16,6 +16,11 @@ integrity rule of ``docs/interface.md`` section 5.1 lives here:
 4. **Never return half-trusted data.**  :func:`read_chunk` refuses a missing
    file, a wrong digest, a wrong field set, a wrong dtype, a wrong row count,
    a discontinuous ``seq`` and a non-finite signal, raising instead of warning.
+5. **Validate before publishing.**  Every path rule and every ``part_id`` rule is
+   checked *before* the temporary file is created, and the manifest entry --
+   whose digest is only known after hashing -- is built and validated *before*
+   ``os.replace``.  A rejected call therefore leaves an existing shard
+   byte-for-byte unchanged and never creates the file it refuses.
 """
 
 from __future__ import annotations
@@ -137,6 +142,46 @@ def _relative_entry_path(output_path: Path, run_dir: Path | None) -> str:
     return relative.as_posix()
 
 
+def _resolve_part_id(path: Path, part_id: int | None) -> int:
+    """Return the shard index, refusing any index the file name contradicts.
+
+    The check runs before the shard is written.  Skipping it would let a caller
+    overwrite ``part-000000.npz`` while the returned entry claims
+    ``part_id=1``, which publishes a shard whose name and manifest entry
+    disagree.
+
+    Args:
+        path: Destination file.
+        part_id: Explicit index, or ``None`` to parse it from the file name.
+
+    Returns:
+        The validated, non-negative shard index.
+
+    Raises:
+        ChunkIOError: if the name is not canonical and no index was given, if
+            ``part_id`` is not a non-negative integer, or if it disagrees with
+            the index encoded in a canonical name.
+    """
+    from_name = _part_id_from_name(path.name)
+    if part_id is None:
+        if from_name is None:
+            raise ChunkIOError(
+                f"cannot derive part_id from {path.name!r}; name the shard "
+                "part-<digits>.npz or pass part_id explicitly"
+            )
+        return from_name
+    if not isinstance(part_id, int) or isinstance(part_id, bool):
+        raise ChunkIOError(f"part_id must be an integer, got {part_id!r}")
+    if part_id < 0:
+        raise ChunkIOError(f"part_id must be non-negative, got {part_id}")
+    if from_name is not None and from_name != part_id:
+        raise ChunkIOError(
+            f"{path.name!r} encodes part_id {from_name}, but part_id={part_id} "
+            "was passed; the manifest entry would not describe the file name"
+        )
+    return part_id
+
+
 def _fsync(handle: Any) -> None:
     """Flush ``handle`` to the operating system and force it to the device.
 
@@ -163,8 +208,10 @@ def write_chunk_atomic(
     """Write one shard atomically and return its manifest entry.
 
     The chunk is validated first, so an invalid shard never reaches the disk.
-    On any failure the temporary file is removed and the destination path is
-    left untouched, which keeps a failed run from masquerading as a complete one.
+    The path rules and the shard index are checked next, and the manifest entry
+    is built and validated before the rename, so *every* rejection leaves the
+    destination exactly as it was: an existing shard keeps its bytes and a new
+    path is never created.  On any failure the temporary file is removed.
 
     Args:
         chunk: Shard to persist; validated against
@@ -175,7 +222,8 @@ def write_chunk_atomic(
             omitted, the entry records the bare file name, which is still
             relative and therefore safe.
         part_id: Shard index.  When omitted it is parsed from the file name; a
-            non-canonical name then raises instead of guessing.
+            non-canonical name then raises instead of guessing.  When given it
+            must agree with the index a canonical name carries.
 
     Returns:
         The entry describing the published shard.
@@ -183,18 +231,17 @@ def write_chunk_atomic(
     Raises:
         ChunkValidationError: if the chunk violates section 5.1.
         ChunkIOError: if the path is unusable, the name carries no ``part_id``,
-            ``run_dir`` does not contain the shard, or the write fails.
+            ``part_id`` contradicts the name, ``run_dir`` does not contain the
+            shard, or the write fails.
+        ManifestError: if the entry cannot be built; raised before publication,
+            so it never leaves a shard behind.
     """
     validate_chunk(chunk)
 
     path = Path(output_path)
-    if part_id is None:
-        part_id = _part_id_from_name(path.name)
-        if part_id is None:
-            raise ChunkIOError(
-                f"cannot derive part_id from {path.name!r}; name the shard "
-                "part-<digits>.npz or pass part_id explicitly"
-            )
+    resolved_part_id = _resolve_part_id(path, part_id)
+    relative_path = _relative_entry_path(path, run_dir)
+    rows = int(np.asarray(chunk.seq).shape[0])
 
     tmp_path = path.with_name(path.name + _TMP_SUFFIX)
     try:
@@ -209,6 +256,14 @@ def write_chunk_atomic(
             )
             _fsync(handle)
         digest = sha256_of_file(tmp_path)
+        # The digest is the last unknown field, so the entry is built -- and
+        # therefore validated -- here, still before the irreversible rename.
+        entry = ChunkManifestEntry(
+            part_id=resolved_part_id,
+            path=relative_path,
+            rows=rows,
+            sha256=digest,
+        )
         os.replace(tmp_path, path)
     except OSError as exc:
         _remove_quietly(tmp_path)
@@ -217,12 +272,7 @@ def write_chunk_atomic(
         _remove_quietly(tmp_path)
         raise
 
-    return ChunkManifestEntry(
-        part_id=part_id,
-        path=_relative_entry_path(path, run_dir),
-        rows=int(np.asarray(chunk.seq).shape[0]),
-        sha256=digest,
-    )
+    return entry
 
 
 def _remove_quietly(path: Path) -> None:

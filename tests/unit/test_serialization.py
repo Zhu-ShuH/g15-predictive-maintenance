@@ -376,6 +376,65 @@ def test_overwriting_a_shard_replaces_it_atomically(tmp_path: Path) -> None:
     assert read_chunk(path, second).seq.shape[0] == 16
 
 
+def test_part_id_contradicting_the_name_keeps_the_old_shard(tmp_path: Path) -> None:
+    """A rejected ``part_id`` must not overwrite the shard.
+
+    Regression for the PR #29 review: the destination used to be replaced before
+    the entry was built, so passing ``part_id=1`` for ``part-000000.npz``
+    published different bytes and only then returned an entry whose index and
+    file name disagreed.  The payload is shifted by +5 g on purpose, so any leak
+    of the rejected chunk into the old file changes its bytes and its digest.
+    """
+    path = shard_path(tmp_path, part_id=0)
+    accepted = write_chunk_atomic(make_chunk(count=8), path, run_dir=tmp_path)
+    before = path.read_bytes()
+
+    base = make_chunk(count=8)
+    shifted = SimulationChunk(
+        seq=base.seq,
+        timestamp_ns=base.timestamp_ns,
+        vibration=base.vibration + 5.0,
+        temperature=base.temperature,
+    )
+
+    with pytest.raises(ChunkIOError, match="encodes part_id 0"):
+        write_chunk_atomic(shifted, path, run_dir=tmp_path, part_id=1)
+
+    assert path.read_bytes() == before
+    assert sha256_of_file(path) == accepted.sha256
+    assert read_chunk(path, accepted).seq.shape[0] == 8
+    assert [item.name for item in path.parent.iterdir()] == ["part-000000.npz"]
+
+
+def test_shard_outside_run_dir_creates_nothing(tmp_path: Path) -> None:
+    """A rejected destination must not exist afterwards.
+
+    Regression for the PR #29 review: ``os.replace`` ran before the containment
+    check, so the failing call still left ``outside/part-000001.npz`` on disk
+    while the manifest knew nothing about it.
+    """
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    outside = tmp_path / "outside" / "part-000001.npz"
+
+    with pytest.raises(ChunkIOError, match="not inside run directory"):
+        write_chunk_atomic(make_chunk(), outside, run_dir=run_dir)
+
+    assert not outside.exists()
+    assert not outside.parent.exists()
+    assert list(run_dir.iterdir()) == []
+
+
+def test_negative_part_id_creates_nothing(tmp_path: Path) -> None:
+    """An impossible index is refused before the directory is even created."""
+    path = tmp_path / "raw" / "chunk.npz"
+
+    with pytest.raises(ChunkIOError, match="part_id must be non-negative"):
+        write_chunk_atomic(make_chunk(), path, run_dir=tmp_path, part_id=-1)
+
+    assert not path.parent.exists()
+
+
 # --------------------------------------------------------------------------- #
 # validate_chunk and path rules
 # --------------------------------------------------------------------------- #
