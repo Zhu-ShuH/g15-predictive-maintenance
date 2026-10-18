@@ -1,1 +1,31 @@
-# TODO: 待 C3/场景负责人完成；目前不是可运行配置。
+# 突发故障：一个 spike 事件，用于验证受控注入 100% 检出
+schema_version: '1.0'
+scenario:
+  id: sudden_fault_001
+  description: '基线平稳，30 万点处注入一次 spike'
+  seed: 42
+  start_time_utc: '2026-10-14T00:00:00Z'
+  device_id: 'DEV-004'
+  sample_rate_hz: 100
+  total_points: 1000000
+  chunk_points: 102400
+signals:
+  vibration:
+    baseline: 0.5
+    degradation_rate_per_sample: 0.000001
+    noise_std: 0.05
+    unit: 'g'
+  temperature:
+    baseline: 35.0
+    degradation_rate_per_sample: 0.000003
+    noise_std: 0.15
+    unit: 'degC'
+fault_generation:
+  mode: manual
+  stochastic_probability_per_window: 0.0
+  events:
+    - event_id: F001
+      type: spike
+      start_seq: 300000
+      duration_points: 512
+      amplitude: 6.0
