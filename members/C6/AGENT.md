@@ -1,6 +1,6 @@
 # G15 项目 · C6（Linux 部署、运维与文档，C 层）专用 AGENT.md
 
-> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
+> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12；按仓库 environment.yml 创建或验证可复用环境，不依赖教师预装或预激活，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
 
 > 用户补充（2026-10-15）：Linux 发行版无指定，虚拟机验证获认可；GitHub 仓库公开；答辩截止日未定、可能后延。Ubuntu 24.04/RHEL 9 是小组自选目标，D1–D14 仅为相对排期，两个系统均须分别真实克隆运行留证。
 
@@ -31,7 +31,7 @@
 - 特征：至少均值、标准差、RMS、峰峰值、超额峭度、主频；健康分为 [0,100] 且评分规则可配置；告警有黄/红、去抖和窗口位置；参数边界、除零、NaN/Inf 明确处理。
 - CLI：`python -m g15 validate|simulate|consume|report|verify|benchmark|doctor`；退出码 `0` 成功、`2` 参数/配置问题、`3` I/O/Schema、`4` 验收不达标、`5` 未预期异常。完整参数见 `docs/interface.md`。
 - SQLite：`runs`、`processed_chunks`、`feature_windows`、`alarms` 四张核心表；另有待评审的 `alarm_states` 状态表，WAL、开启外键；**特征、评分、告警、分片完成标记在同一事务提交**；同分片重放不得重复入库。
-- 跨平台：Ubuntu 24.04 LTS + Red Hat Enterprise Linux 9（RHEL 9）；不能依赖绝对个人路径、预先存在的课程环境、运行时联网或 AI API。
+- 跨平台：Ubuntu 24.04 LTS + Red Hat Enterprise Linux 9（RHEL 9）；不能依赖绝对个人路径、教师预装的课程环境（正式 pp03 应按 environment.yml 创建或验证可复用）、运行时联网或 AI API。
 
 ## AI 行为与协作纪律
 
@@ -71,7 +71,7 @@
 - 禁止随意执行带风险的 `rm -rf`；`clean.sh` 只可清理显式允许的 generated paths，默认安全提示或限定目录。
 - 不得悄悄改 Python 业务算法以绕过部署错误，或为了通过脚本吞掉非零退出码。
 - 不能因为 Ubuntu 可运行就宣称双 Linux 支持；RHEL 必须真实验证 Python 解释器和系统依赖。
-- 不要假设教师已激活 conda `pp03`，或运行时可下载模型/数据、可访问云端 AI。
+- 不要假设教师已预先创建或激活 conda `pp03`；应按 environment.yml 创建或验证可复用，setup.sh 自动化尚待 #10 实现与实测，或运行时可下载模型/数据、可访问云端 AI。
 
 ### 具体开发任务（可拆为 Issue）
 

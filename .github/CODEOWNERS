@@ -1,6 +1,11 @@
 # G15 代码审查归属。每行多个 owner 表示候选审查者，不表示所有人均已批准。
 # 公共接口的 A 复审仍按团队流程人工核对；本文件不代替分支保护或真实 Review。
 * @Zhu-ShuH
+# 明示性能测试、ADR 与共享层的候选审查者；不扩大 Issue 修改范围。
+/tests/performance/ @kittywent
+/docs/adr/ @Zhu-ShuH @kittywent @wxm-1
+/src/g15/common/ @Zhu-ShuH
+# .github/、members/ 和未列出的治理文档继续由 A 兜底；不改变分支保护。
 /src/g15/simulation/engine.py @kittywent
 /src/g15/simulation/degradation.py @kittywent
 /src/g15/simulation/noise.py @kittywent
