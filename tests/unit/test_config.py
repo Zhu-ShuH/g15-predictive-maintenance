@@ -120,6 +120,74 @@ def test_repeated_loading_is_deterministic() -> None:
     assert first is not second
 
 
+# --------------------------------------------------------------------------- #
+# acceptance.md section 3: controlled run matrix
+# --------------------------------------------------------------------------- #
+
+ACCEPTANCE_SEEDS = (42, 20_261_016)
+ACCEPTANCE_CASES = {
+    "healthy": None,
+    "degradation": None,
+    "spike": ("spike", 256),
+    "step": ("step", 2048),
+    "burst": ("burst", 2048),
+}
+
+
+@pytest.mark.parametrize("seed", ACCEPTANCE_SEEDS)
+@pytest.mark.parametrize("case", sorted(ACCEPTANCE_CASES))
+def test_acceptance_matrix_matches_section_3(case: str, seed: int) -> None:
+    """Every controlled run must reproduce the frozen profile of the contract."""
+    config = load_config(CONFIGS / f"acceptance_{case}_seed{seed}.yaml")
+    scenario = config.scenario
+
+    assert scenario.seed == seed
+    assert scenario.device_id == "DEV-001"
+    assert scenario.sample_rate_hz == 100
+    assert scenario.total_points == 65_536
+    assert scenario.chunk_points == 10_240
+    assert config.signals.vibration.unit == "g"
+    assert config.signals.temperature.unit == "degC"
+    assert config.signals.vibration.baseline == 0.5
+    assert config.signals.vibration.noise_std == 0.05
+    assert config.signals.temperature.baseline == 35.0
+    assert config.signals.temperature.noise_std == 0.15
+
+    consumer = load_consumer_config(CONFIGS / "consumer.yaml")
+    assert validate_config(config, consumer=consumer) is None
+
+    expected = ACCEPTANCE_CASES[case]
+    if case == "healthy":
+        assert config.signals.vibration.degradation_rate_per_sample == 0.0
+        assert config.fault_generation.events == ()
+    elif case == "degradation":
+        assert config.signals.vibration.degradation_rate_per_sample == 0.00002
+        assert config.fault_generation.events == ()
+    else:
+        kind, duration = expected
+        assert len(config.fault_generation.events) == 1
+        event = config.fault_generation.events[0]
+        assert (
+            event.type,
+            event.start_seq,
+            event.duration_points,
+            event.amplitude,
+        ) == (kind, 16_384, duration, 5.0)
+
+
+def test_acceptance_matrix_covers_six_fault_events() -> None:
+    """Three fault types times two seeds, as required for TP=6 / FN=0."""
+    events = []
+    for case in ("spike", "step", "burst"):
+        for seed in ACCEPTANCE_SEEDS:
+            config = load_config(CONFIGS / f"acceptance_{case}_seed{seed}.yaml")
+            events.extend(config.fault_generation.events)
+
+    assert len(events) == 6
+    assert {event.type for event in events} == {"spike", "step", "burst"}
+    assert {event.event_id for event in events} == {"F001"}
+
+
 def test_shipped_consumer_config_validates() -> None:
     """``consumer.yaml`` must load and resolve its rules file."""
     config = load_consumer_config(CONFIGS / "consumer.yaml")
@@ -409,6 +477,49 @@ def test_non_string_unit_is_rejected(tmp_path: Path) -> None:
     document["signals"]["vibration"]["unit"] = 7
 
     expect_invalid(tmp_path, document, "signals.vibration.unit", "non-empty string")
+
+
+@pytest.mark.parametrize(
+    ("channel", "unit"),
+    [
+        ("vibration", "m/s2"),
+        ("vibration", "G"),
+        ("temperature", "K"),
+        ("temperature", "degc"),
+    ],
+)
+def test_unit_must_match_the_frozen_contract(
+    tmp_path: Path, channel: str, unit: str
+) -> None:
+    """Only ``g`` and ``degC`` are valid; anything else is a silent mismatch."""
+    document = base_document()
+    document["signals"][channel]["unit"] = unit
+
+    expect_invalid(tmp_path, document, f"signals.{channel}.unit", "must be one of")
+
+
+@pytest.mark.parametrize(
+    "field", ["baseline", "noise_std", "degradation_rate_per_sample"]
+)
+def test_unrepresentable_integer_is_a_config_error(tmp_path: Path, field: str) -> None:
+    """``10**400`` overflows ``float`` and must not escape as ``OverflowError``."""
+    document = base_document()
+    document["signals"]["vibration"][field] = 10**400
+
+    expect_invalid(
+        tmp_path, document, f"signals.vibration.{field}", "representable as a float"
+    )
+
+
+def test_mixed_type_unknown_keys_are_rejected_without_crashing(
+    tmp_path: Path,
+) -> None:
+    """``sorted()`` used to raise TypeError on a bool key next to a string key."""
+    document = base_document()
+    document[True] = 1
+    document["typo"] = 2
+
+    expect_invalid(tmp_path, document, "unknown field", "typo", "True")
 
 
 # --------------------------------------------------------------------------- #
@@ -741,6 +852,37 @@ def test_cli_validate_returns_2_for_a_missing_file(
     captured = capsys.readouterr()
     assert code == 2
     assert "gone.yaml" in captured.err
+
+
+def test_cli_returns_2_for_an_unrepresentable_number(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """A huge integer must be a config error, not a traceback."""
+    document = base_document()
+    document["signals"]["vibration"]["baseline"] = 10**400
+    path = write_document(tmp_path, document)
+
+    code = main(["validate", "--config", str(path)])
+
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "signals.vibration.baseline" in captured.err
+
+
+def test_cli_returns_2_for_mixed_type_unknown_keys(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Mixed key types used to escape as TypeError with exit code 1."""
+    document = base_document()
+    document[True] = 1
+    document["typo"] = 2
+    path = write_document(tmp_path, document)
+
+    code = main(["validate", "--config", str(path)])
+
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "typo" in captured.err
 
 
 @pytest.mark.parametrize(

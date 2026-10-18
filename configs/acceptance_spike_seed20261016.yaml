@@ -1,0 +1,32 @@
+# acceptance.md §3 固定受控轮廓：100 Hz、total_points=65536、chunk_points=10240、
+# 消费窗口 256、尾窗 drop、单设备。单事件，必须被检出。
+schema_version: '1.0'
+scenario:
+  id: acceptance_spike_seed20261016
+  description: '§3 受控用例 spike：单事件 spike，start=16384、duration=256、amplitude=5.0（seed=20261016）'
+  seed: 20261016
+  start_time_utc: '2026-10-14T00:00:00Z'
+  device_id: 'DEV-001'
+  sample_rate_hz: 100
+  total_points: 65536
+  chunk_points: 10240
+signals:
+  vibration:
+    baseline: 0.5
+    degradation_rate_per_sample: 0.0
+    noise_std: 0.05
+    unit: 'g'
+  temperature:
+    baseline: 35.0
+    degradation_rate_per_sample: 0.0
+    noise_std: 0.15
+    unit: 'degC'
+fault_generation:
+  mode: manual
+  stochastic_probability_per_window: 0.0
+  events:
+    - event_id: F001
+      type: spike
+      start_seq: 16384
+      duration_points: 256
+      amplitude: 5.0

@@ -31,6 +31,7 @@ from pathlib import Path
 import yaml
 
 __all__ = [
+    "ALLOWED_UNITS",
     "FAULT_MODES",
     "FAULT_TYPES",
     "INCOMPLETE_WINDOW_POLICIES",
@@ -59,6 +60,12 @@ FAULT_MODES = frozenset({"manual", "stochastic", "combined"})
 
 #: Policies for a final window shorter than ``window_points``.
 INCOMPLETE_WINDOW_POLICIES = frozenset({"drop", "error"})
+
+#: Units frozen per channel by ``docs/interface.md`` section 4.
+ALLOWED_UNITS = {
+    "vibration": frozenset({"g"}),
+    "temperature": frozenset({"degC"}),
+}
 
 _SCENARIO_FIELDS = (
     "id",
@@ -324,7 +331,14 @@ def _as_float(value: object, path: str) -> float:
         raise ConfigError(
             path, f"must be a number, got {type(value).__name__} ({value!r})"
         )
-    return float(value)
+    try:
+        return float(value)
+    except OverflowError as exc:
+        raise ConfigError(
+            path,
+            "must be finite and representable as a float, "
+            "got an integer outside the float range",
+        ) from exc
 
 
 def _as_str(value: object, path: str, allow_empty: bool = False) -> str:
@@ -428,10 +442,12 @@ def _check_fields(
         ConfigError: if the mapping contains any other key.
     """
     allowed = tuple(sorted(set(required) | set(optional)))
-    unknown = sorted(key for key in data if key not in allowed)
+    unknown = [key for key in data if key not in allowed]
     if not unknown:
         return
-    reported = ", ".join(_join(path, key) for key in unknown)
+    # ``sorted`` would raise TypeError on mixed key types (for example ``True``
+    # and ``"typo"``), so order by the textual form and report every offender.
+    reported = ", ".join(_join(path, str(key)) for key in sorted(unknown, key=str))
     raise ConfigError(
         path,
         f"unknown field(s): {reported}; allowed fields are {list(allowed)}",
@@ -608,7 +624,14 @@ def _validate_signals(signals: SignalsBlock) -> None:
             f"{path}.degradation_rate_per_sample",
         )
         _check_non_negative(channel.noise_std, f"{path}.noise_std")
-        _as_str(channel.unit, f"{path}.unit")
+        allowed_units = ALLOWED_UNITS.get(channel.name)
+        if allowed_units is None:
+            raise ConfigError(
+                f"{path}.name",
+                f"unsupported channel {channel.name!r}; "
+                f"expected one of {sorted(ALLOWED_UNITS)}",
+            )
+        _check_choice(channel.unit, f"{path}.unit", allowed_units)
 
 
 def _validate_scenario(scenario: ScenarioBlock) -> None:
