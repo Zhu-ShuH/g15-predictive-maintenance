@@ -3,8 +3,12 @@
 Supports single-line inline links/images and reference definitions, with angle
 destinations or one nested pair of parentheses. Skips code, external schemes,
 and anchors; does not check headings, HTML, multiline links, or remote sites.
-Three explicitly registered project dependencies are checked even inside task
-card code fences. Exit codes: 0 clean, 1 missing/escaping target, 2 scan error.
+Three explicitly registered project dependencies are checked in inline code,
+HTML comments and task-card code fences too; these required paths are not
+examples. HTML comments are not parsed or masked. Unreadable files produce
+diagnostics without discarding other findings; any read error still exits 2.
+Generated pytest/cache directories and nested Git checkouts are excluded.
+Exit codes: 0 clean, 1 missing/escaping target, 2 scan error.
 """
 
 import argparse
@@ -19,7 +23,16 @@ DEPENDENCIES = ("docs/acceptance.md", "docs/environment.md", "environment.yml")
 EXPLICIT = re.compile(
     r"(?<![\w./\\-])(?:" + "|".join(map(re.escape, DEPENDENCIES)) + r")(?![\w./\\-])"
 )
-SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "runs", "__pycache__"}
+SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "runs",
+    "__pycache__",
+    ".pytest_cache",
+    ".black-cache",
+}
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 DEST = r"(<[^>\n]+>|(?:\\.|[^\s()\\]|\((?:\\.|[^()\\])*\))+?)"
 INLINE = re.compile(r"!?\[(?:\\.|[^\]\\])*\]\(\s*" + DEST + r"(?:\s+[^\n]*?)?\s*\)")
@@ -111,18 +124,35 @@ def scan(root: Path) -> list[Finding]:
     findings = []
 
     def walk_error(error: OSError) -> None:
-        raise error
+        path = Path(error.filename) if error.filename else root
+        findings.append(
+            Finding(path.relative_to(root).as_posix(), 1, str(error), "scan error")
+        )
 
     for current, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
         dirs[:] = sorted(
             d
             for d in dirs
-            if d not in SKIP_DIRS and not (Path(current) / d).is_symlink()
+            if d not in SKIP_DIRS
+            and not d.startswith("pytest-of-")
+            and not d.endswith(".egg-info")
+            and not (Path(current) / d).is_symlink()
+            and not (Path(current) / d / ".git").exists()
         )
         for name in sorted(files):
             path = Path(current) / name
             if path.suffix.lower() == ".md" and not path.is_symlink():
-                findings.extend(findings_for_file(root, path))
+                try:
+                    findings.extend(findings_for_file(root, path))
+                except (OSError, UnicodeError, ValueError) as error:
+                    findings.append(
+                        Finding(
+                            path.relative_to(root).as_posix(),
+                            1,
+                            str(error),
+                            "scan error",
+                        )
+                    )
     return findings
 
 
@@ -146,15 +176,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Document reference scan failed: {error}", file=sys.stderr)
         return 2
     for finding in findings:
-        message = f"Missing or escaping {finding.kind}: {finding.target}"
+        if finding.kind == "scan error":
+            message = f"Document reference scan failed for this file: {finding.target}"
+            print(f"{finding.file}:{finding.line}: {message}", file=sys.stderr)
+        else:
+            message = f"Missing or escaping {finding.kind}: {finding.target}"
         if args.github_actions:
+            source = args.root.resolve() / finding.file
+            annotation_file = os.path.relpath(source, Path.cwd()).replace(os.sep, "/")
             print(
-                f"::warning file={annotation_escape(finding.file, property_value=True)},"
+                f"::warning file={annotation_escape(annotation_file, property_value=True)},"
                 f"line={finding.line}::{annotation_escape(message)}"
             )
         else:
             print(f"{finding.file}:{finding.line}: {message}")
     print(f"Document reference scan: {len(findings)} issue(s).")
+    if any(finding.kind == "scan error" for finding in findings):
+        return 2
     return 1 if findings else 0
 
 

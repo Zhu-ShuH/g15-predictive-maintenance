@@ -1,4 +1,4 @@
-name: CI (skeleton checks only)
+name: CI (quality and advisory checks)
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         run: python -m black --check tools
       - name: Pylint (threshold 8.5)
         run: python -m pylint src/g15 --fail-under=8.5
-      - name: Pytest (structural import test; no business tests yet)
+      - name: Pytest (current test suite)
         run: python -m pytest -q
       - name: Package import smoke test
         run: python -c "import g15; import g15.simulation; import g15.pipeline; import g15.analysis; import g15.storage; import g15.reporting; import g15.common"

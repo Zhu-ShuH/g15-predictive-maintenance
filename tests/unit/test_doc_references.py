@@ -117,10 +117,58 @@ def test_invalid_utf8_is_scan_error(tmp_path, capsys):
     assert "scan failed" in capsys.readouterr().err
 
 
-def test_github_warning_and_escaping(tmp_path, capsys):
+def test_github_warning_and_escaping(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     write(tmp_path, "a,b.md", "[x](bad%25name.md)")
     assert CHECKER.main(["--root", str(tmp_path), "--github-actions"]) == 1
     output = capsys.readouterr().out
     assert "::warning file=a%2Cb.md,line=1::" in output
     assert "bad%25name.md" in output
     assert CHECKER.annotation_escape("x\n::error::oops%") == "x%0A::error::oops%25"
+
+
+def test_bad_file_preserves_other_diagnostics_and_scan_error_exit(tmp_path, capsys):
+    """A read failure cannot discard findings before or after the bad file."""
+    write(tmp_path, "a.md", "[x](dead1.md)")
+    (tmp_path / "b.md").write_bytes(b"\xff")
+    write(tmp_path, "c.md", "[x](dead2.md)")
+    assert CHECKER.main(["--root", str(tmp_path)]) == 2
+    captured = capsys.readouterr()
+    assert "a.md:1:" in captured.out and "dead1.md" in captured.out
+    assert "c.md:1:" in captured.out and "dead2.md" in captured.out
+    assert "b.md:1:" in captured.err and "scan failed" in captured.err
+
+
+def test_generated_dirs_and_nested_checkouts_do_not_pollute_scan(tmp_path):
+    """Skip test artifacts and real nested checkouts, not arbitrary tmp docs."""
+    for directory in (
+        "pytest-of-user",
+        ".pytest_cache",
+        ".black-cache",
+        "g15.egg-info",
+    ):
+        write(tmp_path, f"{directory}/bad.md").write_bytes(b"\xff")
+    write(tmp_path, ".tmp-worktree/.git", "gitdir: ../git/worktrees/sample")
+    write(tmp_path, ".tmp-worktree/bad.md").write_bytes(b"\xff")
+    write(tmp_path, ".tmp-docs/a.md", "[x](missing.md)")
+    assert [(item.file, item.target) for item in CHECKER.scan(tmp_path)] == [
+        (".tmp-docs/a.md", "missing.md")
+    ]
+
+
+def test_registered_dependencies_in_inline_code_and_comments(tmp_path):
+    """A explicitly registered dependency is checked in all text contexts."""
+    write(tmp_path, "a.md", "`docs/acceptance.md`\n<!-- docs/environment.md -->\n")
+    assert {(item.line, item.target) for item in CHECKER.scan(tmp_path)} == {
+        (1, "docs/acceptance.md"),
+        (2, "docs/environment.md"),
+    }
+
+
+def test_subdirectory_actions_annotation_is_relative_to_checkout(
+    tmp_path, capsys, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path, "docs/a.md", "[x](missing.md)")
+    assert CHECKER.main(["--root", "docs", "--github-actions"]) == 1
+    assert "::warning file=docs/a.md,line=1::" in capsys.readouterr().out
