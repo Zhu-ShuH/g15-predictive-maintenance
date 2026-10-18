@@ -44,7 +44,7 @@ YAML 配置 → validate/config → Simulation Engine ─┬─> private_truth/f
                                                    └─ 性能/恢复证据
 ```
 
-**依赖方向**：`cli → config/pipeline/report`；`simulation → common`；`pipeline → schema/serialization/analysis/storage`；`analysis → common`；`reporting → storage`。`simulation` **不得 import `analysis` 或 `storage`**；`analysis` **不得访问** `private_truth`。CLI 只能编排模块，不放业务公式。
+**依赖方向**：`cli → config/pipeline/report`；`simulation → common`；`pipeline → common/schema/serialization/analysis/storage`；`analysis → common`；`reporting → storage`。`simulation` **不得 import `analysis` 或 `storage`**；`analysis` **不得访问** `private_truth`。CLI 只能编排模块，不放业务公式。
 
 ## 3. 工程目录（唯一基线）
 
@@ -189,6 +189,12 @@ health_rules_file: 'configs/health_rules.yaml'
 
 ### 5.1 分片 NPZ
 
+`SimulationChunk` 唯一定义位于 `g15.common.types`；`g15.simulation.engine`
+保留同对象重导出。四数组均为一维、等长；内存空块允许，文件空分片非法。
+生成端检查 dtype、等长、片内 seq 连续及信号 finite；序列化写端独立重查并拒空片；
+读取端核对 SHA、rows 后重查数组；消费入口负责 part 顺序、跨片连续性与运行完整性。
+这些检查不得因上游已验证而省略。数值生成和单位含义维持当前基线。
+
 每个 `runs/<run_id>/raw/part-000000.npz` 必须包含**同长度**数组：
 
 | 字段 | 类型 | 说明/约束 |
@@ -250,10 +256,10 @@ validate_config(config: ScenarioConfig) -> None
 load_consumer_config(path: Path) -> ConsumerConfig
 
 # simulation/engine.py
-simulate_chunk(config: ScenarioConfig, start_seq: int, count: int, rng: np.random.Generator) -> SimulationChunk
+simulate_chunk(config: ScenarioConfig, start_seq: int, count: int, rng: np.random.Generator | None = None) -> SimulationChunk
 
 # simulation/faults.py
-inject_faults(chunk: SimulationChunk, config: ScenarioConfig, rng: np.random.Generator) -> tuple[SimulationChunk, list[FaultEvent]]
+inject_faults(chunk: SimulationChunk, config: ScenarioConfig, rng: np.random.Generator | None = None) -> tuple[SimulationChunk, list[FaultEvent]]
 
 # pipeline/serialization.py
 write_chunk_atomic(chunk: SimulationChunk, output_path: Path) -> ChunkManifestEntry
@@ -278,6 +284,11 @@ consume_run(run_dir: Path, database_path: Path, config: ConsumerConfig) -> Consu
 build_report(run_dir: Path, database_path: Path) -> Path
 ```
 
+`simulate_chunk` 与 `inject_faults` 的 `rng` 仅为调用契约兼容保留，接受
+`None` 或 `numpy.random.Generator`，非法类型拒绝；不得消费调用方生成器状态。
+确定性由配置 seed、稳定子流与绝对样本索引决定，不能声称实际使用了传入 RNG。
+随机故障的事件调度规则仍按 #6 单独评审，不由共享类型迁移补造。
+
 **设计约束**：特征、评分、告警规则尽量使用无副作用的纯函数；文件 I/O 仅位于 pipeline/storage/reporting；不跨模块 import 私有 `_name`；不在 import 时执行仿真或访问文件。不要把 `assert` 用于生产输入校验，应使用 `ValueError`/专门异常并映射到明确的 CLI 退出码。
 
 ## 7. 仿真模型规范
@@ -291,6 +302,16 @@ build_report(run_dir: Path, database_path: Path) -> Path
 - 噪声 `ε ~ N(0, σ²)`，从固定 `seed` 生成。
 
 参数要写清物理量纲；此模型是教学用退化过程假设，而不是设备真实物理规律。`float64` 向量化生成，分片长度例如 100,000；不得 Python 层逐点 `append` 百万次。数值较大时须防止溢出、负值或不合理物理值，处理策略需文档声明。
+
+噪声固定按 `BLOCK_POINTS = 16384` 寻址，块 b 覆盖
+`[b*16384, (b+1)*16384)`，子流标签为 `vibration` / `temperature`。
+播种使用 `default_rng(SeedSequence([seed & 0xFFFFFFFFFFFFFFFF,
+crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
+按绝对下标截取块内噪声；不得改用进程不稳定的 `hash()`。
+相同配置、代码与依赖版本下，结果与分片尺寸、生成顺序、重试无关。
+`BLOCK_POINTS` 是数值契约，`chunk_points` 是落盘分片参数，二者不等同。
+修改块大小、标签或播种映射须走兼容性评审：提升相应版本或明确声明跨版本数值不保证一致，
+不得静默改动后仍宣称同版本逐点一致；本次不修改算法、常量或 schema_version。
 
 ### 7.2 注入类型
 
@@ -460,3 +481,19 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 | R10 | 新环境 GitHub 克隆，两种 Linux 可运行 | scripts/CI | 双 Linux 安装运行记录 |
 
 新增需求必须携带验收用例；没有可检查证据的需求不能标为“完成”。
+
+
+## 15. Issue #17 接口评审与迁移记录（2026-10-18）
+
+- 来源：[C4 意见](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/17#issuecomment-6247508474)、
+  [B1 完整回复](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/17#issuecomment-6247619901)。
+  这是线上逐项反馈，未虚构会议、全员批准或验收通过。
+- B1/C4 均支持唯一类型、序列化独立校验、文件拒空、兼容迁移；B1 实测内存空块可用。
+  B1 倾向保留可选 rng 且不得消费，C4 原文为“实现可声明不消费”。
+  A 按本轮执行指派选择统一为 §6 的不得消费，保留原意见差别，提交 B1/C4 复审新措辞。
+- 迁移只移动 SimulationChunk，engine 保留同对象导出；ScenarioConfig 与 FaultEvent 不迁移。
+  B1 原测试路径保持兼容。C4 的 serialization 当前仍局部从 engine 导入，重导出只能兼容，
+  不会自动消除 pipeline→simulation 依赖；应由 C4 在 #3 范围改为 common，
+  或先点名补充 #17 范围。本 PR 未越范围改该文件。
+- 本记录描述待复审的变更与兼容约束；PR 未合并前不声称 main 已迁移或接口已全组冻结。
+  完整生产百万点、检出率与双 Linux 仍按 acceptance.md 独立验收。
