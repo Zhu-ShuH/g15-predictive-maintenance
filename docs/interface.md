@@ -482,17 +482,29 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 
 新增需求必须携带验收用例；没有可检查证据的需求不能标为“完成”。
 
-
 ## 15. Issue #17 接口评审与迁移记录（2026-10-18）
 
 - 来源：[C4 意见](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/17#issuecomment-6247508474)、
   [B1 完整回复](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/17#issuecomment-6247619901)。
   这是线上逐项反馈，未虚构会议、全员批准或验收通过。
-- B1/C4 均支持唯一类型、序列化独立校验、文件拒空、兼容迁移；B1 实测内存空块可用。
-  B1 倾向保留可选 rng 且不得消费，C4 原文为“实现可声明不消费”。
-  A 按本轮执行指派选择统一为 §6 的不得消费，保留原意见差别，提交 B1/C4 复审新措辞。
+- 各议题的原文立场与落点分别记录，不将责任分工建议写成对另一位评审者的附议：
+
+  | 议题 | B1 原文立场 | C4 原文立场 | 本次落点 |
+  |---|---|---|---|
+  | 唯一公共定义 | 同意唯一公共定义及同对象重导出 | 建议唯一类型，推荐迁往 common，不另造同名类型 | common.types |
+  | 四数组 dtype / 单位 | 逐项确认 int64/int64/float64/float64 与 g/degC | 未逐项确认字段与单位 | §5.1 |
+  | 内存空块 | 允许，并提供 count=0 实测 | 未明确表态内存空块 | 允许，仅存在于内存 |
+  | 文件空分片 | 拒绝 | 建议拒绝，并说明序列化侧已拒收 | §5.1 拒绝落盘 |
+  | 校验责任分层 | 给出生成、写入、读取、消费四层表 | 给出独立校验与跨片职责分发建议 | §5.1，保留各自来源 |
+  | rng | 提出方案 (a)：可选参数、不得消费调用方状态 | 表述为“实现可声明不消费” | A 采纳 B1 方案 (a)，落定 §6 措辞 |
+  | BLOCK_POINTS 入契约 | 同意，并提供值、播种规则与建议文本 | 未明确表态固定块入契约 | §7.1 |
+
+  B1 提出方案 (a)（保留 None 默认值并显式不得消费），C4 表述较弱；
+  A 采纳 B1 的方案 (a)，不将两种原文意见写成一致附议，提交 B1/C4 复审。
 - 迁移只移动 SimulationChunk，engine 保留同对象导出；ScenarioConfig 与 FaultEvent 不迁移。
-  B1 原测试路径保持兼容。C4 的 serialization 当前仍局部从 engine 导入，重导出只能兼容，
+  `engine.SimulationChunk is common.types.SimulationChunk` 成立；现有从 engine 导入的调用点
+  （包括 B1 仿真/性能测试及 C4 序列化运行时导入）无需改动即可继续取得同一类对象。
+  测试路径是该兼容约束的下游，不是兼容保证本身。C4 的 serialization 当前仍局部从 engine 导入，重导出只能兼容，
   不会自动消除 pipeline→simulation 依赖；应由 C4 在 #3 范围改为 common，
   或先点名补充 #17 范围。本 PR 未越范围改该文件。
 - 本记录描述待复审的变更与兼容约束；PR 未合并前不声称 main 已迁移或接口已全组冻结。
