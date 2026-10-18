@@ -111,6 +111,15 @@ def test_shipped_scenarios_align_with_the_consumer_window(name: str) -> None:
     assert validate_config(config, consumer=consumer) is None
 
 
+def test_repeated_loading_is_deterministic() -> None:
+    """Parsing the same document twice must yield equal, independent objects."""
+    first = load_config(CONFIGS / "default.yaml")
+    second = load_config(CONFIGS / "default.yaml")
+
+    assert first == second
+    assert first is not second
+
+
 def test_shipped_consumer_config_validates() -> None:
     """``consumer.yaml`` must load and resolve its rules file."""
     config = load_consumer_config(CONFIGS / "consumer.yaml")
@@ -672,6 +681,25 @@ def test_health_rules_path_is_independent_of_cwd(
 
     assert first == second
     assert first.is_absolute()
+
+
+def test_health_rules_path_is_absolute_for_a_relative_config_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A relative ``--config`` argument must still yield an absolute path.
+
+    The CLI is normally invoked from the repository root with
+    ``--config configs/consumer.yaml``. The resulting object must not embed a
+    relative path, otherwise it stops resolving as soon as the process changes
+    its working directory.
+    """
+    monkeypatch.chdir(ROOT)
+
+    config = load_consumer_config(Path("configs", "consumer.yaml"))
+
+    assert config.health_rules_path.is_absolute()
+    assert config.health_rules_path == (CONFIGS / "health_rules.yaml").resolve()
+    assert config.health_rules_path.is_file()
 
 
 # --------------------------------------------------------------------------- #

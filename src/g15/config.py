@@ -996,12 +996,13 @@ def _repository_root(config_path: Path) -> Path:
 
     Returns:
         The nearest ancestor holding ``pyproject.toml``, or the file's own
-        directory when the marker is absent.
+        directory when the marker is absent. The result is always absolute, so
+        that paths built from it survive a later change of working directory.
     """
     for parent in (config_path.parent, *config_path.parent.parents):
         if (parent / "pyproject.toml").is_file():
-            return parent
-    return config_path.parent
+            return parent.resolve()
+    return config_path.parent.resolve()
 
 
 def _resolve_health_rules(config_path: Path, value: str) -> Path:
@@ -1022,6 +1023,7 @@ def _resolve_health_rules(config_path: Path, value: str) -> Path:
         resolved = candidate
     else:
         resolved = _repository_root(config_path) / candidate
+    resolved = resolved.resolve()
     if not resolved.is_file():
         raise ConfigError("health_rules_file", f"file not found: {resolved}")
     return resolved
