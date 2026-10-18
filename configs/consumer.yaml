@@ -1,1 +1,5 @@
-# TODO: 待 C3 按评审后的消费配置契约填写；目前不是可运行配置。
+# 消费侧配置：只含公开参数，禁止出现任何故障信息（docs/interface.md §4）
+schema_version: '1.0'
+window_points: 256
+incomplete_window: drop
+health_rules_file: 'configs/health_rules.yaml'

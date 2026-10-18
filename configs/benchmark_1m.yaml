@@ -1,1 +1,26 @@
-# TODO: 待场景负责人完成并实测；目前不是性能结果或可运行配置。
+# 百万点基准：固定 seed、无事件，只测生成吞吐（<60 s）
+schema_version: '1.0'
+scenario:
+  id: benchmark_1m
+  description: '100 万点性能基准，固定 seed，可逐点复现'
+  seed: 42
+  start_time_utc: '2026-10-14T00:00:00Z'
+  device_id: 'DEV-005'
+  sample_rate_hz: 100
+  total_points: 1000000
+  chunk_points: 102400
+signals:
+  vibration:
+    baseline: 0.5
+    degradation_rate_per_sample: 0.000001
+    noise_std: 0.05
+    unit: 'g'
+  temperature:
+    baseline: 35.0
+    degradation_rate_per_sample: 0.000003
+    noise_std: 0.15
+    unit: 'degC'
+fault_generation:
+  mode: manual
+  stochastic_probability_per_window: 0.0
+  events: []

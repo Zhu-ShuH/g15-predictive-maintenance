@@ -1,1 +1,31 @@
-# TODO: 待 C3 按评审后的接口填写；目前不是可运行配置。
+# 主演示场景：缓慢退化 + 一个突发冲击（docs/interface.md §4 标准示例）
+schema_version: '1.0'
+scenario:
+  id: bearing_001
+  description: '轴承缓慢退化与突发冲击'
+  seed: 42
+  start_time_utc: '2026-10-14T00:00:00Z'
+  device_id: 'DEV-001'
+  sample_rate_hz: 100
+  total_points: 1000000
+  chunk_points: 102400
+signals:
+  vibration:
+    baseline: 0.5
+    degradation_rate_per_sample: 0.000001
+    noise_std: 0.05
+    unit: 'g'
+  temperature:
+    baseline: 35.0
+    degradation_rate_per_sample: 0.000003
+    noise_std: 0.15
+    unit: 'degC'
+fault_generation:
+  mode: manual
+  stochastic_probability_per_window: 0.0
+  events:
+    - event_id: F001
+      type: spike
+      start_seq: 600000
+      duration_points: 256
+      amplitude: 5.0
