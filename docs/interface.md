@@ -1,5 +1,7 @@
 # G15 预测性维护场景沙盘：架构设计与接口契约 V1.0
 
+> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
+
 > 状态：**设计基线（待小组审核/实现）**。本文是项目册 G15 和课程 P4.1/P2.2 的小组技术落地方案；NPZ、SQLite、CLI、字段名、阈值等均为小组选定的工程约定，不是教师原文强制技术栈。组长审核通过后冻结 `schema_version=1.0`。若此前草案写的是 CSV 分片，**以本版 NPZ 分片为准**，CSV 仅可选导出。
 > 2026-10-15 更新：先读资料包根目录 `00_先读_统一决策与待确认事项.md`；当前没有完成组内冻结或任何代码实测。下述 14 天为相对计划模板，实际截止日待确认。
 
@@ -16,7 +18,7 @@
 - 内部数据交换：**NPZ 数值分片 + `manifest.json` 元数据 + Schema V1**。源数据与故障真值分目录，消费者在代码与接口层禁止读取真值；同一运行目录内的子目录划分不构成操作系统权限隔离。报告提供 JSON 和 Markdown；可选 CSV 导出用于人工检查。
 - 没有强制 Web 界面、在线模型 API、MQTT、Redis、微服务、RUL 估计、机器学习训练。它们只能在验收主链达标后以受控 ADR 增补。
 - SQLite 存储消费状态、特征、评分、告警和操作结果；`WAL` 模式，消费者单写者、按分片事务提交。
-- 部署：源码安装到 `.venv`，支持离线运行（下载依赖属于安装阶段）；只依赖相对路径和环境变量。
+- 部署：源码安装到 Conda `pp03`（Python 3.12），支持离线运行（下载依赖属于安装阶段）；只依赖相对路径和环境变量。
 
 ## 2. 系统结构与模块依赖
 
@@ -198,7 +200,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 `device_id` 和 `run_id` 在分片对应的 manifest 元数据中给出；一个运行只对应一个设备（多设备通过多个 run 支持，避免本期接口歧义）。消费者读取时必须 `np.load(path, allow_pickle=False)`；不得读取对象 pickle。边界分片可小于 chunk_points。类型或数值错误按消费者错误策略拒收并记日志。
 
-**百万点口径待教师确认**：暂按 `seq` 的采样次数计点；双信号的标量值总数另列，性能报告必须同时记录 `sample_count` 和 `scalar_value_count`，不能把两个值合并宣称为两个已验证采样点。
+**百万点口径已由组长确认**：按 `seq` 的采样次数计点；双信号的标量值总数另列，性能报告必须同时记录 `sample_count` 和 `scalar_value_count`，不能把两个值合并宣称为两个已验证采样点。
 
 ### 5.2 Manifest（示例）
 
@@ -235,7 +237,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 ### 5.4 输出报告结构
 
-`reports/summary.json` 最少包括：`run_id`、`schema_version`、`scoring_version`、`total_points`（暂指采样次数）、`scalar_value_count`、`processed_points`、`rejected_points`、`feature_windows`、`alarm_count`、`health_score_min/max`、`elapsed_seconds`、`fault_events`、`detected_events`、`false_alarm_count`、`detection_rate`、`errors`。`reports/summary.md` 要有相同口径及运行环境。未知指标用 `null`，不得捏造 `0` 或 `100%`。
+`reports/summary.json` 最少包括：`run_id`、`schema_version`、`scoring_version`、`total_points`（采样次数）、`scalar_value_count`、`processed_points`、`rejected_points`、`feature_windows`、`alarm_count`、`health_score_min/max`、`elapsed_seconds`、`fault_events`、`detected_events`、`false_alarm_count`、`detection_rate`、`errors`。`reports/summary.md` 要有相同口径及运行环境。未知指标用 `null`，不得捏造 `0` 或 `100%`。
 
 ## 6. Python 模块公开接口契约
 
@@ -300,7 +302,7 @@ build_report(run_dir: Path, database_path: Path) -> Path
 
 ### 7.3 性能评价
 
-必须实测：**1,000,000 点、从启动仿真计时到全部 NPZ 数据分片和 Manifest 成功落盘，elapsed <60 s**。使用 `time.perf_counter()`；报告 CPU、内存、Python/NumPy 版本、Linux、块大小、数据量、产生速率及磁盘写入是否包含在内。测试脚本在 Ubuntu 和 RHEL 独立执行。不要把 CI 共享 Runner 波动时间当作唯一结论。
+必须实测：**1,000,000 点、从配置校验后、首次数据生成前计时到全部 NPZ 数据分片和 complete Manifest 写入完成（含随机初始化、序列化、哈希与原子发布），详见 docs/acceptance.md，elapsed <60 s**。使用 `time.perf_counter()`；报告 CPU、内存、Python/NumPy 版本、Linux、块大小、数据量、产生速率及磁盘写入是否包含在内。测试脚本在 Ubuntu 和 RHEL 独立执行。不要把 CI 共享 Runner 波动时间当作唯一结论。
 
 ## 8. 特征、评分、告警规范
 
@@ -334,7 +336,7 @@ build_report(run_dir: Path, database_path: Path) -> Path
 
 `detection_rate = matched_injected_fault_events / total_injected_fault_events`。
 
-验证器按 `device_id` 和事件区间进行匹配；允许的检测时延 `max_detection_lag_windows` 必须测试前写明。正常场景的误报数量同时报告。应准备至少正常、缓慢退化、突发冲击、阶跃故障四种场景，并预留未参与调参的验证 seed。**“100%”只指预设受控注入测试集**，不能宣称真实工业环境无漏报。
+事件匹配及受控配置按 docs/acceptance.md；验证器按 `device_id` 和事件区间进行匹配；允许的检测时延 `max_detection_lag_windows` 必须测试前写明。正常场景的误报数量同时报告。应准备至少正常、缓慢退化、突发冲击、阶跃故障四种场景，并预留未参与调参的验证 seed。**“100%”只指预设受控注入测试集**，不能宣称真实工业环境无漏报。
 
 ## 9. SQLite 数据库契约
 
@@ -426,7 +428,7 @@ runs/<run_id>/
 
 ## 12. 跨平台部署与故障恢复
 
-Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux 9（RHEL 9）；用户确认两种发行版无指定且虚拟机验证获认可。须在两套不同发行版的虚拟机或系统中分别从公开 GitHub 仓库全新克隆，并确认实际安装了 Python 3.11 或 3.12。RHEL 虚拟机先确认可用软件仓库及所需包，再执行安装，不沿用原目标发行版的软件源假设。按 `python -m venv .venv` 建虚拟环境、安装固定依赖；`pp03` 是否为强制环境仍待确认。`setup.sh` 在明确的版本要求和依赖错误下退出非零状态；`demo.sh` 从空 `runs/` 可重建结果；`verify.sh` 检查测试、完整链路和验收门禁；`benchmark.sh` 生成可审计的性能结果。脚本使用 `set -euo pipefail`、相对目录定位和有意义的退出码。
+Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux 9（RHEL 9）；用户确认两种发行版无指定且虚拟机验证获认可。须在两套不同发行版的虚拟机或系统中分别从公开 GitHub 仓库全新克隆，并确认 Conda pp03 内实际安装 Python 3.12。RHEL 虚拟机先确认可用软件仓库及所需包，再执行安装，不沿用原目标发行版的软件源假设。按 environment.yml 创建或复用 Conda pp03 / Python 3.12，并安装项目依赖，版本不符停止且不覆盖旧环境；详情见 docs/environment.md。依赖尚未锁定，后续由 A/C6 验证。`setup.sh` 在明确的版本要求和依赖错误下退出非零状态；`demo.sh` 从空 `runs/` 可重建结果；`verify.sh` 检查测试、完整链路和验收门禁；`benchmark.sh` 生成可审计的性能结果。脚本使用 `set -euo pipefail`、相对目录定位和有意义的退出码。
 
 必须进行真实故障注入：①业务突发故障检出；②文件损坏/哈希失败隔离；③消费进程 `kill -9` 后重启并重放；可选 ④无权限写入、⑤非法配置。**断电保证**要区别于进程强杀：`os.replace`、WAL、SHA 能提高可靠性，但不能未经断电实测就声称零数据损失。所有演示保留命令和日志。
 
@@ -437,7 +439,7 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 1. 提 Issue，说明现状、原因、兼容影响、迁移计划。
 2. A + B1 + B2 + C4 审查；根据影响范围邀请 C2/C3/C5。
 3. 修改接口文档、测试 fixture 和消费端，再修改实现。
-4. 运行 `./scripts/verify.sh` 并在两种 Linux 至少做兼容烟测。
+4. 运行 `bash scripts/verify.sh` 并在两种 Linux 至少做兼容烟测。
 5. 经评审合并；破坏兼容时提升 schema 的主版本。
 
 任何人和任何 AI 助手都不得未经此流程擅自“优化”公共字段和阈值。
