@@ -8,9 +8,10 @@ contract, so the tests pin three things:
 * the failure rule that matters most: **a failed run must never publish a
   ``complete`` manifest**.
 
-Configurations are plain mappings, matching how ``simulate_chunk`` reads them,
-so the suite does not depend on ``g15.config`` or on ``configs/*.yaml`` (both
-still owned by Issue #4).
+Most fixtures are plain mappings; compatibility cases also exercise C3-shaped
+objects. The real-loader integration runs when Issue #4's ``load_config`` is
+available, and otherwise reports an explicit skip rather than substituting a
+fake loader. The loader and source YAML remain owned by Issue #4.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 from g15.pipeline import producer
 from g15.pipeline.schema import ManifestStatus, manifest_from_dict
@@ -287,12 +289,91 @@ def test_truth_file_is_written_when_the_hook_reports_events(
     assert truth["run_id"] == summary.run_dir.name
 
 
-def test_runs_without_the_hook_still_succeed(tmp_path: Path) -> None:
-    """Issue #6 is unmerged: the producer must degrade, not fail."""
+def test_event_free_runs_without_the_hook_still_succeed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Only event-free runs may proceed when Issue #6 is unavailable."""
+    monkeypatch.setitem(
+        sys.modules, "g15.simulation.faults", types.ModuleType("g15.simulation.faults")
+    )
     summary = produce_run_detailed(scenario_config(total_points=256), tmp_path)
 
     assert summary.fault_events == 0
     assert (summary.run_dir / "manifest.json").is_file()
+
+
+@pytest.mark.parametrize("mode", ["manual", "stochastic", "combined"])
+def test_requested_faults_without_hook_publish_nothing(
+    tmp_path: Path, monkeypatch, mode: str
+) -> None:
+    """Missing injection must not silently turn requested faults into healthy data."""
+    monkeypatch.setitem(
+        sys.modules, "g15.simulation.faults", types.ModuleType("g15.simulation.faults")
+    )
+    config = scenario_config(total_points=32, chunk_points=16)
+    block = config["fault_generation"]
+    block["mode"] = mode
+    if mode in ("manual", "combined"):
+        block["events"] = [
+            {
+                "event_id": "F001",
+                "type": "spike",
+                "start_seq": 4,
+                "duration_points": 4,
+                "amplitude": 5.0,
+            }
+        ]
+    if mode in ("stochastic", "combined"):
+        block["stochastic_probability_per_window"] = 0.25
+    output_root = tmp_path / "runs"
+    with pytest.raises(RuntimeError, match="requires fault injection"):
+        produce_run_detailed(config, output_root)
+    assert not output_root.exists()
+    assert list(tmp_path.rglob("manifest.json")) == []
+
+
+@pytest.mark.parametrize(
+    "representation", ["nested_mapping", "nested_object", "flat_mapping", "flat_object"]
+)
+def test_scenario_id_alias_preserves_manifest_and_run_id(
+    tmp_path: Path, representation: str
+) -> None:
+    """Both mappings and C3-shaped objects retain their declared scenario id."""
+    config = scenario_config(total_points=32, chunk_points=16)
+    config["scenario"]["scenario_id"] = config["scenario"].pop("id")
+    if representation.startswith("flat"):
+        scenario = config.pop("scenario")
+        config.update(scenario)
+    elif representation == "nested_object":
+        config["scenario"] = types.SimpleNamespace(**config["scenario"])
+    if representation.endswith("object"):
+        config = types.SimpleNamespace(**config)
+    run_dir = produce_run(config, tmp_path)
+    payload, manifest = load_manifest(run_dir)
+    assert payload["scenario_id"] == manifest.scenario_id == "bearing_001"
+    assert "-bearing_001-" in run_dir.name
+
+
+def test_real_c3_loader_produces_a_complete_event_free_run(tmp_path: Path) -> None:
+    """Exercise the actual loader when Issue #4 is present in the integration tree."""
+    from g15 import config as config_module  # pylint: disable=import-outside-toplevel
+
+    if not callable(getattr(config_module, "load_config", None)):
+        pytest.skip("Issue #4 load_config is not present on this PR base")
+    config_path = tmp_path / "scenario.yaml"
+    config_path.write_text(
+        yaml.safe_dump(scenario_config(total_points=32, chunk_points=16)),
+        encoding="utf-8",
+    )
+    config = config_module.load_config(config_path)
+    assert config.scenario.scenario_id == "bearing_001"
+    summary = produce_run_detailed(config, tmp_path / "runs")
+    payload, manifest = load_manifest(summary.run_dir)
+    assert payload["scenario_id"] == "bearing_001"
+    assert manifest.total_points == 32
+    assert [part.rows for part in manifest.parts] == [16, 16]
+    assert summary.fault_events == 0
+    assert "-bearing_001-" in summary.run_dir.name
 
 
 # --------------------------------------------------------------------------- #

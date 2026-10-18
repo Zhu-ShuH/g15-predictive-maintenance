@@ -198,10 +198,14 @@ def _scenario_id(config: object) -> str:
         config: Scenario configuration.
 
     Returns:
-        ``scenario.id`` when present, otherwise ``""``.
+        ``scenario.id`` or the configuration object's ``scenario_id`` alias;
+        the same names are also accepted on a flat configuration.
     """
-    value = _field(config, "id", None)
-    return "" if value is None else str(value)
+    for name in ("id", "scenario_id"):
+        value = _field(config, name, None)
+        if value is not None:
+            return str(value)
+    return ""
 
 
 def make_run_id(scenario_id: object, now: _dt.datetime | None = None) -> str:
@@ -290,9 +294,9 @@ def _fault_hook() -> Callable[..., tuple[Any, list[Any]]] | None:
     """Return C1's injection function, or ``None`` while Issue #6 is unmerged.
 
     ``g15.simulation.faults`` is owned by C1 and is an empty placeholder on the
-    current ``main``.  Until it lands, the producer must run *without* injection
-    rather than pretend it injected anything: it logs one warning per run,
-    returns ``None`` and reports no events.
+    current ``main``.  Until it lands, only event-free configurations may run
+    without injection.  This function returns ``None``; the producer rejects
+    configurations that require manual or stochastic faults before any output.
 
     Returns:
         ``inject_faults`` when importable, otherwise ``None``.
@@ -305,10 +309,26 @@ def _fault_hook() -> Callable[..., tuple[Any, list[Any]]] | None:
     except ImportError:
         _LOG.warning(
             "fault injection unavailable: g15.simulation.faults is not "
-            "implemented yet (Issue #6); this run contains no injected events"
+            "implemented yet (Issue #6); only event-free runs may continue"
         )
         return None
     return inject_faults
+
+
+def _requires_fault_injection(config: object) -> bool:
+    """Return whether the configuration requests any injected faults.
+
+    Args:
+        config: Validated mapping or configuration object.
+
+    Returns:
+        True for manual events or a non-zero stochastic probability.
+    """
+    events = _field(config, "events", (), block="fault_generation")
+    probability = _field(
+        config, "stochastic_probability_per_window", 0.0, block="fault_generation"
+    )
+    return bool(events) or probability != 0.0
 
 
 def _write_parts(
@@ -482,6 +502,8 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
         ValueError: if a scenario field is missing or not a positive integer,
             or the simulation kernel rejects the configuration.
         OSError: if the run directory cannot be created or written.
+        RuntimeError: if faults are requested but the injection module is
+            unavailable; no output directory or complete manifest is published.
         g15.pipeline.schema.DataContractError: if a shard or the manifest
             violates the contract; no ``complete`` manifest is published then.
     """
@@ -490,13 +512,18 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
         _field(config, "chunk_points"), "scenario.chunk_points"
     )
 
+    hook = _fault_hook()
+    if hook is None and _requires_fault_injection(config):
+        raise RuntimeError(
+            "configuration requires fault injection, but "
+            "g15.simulation.faults.inject_faults is unavailable (Issue #6)"
+        )
+
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
     run_id = make_run_id(_scenario_id(config))
     run_dir = root / run_id
     run_dir.mkdir(exist_ok=False)
-
-    hook = _fault_hook()
 
     # --- official measurement window (acceptance.md section 2) starts here ---
     started = time.perf_counter()
