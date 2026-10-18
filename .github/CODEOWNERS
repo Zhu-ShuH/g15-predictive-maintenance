@@ -5,7 +5,9 @@
 /tests/performance/ @kittywent
 /docs/adr/ @Zhu-ShuH @kittywent @wxm-1
 /src/g15/common/ @Zhu-ShuH
-# .github/、members/ 和未列出的治理文档继续由 A 兜底；不改变分支保护。
+# .github/、members/ 和未列出的 docs/*.md 继续由 A 兜底；不改变分支保护。
+# /tools/ 与 /tests/unit/test_doc_references.py 由文档检查任务的作者 A 兜底。
+# /environment.yml 由 A 的 2026-10-16 组长决定维护；以上均沿用 * 规则。
 /src/g15/simulation/engine.py @kittywent
 /src/g15/simulation/degradation.py @kittywent
 /src/g15/simulation/noise.py @kittywent
