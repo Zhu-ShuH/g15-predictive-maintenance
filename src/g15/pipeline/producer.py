@@ -248,18 +248,31 @@ def _start_time_text(config: object, fallback_ns: int) -> str:
 
 
 def _units_from(config: object) -> dict[str, str]:
-    """Return the manifest ``units`` mapping, preferring the configuration.
+    """Return the manifest ``units`` mapping, validated against section 5.2.
+
+    Section 5.2 freezes the unit strings (``g`` and ``degC``).  Copying an
+    arbitrary declared unit such as ``m/s2`` into the manifest would publish
+    valid-looking data that every consumer reads with the wrong magnitude, so a
+    non-contract unit is refused instead of being silently relabelled.
 
     Args:
         config: Scenario configuration.
 
     Returns:
         A mapping with exactly ``vibration`` and ``temperature``.
+
+    Raises:
+        ValueError: if a declared unit is not the frozen one for its channel.
     """
     units: dict[str, str] = {}
     for signal, default in FIELD_UNITS.items():
         declared = _field(config, "unit", default, block=f"signals.{signal}")
-        units[signal] = declared if isinstance(declared, str) and declared else default
+        if not isinstance(declared, str) or declared != default:
+            raise ValueError(
+                f"signals.{signal}.unit must be {default!r} (docs/interface.md "
+                f"section 5.2), got {declared!r}"
+            )
+        units[signal] = declared
     return units
 
 
@@ -385,6 +398,7 @@ def _build_manifest(
     params: ScenarioParameters,
     run_id: str,
     entries: list[ChunkManifestEntry],
+    units: dict[str, str],
 ) -> Manifest:
     """Assemble the ``complete`` manifest for a finished run.
 
@@ -393,6 +407,7 @@ def _build_manifest(
         params: Validated scenario parameters from the simulation kernel.
         run_id: Identifier of the run directory.
         entries: Shards in publication order.
+        units: Already validated unit mapping (section 5.2).
 
     Returns:
         A manifest whose ``parts`` cover ``total_points`` exactly.
@@ -406,7 +421,7 @@ def _build_manifest(
         sample_rate_hz=params.sample_rate_hz,
         start_time_utc=_start_time_text(config, params.start_time_utc_ns),
         total_points=params.total_points,
-        units=_units_from(config),
+        units=dict(units),
         status=ManifestStatus.COMPLETE,
         parts=tuple(entries),
     )
@@ -499,8 +514,9 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
         A :class:`ProductionSummary` describing the published run.
 
     Raises:
-        ValueError: if a scenario field is missing or not a positive integer,
-            or the simulation kernel rejects the configuration.
+        ValueError: if a scenario field is missing or not a positive integer, a
+            declared signal unit is not the frozen section 5.2 unit, or the
+            simulation kernel rejects the configuration.
         OSError: if the run directory cannot be created or written.
         RuntimeError: if faults are requested but the injection module is
             unavailable; no output directory or complete manifest is published.
@@ -511,6 +527,9 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
     chunk_points = _positive_int(
         _field(config, "chunk_points"), "scenario.chunk_points"
     )
+    # Validated before the run directory exists: a non-contract unit must fail
+    # without publishing anything, not after the shards are already on disk.
+    units = _units_from(config)
 
     hook = _fault_hook()
     if hook is None and _requires_fault_injection(config):
@@ -530,7 +549,7 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
     entries, truth = _write_parts(
         config, run_dir, params.total_points, chunk_points, hook
     )
-    manifest = _build_manifest(config, params, run_id, entries)
+    manifest = _build_manifest(config, params, run_id, entries, units)
     _write_json_atomic(run_dir / "manifest.json", manifest.to_dict())
     elapsed = time.perf_counter() - started
     # --- official measurement window ends here ---

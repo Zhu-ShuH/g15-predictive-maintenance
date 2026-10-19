@@ -49,6 +49,7 @@ def scenario_config(
     seed: int = 42,
     events: list[dict[str, object]] | None = None,
     vibration_unit: str = "g",
+    temperature_unit: str = "degC",
 ) -> dict[str, object]:
     """Return a configuration shaped like ``docs/interface.md`` section 4."""
     return {
@@ -73,7 +74,7 @@ def scenario_config(
                 "baseline": 35.0,
                 "degradation_rate_per_sample": 3e-06,
                 "noise_std": 0.15,
-                "unit": "degC",
+                "unit": temperature_unit,
             },
         },
         "fault_generation": {
@@ -163,7 +164,7 @@ def test_shards_are_readable_and_contiguous(tmp_path: Path) -> None:
 def test_manifest_records_scenario_metadata(tmp_path: Path) -> None:
     """Identifiers and units must be copied from the configuration."""
     run_dir = produce_run(
-        scenario_config(total_points=300, chunk_points=256, vibration_unit="m/s2"),
+        scenario_config(total_points=300, chunk_points=256),
         tmp_path,
     )
 
@@ -174,7 +175,29 @@ def test_manifest_records_scenario_metadata(tmp_path: Path) -> None:
     assert manifest.seed == 42
     assert manifest.sample_rate_hz == 100
     assert manifest.start_time_utc == "2026-10-14T00:00:00Z"
-    assert payload["units"] == {"vibration": "m/s2", "temperature": "degC"}
+    assert payload["units"] == {"vibration": "g", "temperature": "degC"}
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value"),
+    [("vibration_unit", "m/s2"), ("temperature_unit", "K"), ("vibration_unit", "")],
+)
+def test_non_contract_unit_publishes_nothing(
+    tmp_path: Path, keyword: str, value: str
+) -> None:
+    """Section 5.2 freezes the units; producer must not relabel the data.
+
+    The check runs before the run directory is created, so a rejected unit
+    leaves no shards behind for a consumer to pick up.
+    """
+    config = scenario_config(total_points=32, chunk_points=16, **{keyword: value})
+    output_root = tmp_path / "runs"
+
+    with pytest.raises(ValueError, match="section 5.2"):
+        produce_run_detailed(config, output_root)
+
+    assert not output_root.exists()
+    assert list(tmp_path.rglob("manifest.json")) == []
 
 
 def test_run_id_is_unique_and_filesystem_safe(tmp_path: Path) -> None:
