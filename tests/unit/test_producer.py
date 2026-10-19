@@ -1,0 +1,380 @@
+"""Unit tests for the run producer (Issue #11, owner C4).
+
+The producer is the bridge between the simulation kernel and the on-disk
+contract, so the tests pin three things:
+
+* the shard layout and the manifest that describes it,
+* determinism (same configuration, same numbers, different ``run_id``),
+* the failure rule that matters most: **a failed run must never publish a
+  ``complete`` manifest**.
+
+Configurations are plain mappings, matching how ``simulate_chunk`` reads them,
+so the suite does not depend on ``g15.config`` or on ``configs/*.yaml`` (both
+still owned by Issue #4).
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+import types
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from g15.pipeline import producer
+from g15.pipeline.schema import ManifestStatus, manifest_from_dict
+from g15.pipeline.serialization import ChunkIOError, read_chunk
+from g15.pipeline.producer import (
+    ProductionSummary,
+    make_run_id,
+    produce_run,
+    produce_run_detailed,
+)
+
+# --------------------------------------------------------------------------- #
+# Fixtures
+# --------------------------------------------------------------------------- #
+
+RUN_ID_PATTERN = re.compile(r"^(\d{8}T\d{6}Z)-([A-Za-z0-9._-]+)-([0-9a-f]{6})$")
+
+
+def scenario_config(
+    total_points: int = 1000,
+    chunk_points: int = 256,
+    seed: int = 42,
+    events: list[dict[str, object]] | None = None,
+    vibration_unit: str = "g",
+) -> dict[str, object]:
+    """Return a configuration shaped like ``docs/interface.md`` section 4."""
+    return {
+        "schema_version": "1.0",
+        "scenario": {
+            "id": "bearing_001",
+            "seed": seed,
+            "start_time_utc": "2026-10-14T00:00:00Z",
+            "device_id": "DEV-001",
+            "sample_rate_hz": 100,
+            "total_points": total_points,
+            "chunk_points": chunk_points,
+        },
+        "signals": {
+            "vibration": {
+                "baseline": 0.5,
+                "degradation_rate_per_sample": 1e-06,
+                "noise_std": 0.05,
+                "unit": vibration_unit,
+            },
+            "temperature": {
+                "baseline": 35.0,
+                "degradation_rate_per_sample": 3e-06,
+                "noise_std": 0.15,
+                "unit": "degC",
+            },
+        },
+        "fault_generation": {
+            "mode": "manual",
+            "stochastic_probability_per_window": 0.0,
+            "events": events if events is not None else [],
+        },
+    }
+
+
+def single_run_dir(output_root: Path) -> Path:
+    """Return the only run directory created under ``output_root``."""
+    candidates = [item for item in output_root.iterdir() if item.is_dir()]
+    assert len(candidates) == 1, f"expected one run directory, got {candidates}"
+    return candidates[0]
+
+
+def load_manifest(run_dir: Path):
+    """Parse the published manifest, failing the test if it is absent."""
+    payload = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return payload, manifest_from_dict(payload)
+
+
+# --------------------------------------------------------------------------- #
+# Shard layout and manifest
+# --------------------------------------------------------------------------- #
+
+
+def test_run_publishes_a_complete_manifest(tmp_path: Path) -> None:
+    """A finished run must describe every shard and add up exactly."""
+    run_dir = produce_run(scenario_config(total_points=1000), tmp_path)
+
+    payload, manifest = load_manifest(run_dir)
+
+    assert manifest.status is ManifestStatus.COMPLETE
+    assert payload["schema_version"] == "1.0"
+    assert manifest.total_points == 1000
+    assert [entry.rows for entry in manifest.parts] == [256, 256, 256, 232]
+    assert sum(entry.rows for entry in manifest.parts) == 1000
+    assert [entry.path for entry in manifest.parts] == [
+        "raw/part-000000.npz",
+        "raw/part-000001.npz",
+        "raw/part-000002.npz",
+        "raw/part-000003.npz",
+    ]
+
+
+def test_exact_division_publishes_no_empty_tail(tmp_path: Path) -> None:
+    """1024 / 256 must produce four full shards, not a fifth empty one."""
+    run_dir = produce_run(
+        scenario_config(total_points=1024, chunk_points=256), tmp_path
+    )
+
+    _, manifest = load_manifest(run_dir)
+
+    assert len(manifest.parts) == 4
+    assert {entry.rows for entry in manifest.parts} == {256}
+    assert len(list((run_dir / "raw").glob("part-*.npz"))) == 4
+
+
+def test_shorter_than_one_chunk_produces_a_single_shard(tmp_path: Path) -> None:
+    """A run smaller than ``chunk_points`` is one short shard."""
+    run_dir = produce_run(scenario_config(total_points=100, chunk_points=256), tmp_path)
+
+    _, manifest = load_manifest(run_dir)
+
+    assert len(manifest.parts) == 1
+    assert manifest.parts[0].rows == 100
+
+
+def test_shards_are_readable_and_contiguous(tmp_path: Path) -> None:
+    """Each shard must verify against its entry and continue the previous one."""
+    run_dir = produce_run(
+        scenario_config(total_points=1000, chunk_points=256), tmp_path
+    )
+    _, manifest = load_manifest(run_dir)
+
+    seen: list[int] = []
+    for entry in manifest.parts:
+        chunk = read_chunk(run_dir / entry.path, entry)
+        assert int(chunk.seq[0]) == (0 if not seen else seen[-1] + 1)
+        seen.extend(int(value) for value in chunk.seq)
+
+    assert seen == list(range(1000))
+
+
+def test_manifest_records_scenario_metadata(tmp_path: Path) -> None:
+    """Identifiers and units must be copied from the configuration."""
+    run_dir = produce_run(
+        scenario_config(total_points=300, chunk_points=256, vibration_unit="m/s2"),
+        tmp_path,
+    )
+
+    payload, manifest = load_manifest(run_dir)
+
+    assert manifest.scenario_id == "bearing_001"
+    assert manifest.device_id == "DEV-001"
+    assert manifest.seed == 42
+    assert manifest.sample_rate_hz == 100
+    assert manifest.start_time_utc == "2026-10-14T00:00:00Z"
+    assert payload["units"] == {"vibration": "m/s2", "temperature": "degC"}
+
+
+def test_run_id_is_unique_and_filesystem_safe(tmp_path: Path) -> None:
+    """Two runs of the same scenario must not collide."""
+    first = produce_run(scenario_config(total_points=256), tmp_path)
+    second = produce_run(scenario_config(total_points=256), tmp_path)
+
+    assert first.name != second.name
+    for run_dir in (first, second):
+        match = RUN_ID_PATTERN.match(run_dir.name)
+        assert match, run_dir.name
+        assert match.group(2) == "bearing_001"
+
+
+def test_make_run_id_sanitises_the_scenario_slug() -> None:
+    """Slug characters outside ``[A-Za-z0-9._-]`` must not reach the path."""
+    run_id = make_run_id("轴承 001/失败")
+
+    assert RUN_ID_PATTERN.match(run_id)
+    assert "/" not in run_id
+    assert " " not in run_id
+
+
+# --------------------------------------------------------------------------- #
+# Determinism
+# --------------------------------------------------------------------------- #
+
+
+def test_same_config_gives_identical_numbers(tmp_path: Path) -> None:
+    """Same seed must reproduce the data; only ``run_id`` may differ."""
+    first = produce_run(scenario_config(total_points=1000), tmp_path)
+    second = produce_run(scenario_config(total_points=1000), tmp_path)
+
+    _, manifest_a = load_manifest(first)
+    _, manifest_b = load_manifest(second)
+    assert [entry.rows for entry in manifest_a.parts] == [
+        entry.rows for entry in manifest_b.parts
+    ]
+
+    for entry_a, entry_b in zip(manifest_a.parts, manifest_b.parts, strict=True):
+        chunk_a = read_chunk(first / entry_a.path, entry_a)
+        chunk_b = read_chunk(second / entry_b.path, entry_b)
+        for name in ("seq", "timestamp_ns", "vibration", "temperature"):
+            assert np.array_equal(getattr(chunk_a, name), getattr(chunk_b, name))
+
+
+def test_different_seed_changes_the_noise(tmp_path: Path) -> None:
+    """The seed must actually reach the generator."""
+    first = produce_run(scenario_config(total_points=256, seed=42), tmp_path)
+    second = produce_run(scenario_config(total_points=256, seed=7), tmp_path)
+
+    _, manifest_a = load_manifest(first)
+    _, manifest_b = load_manifest(second)
+    chunk_a = read_chunk(first / manifest_a.parts[0].path, manifest_a.parts[0])
+    chunk_b = read_chunk(second / manifest_b.parts[0].path, manifest_b.parts[0])
+
+    assert not np.array_equal(chunk_a.vibration, chunk_b.vibration)
+
+
+# --------------------------------------------------------------------------- #
+# Truth file and the Issue #6 hook
+# --------------------------------------------------------------------------- #
+
+
+def test_no_truth_file_without_events(tmp_path: Path) -> None:
+    """An event-free run must not fabricate an empty answer key."""
+    run_dir = produce_run(scenario_config(total_points=256), tmp_path)
+
+    assert not (run_dir / "private_truth" / "faults.json").exists()
+
+
+def test_truth_file_is_written_when_the_hook_reports_events(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The producer must persist the answer key without reading it back."""
+    module = types.ModuleType("g15.simulation.faults")
+
+    class FakeEvent:
+        """Stand-in for :class:`g15.simulation.faults.FaultEvent`."""
+
+        event_id = "F001"
+        start_seq = 10
+        end_seq_exclusive = 20
+        amplitude = 5.0
+
+        def to_dict(self) -> dict[str, object]:
+            """Return the section 5.3 truth record."""
+            return {
+                "event_id": self.event_id,
+                "device_id": "DEV-001",
+                "type": "spike",
+                "start_seq": self.start_seq,
+                "end_seq_exclusive": self.end_seq_exclusive,
+                "amplitude": self.amplitude,
+            }
+
+    def fake_inject(chunk, config, rng=None):  # noqa: ANN001, ARG001
+        """Return the chunk untouched plus one event, twice for the same id."""
+        return chunk, [FakeEvent(), FakeEvent()]
+
+    module.inject_faults = fake_inject  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "g15.simulation.faults", module)
+
+    summary = produce_run_detailed(scenario_config(total_points=256), tmp_path)
+
+    truth = json.loads(
+        (summary.run_dir / "private_truth" / "faults.json").read_text(encoding="utf-8")
+    )
+    assert summary.fault_events == 1, "duplicate event_id must be collapsed"
+    assert len(truth["events"]) == 1
+    assert truth["events"][0]["event_id"] == "F001"
+    assert truth["run_id"] == summary.run_dir.name
+
+
+def test_runs_without_the_hook_still_succeed(tmp_path: Path) -> None:
+    """Issue #6 is unmerged: the producer must degrade, not fail."""
+    summary = produce_run_detailed(scenario_config(total_points=256), tmp_path)
+
+    assert summary.fault_events == 0
+    assert (summary.run_dir / "manifest.json").is_file()
+
+
+# --------------------------------------------------------------------------- #
+# Failure handling
+# --------------------------------------------------------------------------- #
+
+
+def test_failed_run_publishes_no_complete_manifest(tmp_path: Path, monkeypatch) -> None:
+    """A write failure must leave the run unconsumable, not half-valid."""
+    real_write = producer.write_chunk_atomic
+    calls = {"count": 0}
+
+    def flaky(chunk, path, **kwargs):  # noqa: ANN001
+        """Fail on the third shard, after two have been published."""
+        calls["count"] += 1
+        if calls["count"] == 3:
+            raise ChunkIOError("simulated disk failure")
+        return real_write(chunk, path, **kwargs)
+
+    monkeypatch.setattr(producer, "write_chunk_atomic", flaky)
+
+    with pytest.raises(ChunkIOError, match="simulated disk failure"):
+        produce_run(scenario_config(total_points=1000, chunk_points=256), tmp_path)
+
+    run_dir = single_run_dir(tmp_path)
+    assert not (run_dir / "manifest.json").exists()
+    assert len(list((run_dir / "raw").glob("part-*.npz"))) == 2
+    assert not (run_dir / "private_truth").exists()
+
+
+def test_missing_chunk_points_is_rejected(tmp_path: Path) -> None:
+    """``scenario.chunk_points`` has no safe default."""
+    config = scenario_config()
+    del config["scenario"]["chunk_points"]  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="chunk_points"):
+        produce_run(config, tmp_path)
+
+
+@pytest.mark.parametrize("chunk_points", [0, -5, 2.5, True])
+def test_invalid_chunk_points_is_rejected(tmp_path: Path, chunk_points: object) -> None:
+    """Zero, negative, fractional and boolean shard sizes are all invalid."""
+    config = scenario_config()
+    config["scenario"]["chunk_points"] = chunk_points  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="chunk_points"):
+        produce_run(config, tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# Summary and run log
+# --------------------------------------------------------------------------- #
+
+
+def test_summary_reports_the_measurement_window(tmp_path: Path) -> None:
+    """The summary must expose the acceptance-section-2 numbers."""
+    summary = produce_run_detailed(
+        scenario_config(total_points=1000, chunk_points=256), tmp_path
+    )
+
+    assert isinstance(summary, ProductionSummary)
+    assert summary.elapsed_seconds > 0
+    assert summary.total_points == 1000
+    assert summary.scalar_value_count == 2000, "two signals per sample"
+    assert summary.part_count == 4
+    assert summary.run_dir == single_run_dir(tmp_path)
+
+
+def test_run_log_records_the_completion(tmp_path: Path) -> None:
+    """``logs/app.jsonl`` is the evidence trail for a published run."""
+    summary = produce_run_detailed(scenario_config(total_points=512), tmp_path)
+
+    lines = (
+        (summary.run_dir / "logs" / "app.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["component"] == "producer"
+    assert record["event"] == "run_complete"
+    assert record["run_id"] == summary.run_dir.name
+    assert record["part_count"] == 2
+    assert record["total_points"] == 512
+    assert record["elapsed_ms"] >= 0
