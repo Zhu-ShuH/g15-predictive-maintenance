@@ -1,4 +1,4 @@
-name: CI (skeleton checks only)
+name: CI (quality and advisory checks)
 
 on:
   push:
@@ -20,9 +20,31 @@ jobs:
         run: python -m pip install -e . -r requirements-dev.txt
       - name: Black (real check)
         run: python -m black --check src tests
+      - name: Black (engineering tools)
+        run: python -m black --check tools
       - name: Pylint (threshold 8.5)
         run: python -m pylint src/g15 --fail-under=8.5
-      - name: Pytest (structural import test; no business tests yet)
+      - name: Pytest (current test suite)
         run: python -m pytest -q
       - name: Package import smoke test
         run: python -c "import g15; import g15.simulation; import g15.pipeline; import g15.analysis; import g15.storage; import g15.reporting; import g15.common"
+
+  docs-references-advisory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check local document references (advisory)
+        id: doc_references
+        continue-on-error: true
+        run: python tools/check_doc_references.py --root . --github-actions
+      - name: Record advisory outcome
+        if: always()
+        env:
+          ADVISORY_OUTCOME: ${{ steps.doc_references.outcome }}
+        run: |
+          echo "### Document references (advisory)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Scanner outcome: $ADVISORY_OUTCOME. See the scan step for file/line diagnostics." >> "$GITHUB_STEP_SUMMARY"
+          echo "This is not a required merge check. Existing skeleton checks remain blocking." >> "$GITHUB_STEP_SUMMARY"
