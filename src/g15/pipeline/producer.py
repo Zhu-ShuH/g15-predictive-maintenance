@@ -112,10 +112,16 @@ _RUN_STAMP_FORMAT: Final[str] = "%Y%m%dT%H%M%SZ"
 #: Characters allowed in the scenario part of a run identifier.
 _UNSAFE_SLUG: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9._-]+")
 
-#: Largest value an ``int64`` nanosecond timestamp can hold (``2**63 - 1``).
+#: Bounds of an ``int64`` nanosecond timestamp (``-2**63`` .. ``2**63 - 1``).
 #: ``SimulationChunk.timestamp_ns`` is ``int64`` (``docs/interface.md`` 5.1),
-#: so this is a hard upper bound, not a policy choice.
+#: so these are hard limits, not policy choices.  The upper bound is exceeded by
+#: a run that is too long; the lower bound is exceeded by a ``start_time_utc``
+#: before 1677-09-21, which overflows on the *first* sample instead.
 _INT64_MAX_NS: Final[int] = (1 << 63) - 1
+_INT64_MIN_NS: Final[int] = -(1 << 63)
+
+#: Human-readable form of :data:`_INT64_MIN_NS` / :data:`_INT64_MAX_NS`.
+_TIMESTAMP_RANGE_TEXT: Final[str] = "1677-09-21T00:12:44Z .. 2262-04-11T23:47:16Z"
 
 
 class _Absent:
@@ -257,9 +263,10 @@ def _timestamp_offset_fits(
         remainder * NANOSECONDS_PER_SECOND + sample_rate_hz // 2
     ) // sample_rate_hz
     offset_ns = whole_seconds * NANOSECONDS_PER_SECOND + sub_second_ns
-    return (
-        offset_ns <= _INT64_MAX_NS and (start_time_utc_ns + offset_ns) <= _INT64_MAX_NS
-    )
+    if offset_ns > _INT64_MAX_NS:
+        return False
+    stamp = start_time_utc_ns + offset_ns
+    return _INT64_MIN_NS <= stamp <= _INT64_MAX_NS
 
 
 def _max_total_points(start_time_utc_ns: int, sample_rate_hz: int) -> int:
@@ -308,10 +315,19 @@ def _check_timestamp_range(params: ScenarioParameters) -> None:
         params: Validated scenario parameters.
 
     Raises:
-        ValueError: if ``total_points`` exceeds what ``int64`` nanoseconds can
-            represent for this start instant and sampling rate.
+        ValueError: if ``start_time_utc`` itself lies outside the ``int64``
+            nanosecond range, or if ``total_points`` exceeds what that range
+            can represent for this start instant and sampling rate.
     """
     limit = _max_total_points(params.start_time_utc_ns, params.sample_rate_hz)
+    if limit == 0:
+        raise ValueError(
+            "scenario.start_time_utc is outside the int64 UTC nanosecond range "
+            f"[{_INT64_MIN_NS}, {_INT64_MAX_NS}] "
+            f"({_TIMESTAMP_RANGE_TEXT}): start_time_utc_ns="
+            f"{params.start_time_utc_ns}, so even the first sample would "
+            "overflow"
+        )
     if params.total_points <= limit:
         return
     worst = _last_timestamp_ns(

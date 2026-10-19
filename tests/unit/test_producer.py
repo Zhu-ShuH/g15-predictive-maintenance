@@ -50,6 +50,7 @@ def scenario_config(
     events: list[dict[str, object]] | None = None,
     vibration_unit: str = "g",
     temperature_unit: str = "degC",
+    start_time_utc: str = "2026-10-14T00:00:00Z",
 ) -> dict[str, object]:
     """Return a configuration shaped like ``docs/interface.md`` section 4."""
     return {
@@ -57,7 +58,7 @@ def scenario_config(
         "scenario": {
             "id": "bearing_001",
             "seed": seed,
-            "start_time_utc": "2026-10-14T00:00:00Z",
+            "start_time_utc": start_time_utc,
             "device_id": "DEV-001",
             "sample_rate_hz": 100,
             "total_points": total_points,
@@ -528,6 +529,47 @@ def test_timestamp_guard_boundary_is_exact() -> None:
 def test_shipped_benchmark_is_far_below_the_limit() -> None:
     """The 1,000,000-point acceptance run must never trip the guard."""
     assert producer._max_total_points(START_NS, 100) > 1_000_000 * 1000
+
+
+def test_start_instant_below_the_int64_floor_publishes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start instant before 1677-09-21 is refused before any output exists.
+
+    This is the *other* end of the same ``int64`` range.  ``start_time_utc``
+    alone can overflow on sample 0, in which case no ``total_points`` value
+    helps; the guard must catch it as a configuration error rather than let
+    NumPy raise ``OverflowError`` midway through the run, after the output
+    directory already exists.
+    """
+
+    def _forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("guard did not fire: simulate_chunk was called")
+
+    monkeypatch.setattr(producer, "simulate_chunk", _forbidden)
+    output_root = tmp_path / "runs"
+
+    with pytest.raises(ValueError, match="start_time_utc is outside"):
+        produce_run_detailed(
+            scenario_config(total_points=8, start_time_utc="1600-01-01T00:00:00Z"),
+            output_root,
+        )
+
+    assert not output_root.exists(), "a refused run must not create anything"
+
+
+def test_start_instant_at_the_int64_floor_is_accepted(tmp_path: Path) -> None:
+    """The floor itself is representable, so it must not be refused.
+
+    ``1677-09-21T00:12:44Z`` is the first whole second that fits; refusing it
+    would be an off-by-one in the guard rather than a contract violation.
+    """
+    run_dir = produce_run(
+        scenario_config(total_points=8, start_time_utc="1677-09-21T00:12:44Z"),
+        tmp_path,
+    )
+
+    assert (run_dir / "manifest.json").is_file()
 
 
 # --------------------------------------------------------------------------- #
