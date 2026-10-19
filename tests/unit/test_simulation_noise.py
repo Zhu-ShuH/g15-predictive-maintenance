@@ -181,3 +181,36 @@ def test_large_seed_values_are_supported() -> None:
 
     assert values.shape == (64,)
     assert bool(np.all(np.isfinite(values)))
+
+
+def test_golden_values_pin_the_numeric_contract() -> None:
+    """Hard-coded samples guard the numeric contract, not just self-consistency.
+
+    Every other test in this module compares the implementation with itself, so
+    a silent change to ``BLOCK_POINTS`` or to the entropy formula would keep all
+    of them green while changing every number in every generated dataset. These
+    literals were produced by the current implementation and are pinned on
+    purpose: moving any of them is a reviewed contract change, not a refactor
+    side effect (``docs/interface.md`` section 6 treats the block grid as a
+    numeric contract, not an implementation detail).
+
+    The second call starts two points before a block boundary so a change to
+    the grid shows up as a discontinuity instead of a uniform shift.
+    """
+    assert list(stream_entropy(42, STREAM_VIBRATION, 0)) == [42, 3_216_066_249, 0]
+
+    head = standard_normal(42, STREAM_VIBRATION, 0, 4)
+    assert head.tolist() == [
+        -0.6869564307698991,
+        -0.8351377905724985,
+        -0.08340827791750291,
+        0.9252695431570744,
+    ]
+
+    crossing = standard_normal(42, STREAM_VIBRATION, BLOCK_POINTS - 2, 4)
+    assert crossing.tolist() == [
+        0.17703369886443934,
+        -1.1352805402178385,
+        -1.2608326789513238,
+        0.1603717396662623,
+    ]
