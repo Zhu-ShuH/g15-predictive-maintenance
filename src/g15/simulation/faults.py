@@ -261,10 +261,18 @@ def _burst_waveform(offset: np.ndarray, amplitude: float, duration: int) -> np.n
     first and the last sample of the event are exactly ``0``. That keeps a
     chunk boundary inside the event free of any artificial jump, and makes the
     waveform identical whether it is generated in one pass or per chunk.
+
+    For ``D <= 2`` the Hann window is identically zero (and for ``D == 1`` the
+    only sample sits on a zero crossing of the carrier), which would make the
+    event undetectable while its truth record still counts towards the
+    detection denominator. Such short events therefore fall back to the
+    unwindowed carrier evaluated at half-sample centres,
+    ``A * sin(2*pi*(k + 0.5) / 8)``: always non-zero, and still a function of
+    the absolute offset only, so per-chunk generation stays bit-identical.
     """
     phase = 2.0 * np.pi * offset / _BURST_SAMPLES_PER_CYCLE
-    if duration <= 1:
-        return amplitude * np.sin(phase)
+    if duration <= 2:
+        return amplitude * np.sin(phase + np.pi / _BURST_SAMPLES_PER_CYCLE)
     window = 0.5 - 0.5 * np.cos(2.0 * np.pi * offset / (duration - 1))
     return amplitude * np.sin(phase) * window
 

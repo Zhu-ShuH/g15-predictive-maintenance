@@ -217,6 +217,26 @@ def test_single_point_event_touches_one_sample() -> None:
     assert truth[0].duration_points == 1
 
 
+def test_burst_short_duration_is_not_silently_zero() -> None:
+    """B1 review fix: ``D <= 2`` must not inject an all-zero burst.
+
+    The Hann window vanishes for ``D <= 2`` (and ``D == 1`` additionally sits
+    on a carrier zero crossing), so the injector falls back to the unwindowed
+    carrier at half-sample centres ``A*sin(2*pi*(k + 0.5)/8)``:
+    D=1 -> [5*sin(pi/8)]              = [1.913417],
+    D=2 -> [5*sin(pi/8), 5*sin(3*pi/8)] = [1.913417, 4.619398].
+    """
+    config_one = _config([_event("F090", "burst", 0, 1, 5.0)], 2)
+    result_one, truth_one = inject_faults(_chunk(0, [0.0] * 2), config_one)
+    assert result_one.vibration == pytest.approx([1.913417, 0.0])
+    assert truth_one[0].duration_points == 1
+
+    config_two = _config([_event("F091", "burst", 0, 2, 5.0)], 2)
+    result_two, truth_two = inject_faults(_chunk(0, [0.0] * 2), config_two)
+    assert result_two.vibration == pytest.approx([1.913417, 4.619398])
+    assert truth_two[0].duration_points == 2
+
+
 def test_first_and_last_sample_of_the_run_can_be_injected() -> None:
     """``start_seq=0`` and ``end_seq_exclusive=total_points`` are legal."""
     config = _scenario([_event("F050", "step", 3, 1, 1.0)], 4)
