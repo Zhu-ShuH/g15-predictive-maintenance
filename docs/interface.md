@@ -234,6 +234,18 @@ health_rules_file: 'configs/health_rules.yaml'
 
 上面 `parts` 为**结构示意**，完整百万点运行应列出全部分片，且各 `rows` 之和与 `total_points` 一致。`status=complete` 才允许消费者开始；Manifest 最后原子发布。校验 SHA-256 与采样序号连续性。将分片先写入同目录 `.tmp` 文件，通过 `os.replace` 原子更名，随后发布清单；对于 `np.savez`，应传入打开的二进制文件句柄，以免其自动附加 `.npz` 扩展名。写入失败不得发布 complete 状态。
 
+#### 5.2.1 读入侧校验规则（Manifest 是不可信输入）
+
+Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留在半成品状态，因此读入侧**不得以“能解析”推断“可信”**。以下四条为冻结规则，`g15.pipeline.schema` 与 `g15.pipeline.serialization` 是它们的可执行形式（Issue #34 收口）。
+
+1. **`start_time_utc` 是完整且锚定 UTC 的时刻。** 形如 `YYYY-MM-DDThh:mm:ss[.ffffff]`，其后必须带时区（`Z` 或 `±hh:mm`）且偏移为 **0**。`Z` 与 `+00:00` 等价，**两者都接受**——生产者会把配置文本原样写入清单，而配置校验接受零偏移，读入侧比生产者更严会让一次运行被自己的读者拒绝。仅日期（`2026-10-14`）、无时区、非零偏移（如 `+08:00`）、非法日历值（如 `2026-13-45T99:99:99Z`）以及任意文本一律拒绝。不要只检查结尾的 `Z`，也不要只调用 `fromisoformat`：后者会把 `2026-10-14` 静默当成当日零点。
+
+2. **`part_id` 必须与文件名编码的序号一致。** `path` 先满足安全相对 POSIX 路径规则，随后**只取** `PurePosixPath(path).name` 比对：若它匹配 `part-NNNNNN.npz`（**六位及以上**，如 `part-000000.npz`、`part-1000000.npz`），其数字必须等于 `part_id`；`part_id=0` 配 `raw/part-000005.npz` 必须拒绝。父目录不冻结（`raw/` 是约定而非约束），非规范名（如 `raw/shard-4.npz`）不含序号，故不做比对。
+
+3. **`status` 决定 `parts` 的下限。** 只有 `complete` 可被消费，且必须**至少列出一个分片**、`rows` 之和恰好等于 `total_points`；`failed` **允许零分片**（表达“第一个分片落盘前就失败”），也允许部分分片，但分片仍须从 0 连续编号。任何情况下都不得把 `failed` 当 `complete` 消费。
+
+4. **分片归属由 `run_dir` 决定，不由文件名决定。** `read_chunk(path, entry)` 只比对文件名与 SHA-256，字节完全相同的副本可以通过；因此**消费入口必须传 `run_dir=`**，此时解析后的分片必须恰好位于 `run_dir / entry.path`，越界（含符号链接逃逸）一律拒绝。省略 `run_dir` 的调用仅做文件身份/摘要/字段校验，只可用于已知归属的上下文。
+
 ### 5.3 故障真值（只对验证器开放）
 
 `runs/<run_id>/private_truth/faults.json`（小组暂定路径，非权限边界）：
