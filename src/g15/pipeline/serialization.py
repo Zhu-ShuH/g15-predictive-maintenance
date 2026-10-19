@@ -27,10 +27,13 @@ from __future__ import annotations
 
 import hashlib
 import os
+import zipfile
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 
 import numpy as np
+
+from g15.common.types import SimulationChunk
 
 from g15.pipeline.schema import (
     CHUNK_FILE_PATTERN,
@@ -42,9 +45,6 @@ from g15.pipeline.schema import (
     is_safe_relative_path,
     validate_chunk,
 )
-
-if TYPE_CHECKING:  # pragma: no cover - import for type checkers only
-    from g15.simulation.engine import SimulationChunk
 
 __all__ = [
     "ChecksumMismatchError",
@@ -317,17 +317,20 @@ def _load_npz(path: Path) -> dict[str, np.ndarray[Any, Any]]:
                     f"{sorted(fields - expected)}"
                 )
             return {name: np.asarray(archive[name]) for name in NPZ_FIELDS}
-    except (OSError, ValueError, EOFError) as exc:
+    except (OSError, ValueError, EOFError, zipfile.BadZipFile) as exc:
+        # zipfile.BadZipFile inherits Exception, *not* OSError: a shard whose
+        # digest matches but whose bytes are not a zip would otherwise escape
+        # the contract family and reach the CLI as a traceback instead of
+        # exit 3 (docs/interface.md section 12, "corrupted file isolation").
         raise ChunkIOError(f"cannot read shard {path}: {exc}") from exc
 
 
 def _build_chunk(arrays: dict[str, np.ndarray[Any, Any]]) -> "SimulationChunk":
     """Construct a ``SimulationChunk`` from loaded arrays.
 
-    The type is imported lazily: it is defined in :mod:`g15.simulation.engine`
-    today and Issue #17 may move it to :mod:`g15.common.types`.  A local import
-    keeps that migration to a single line and avoids a module-level dependency
-    from ``pipeline`` on ``simulation``.
+    Issue #17 settled the ownership question: the single public definition now
+    lives in :mod:`g15.common.types`, and section 2 of ``docs/interface.md``
+    allows the ``pipeline -> common`` edge, so the import is no longer local.
 
     Args:
         arrays: The four frozen arrays.
@@ -335,10 +338,6 @@ def _build_chunk(arrays: dict[str, np.ndarray[Any, Any]]) -> "SimulationChunk":
     Returns:
         A chunk ready to hand to the consumer or the analysis layer.
     """
-    # Local import keeps the Issue #17 migration to one line.
-    # pylint: disable=import-outside-toplevel
-    from g15.simulation.engine import SimulationChunk
-
     return SimulationChunk(
         seq=arrays["seq"],
         timestamp_ns=arrays["timestamp_ns"],

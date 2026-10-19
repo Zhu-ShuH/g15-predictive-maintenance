@@ -7,11 +7,12 @@ from a manifest payload.
 
 Design notes
 ------------
-* ``SimulationChunk`` is **not** defined here.  It currently lives in
-  :mod:`g15.simulation.engine` and its final home is tracked by Issue #17, so
-  every function below is duck-typed: it only requires the four attributes
-  ``seq``, ``timestamp_ns``, ``vibration`` and ``temperature``.  Duplicating the
-  type here would give the project two definitions of the same contract.
+* ``SimulationChunk`` is **not** defined here.  Issue #17 settled its single
+  public home as :mod:`g15.common.types`, so every function below is duck-typed:
+  it only requires the four attributes ``seq``, ``timestamp_ns``, ``vibration``
+  and ``temperature``.  Duplicating the type here would give the project two
+  definitions of the same contract, and importing it would make this module
+  depend on ``common`` for no benefit.
 * Validation raises :class:`DataContractError` subclasses rather than using
   ``assert``, so the checks survive ``python -O`` (``members/C4/AGENT.md``).
 * Cross-shard ``seq`` continuity is deliberately *not* checked: it belongs to the
@@ -264,13 +265,15 @@ class Manifest:
             raise ManifestError(
                 f"total_points must be positive, got {self.total_points}"
             )
-        if set(self.units) != set(FIELD_UNITS):
+        if dict(self.units) != FIELD_UNITS:
+            # Comparing values, not only keys: ``m/s2`` or ``K`` silently
+            # accepted here would make every downstream consumer interpret the
+            # numbers with the wrong physical magnitude (section 5.2 freezes
+            # ``g`` and ``degC``).
             raise ManifestError(
-                f"units must describe exactly {sorted(FIELD_UNITS)}, got "
-                f"{sorted(self.units)}"
+                f"units are frozen by section 5.2: expected {dict(FIELD_UNITS)}, "
+                f"got {dict(self.units)}"
             )
-        if any(not isinstance(value, str) for value in self.units.values()):
-            raise ManifestError("every unit must be a string")
         if not isinstance(self.status, ManifestStatus):
             raise ManifestError(f"status must be a ManifestStatus, got {self.status!r}")
         self._check_parts()
@@ -569,7 +572,7 @@ def manifest_from_dict(payload: object) -> Manifest:
         sample_rate_hz=_require_int(mapping, "sample_rate_hz", "manifest"),
         start_time_utc=mapping["start_time_utc"],
         total_points=_require_int(mapping, "total_points", "manifest"),
-        units={str(key): str(value) for key, value in units.items()},
+        units=dict(units),
         status=parsed_status,
         parts=parts,
     )

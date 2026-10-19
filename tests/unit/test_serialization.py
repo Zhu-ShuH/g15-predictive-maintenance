@@ -13,6 +13,8 @@ is still open).
 from __future__ import annotations
 
 import json
+import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +25,7 @@ from g15.pipeline.schema import (
     SCHEMA_VERSION,
     ChunkManifestEntry,
     ChunkValidationError,
+    DataContractError,
     Manifest,
     ManifestError,
     ManifestStatus,
@@ -38,7 +41,7 @@ from g15.pipeline.serialization import (
     sha256_of_file,
     write_chunk_atomic,
 )
-from g15.simulation.engine import SimulationChunk
+from g15.common.types import SimulationChunk
 
 # --------------------------------------------------------------------------- #
 # Fixtures and helpers
@@ -218,6 +221,32 @@ def test_corrupted_byte_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(ChecksumMismatchError, match="sha256"):
         read_chunk(path, entry)
+
+
+def test_digest_valid_but_not_a_zip_is_refused(tmp_path: Path) -> None:
+    """A damaged file must fail inside the contract family, never as a raw error.
+
+    ``zipfile.BadZipFile`` inherits ``Exception`` rather than ``OSError``, so it
+    used to escape ``read_chunk`` untouched and reach the CLI as a traceback
+    instead of exit code 3 (``docs/interface.md`` section 12, corrupted-file
+    isolation).  The digest here is correct on purpose: the failure has to come
+    from parsing, not from the checksum check.
+    """
+    path = shard_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(
+        b"PK\x03\x04 truncated: the digest matches, the bytes are not a zip"
+    )
+    entry = ChunkManifestEntry(
+        part_id=0, path="raw/part-000000.npz", rows=8, sha256=sha256_of_file(path)
+    )
+
+    with pytest.raises(ChunkIOError, match="cannot read shard") as excinfo:
+        read_chunk(path, entry)
+
+    assert isinstance(excinfo.value, DataContractError)
+    assert not isinstance(excinfo.value, zipfile.BadZipFile)
+    assert sha256_of_file(path) == entry.sha256
 
 
 def test_missing_field_is_refused(tmp_path: Path) -> None:
@@ -441,8 +470,8 @@ def test_negative_part_id_creates_nothing(tmp_path: Path) -> None:
 
 
 def test_validate_chunk_accepts_a_contract_compliant_shard() -> None:
-    """The happy path must not raise."""
-    validate_chunk(make_chunk(count=32, start_seq=512))
+    """The happy path must not raise; it returns ``None`` on success."""
+    assert validate_chunk(make_chunk(count=32, start_seq=512)) is None
 
 
 def test_validate_chunk_rejects_a_missing_field() -> None:
@@ -516,6 +545,45 @@ def test_manifest_round_trip_through_json(tmp_path: Path) -> None:
         "raw/part-000001.npz",
         "raw/part-000002.npz",
     ]
+
+
+@pytest.mark.parametrize(
+    "units",
+    [
+        {"vibration": "m/s2", "temperature": "degC"},
+        {"vibration": "g", "temperature": "K"},
+        {"vibration": "", "temperature": ""},
+        {"vibration": "g ", "temperature": "degC"},
+    ],
+)
+def test_units_must_match_the_frozen_values(
+    tmp_path: Path, units: dict[str, str]
+) -> None:
+    """Section 5.2 freezes the unit *values*, not just the key set.
+
+    ``m/s2`` accepted here would be published as if it were ``g`` and every
+    downstream consumer would silently interpret the amplitude with the wrong
+    magnitude -- a data-correctness bug that no later check can detect.
+    """
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    manifest = make_manifest((entry,), total_points=8)
+
+    with pytest.raises(ManifestError, match="frozen by section 5.2"):
+        replace(manifest, units=units)
+
+
+def test_manifest_from_dict_does_not_coerce_unit_types(tmp_path: Path) -> None:
+    """Non-string units are refused, not silently turned into ``"123"``."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["units"] = {"vibration": 123, "temperature": 456}
+
+    with pytest.raises(ManifestError, match="frozen by section 5.2"):
+        manifest_from_dict(payload)
 
 
 def test_manifest_rejects_an_unknown_field(tmp_path: Path) -> None:
