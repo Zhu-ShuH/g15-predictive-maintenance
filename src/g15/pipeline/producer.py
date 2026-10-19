@@ -246,9 +246,19 @@ def _timestamp_offset_fits(
 ) -> bool:
     """Return whether ``sample_index`` maps to an ``int64``-representable stamp.
 
-    Mirrors ``engine.timestamp_ns_for`` exactly: the relative offset is built in
-    ``int64`` first and the start instant is added to it afterwards, so two
-    separate sums have to fit.
+    Mirrors ``engine.timestamp_ns_for`` step by step, but evaluates it in
+    arbitrary-precision integers so the answer is known before any array
+    exists.
+
+    Two sums are required to fit: the relative offset and the final stamp.  The
+    offset check makes this slightly *stricter* than the kernel for start
+    instants before 1970.  The kernel's offset is an ``int64`` array that wraps
+    modulo ``2**64``, and because the final stamp still lands in range the
+    wrapped intermediate happens to subtract back out to the right value.  That
+    is arithmetic luck, not a contract: a guard whose correctness depends on
+    modular wraparound breaks the moment the kernel switches to object dtype or
+    a checked loop.  Refusing a pre-1970 run longer than 292 years is a cheaper
+    failure than silently trusting the wrap.
 
     Args:
         sample_index: Zero-based absolute sampling index.
@@ -256,7 +266,7 @@ def _timestamp_offset_fits(
         sample_rate_hz: Sampling frequency in hertz; must be positive.
 
     Returns:
-        True when both intermediate sums stay inside ``int64``.
+        True when the offset and the resulting stamp both stay inside ``int64``.
     """
     whole_seconds, remainder = divmod(sample_index, sample_rate_hz)
     sub_second_ns = (
@@ -272,10 +282,11 @@ def _timestamp_offset_fits(
 def _max_total_points(start_time_utc_ns: int, sample_rate_hz: int) -> int:
     """Largest ``total_points`` whose last timestamp still fits in ``int64``.
 
-    The predicate is monotone in the sample index, so an exact bound is found by
-    bisection.  Being exact matters: a conservative bound would reject a
-    boundary-legal configuration, and the whole point of the guard is to refuse
-    only the runs that genuinely cannot be represented.
+    The predicate is monotone in the sample index, so the bound is found by
+    bisection.  Exactness matters: an arbitrarily conservative bound would
+    reject configurations that are legal, so the search is over the predicate
+    itself rather than over a closed-form estimate.  The only deliberate slack
+    is the pre-1970 offset case described on :func:`_timestamp_offset_fits`.
 
     Args:
         start_time_utc_ns: Run start instant as UTC Unix nanoseconds.
