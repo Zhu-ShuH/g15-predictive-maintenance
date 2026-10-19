@@ -1,0 +1,47 @@
+#!/bin/sh
+# Advisory local guard. Exact-SHA exceptions require A's documented review.
+set -eu
+die() { echo "[pre-push] $*" >&2; exit 1; }
+name=$(git config --local --get user.name) || die 'Set local user.name.'
+email=$(git config --local --get user.email) || die 'Set local user.email.'
+[ -n "$name" ] && [ -n "$email" ] || die 'Empty local identity.'
+only=$(git config --local --type=bool --get user.useConfigOnly) || die 'Set local user.useConfigOnly=true.'
+[ "$only" = true ] || die 'Set local user.useConfigOnly=true.'
+expected="$name <$email>"
+author=$(git var GIT_AUTHOR_IDENT) || die 'Cannot resolve author.'
+committer=$(git var GIT_COMMITTER_IDENT) || die 'Cannot resolve committer.'
+[ "${author%%>*}>" = "$expected" ] || die 'Effective author differs from local identity.'
+[ "${committer%%>*}>" = "$expected" ] || die 'Effective committer differs from local identity.'
+remote=${1-}
+[ "$remote" = origin ] || die 'Only named origin is supported; review other destinations first.'
+base=$(git rev-parse --verify refs/remotes/origin/main^{commit}) || die 'Fetch origin/main first.'
+if approved=$(git config --local --get-all g15.identityApprovedCommit); then
+    :
+else
+    rc=$?
+    [ "$rc" -eq 1 ] || die 'Cannot read approved SHA list.'
+    approved=''
+fi
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" != "$zero" ] || continue
+    case "$remote_ref" in refs/heads/*) : ;; *) die 'Non-branch push requires separate review.' ;; esac
+    git cat-file -e "$local_sha^{commit}" || die 'Missing local commit.'
+    if [ "$remote_sha" = "$zero" ]; then
+        commits=$(git rev-list "$local_sha" --not "$base") || die 'Cannot calculate new-branch range.'
+    else
+        git cat-file -e "$remote_sha^{commit}" || die 'Missing remote tip; fetch then retry.'
+        commits=$(git rev-list "$local_sha" --not "$remote_sha" "$base") || die 'Cannot calculate push range.'
+    fi
+    for sha in $commits; do
+        if printf '%s\n' "$approved" | grep -Fqx "$sha"; then
+            echo "[pre-push] Reviewed exception: $sha" >&2
+            continue
+        fi
+        a=$(git show -s --format='%an <%ae>' "$sha") || die 'Cannot inspect author.'
+        c=$(git show -s --format='%cn <%ce>' "$sha") || die 'Cannot inspect committer.'
+        [ "$a" = "$expected" ] && [ "$c" = "$expected" ] ||
+            die "$sha: author=$a; committer=$c. Stop and ask A to review; do not rewrite unrelated history."
+    done
+done
+exit 0
