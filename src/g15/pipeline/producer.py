@@ -12,6 +12,24 @@ a half-written run: either the manifest is missing (nothing to consume) or it
 describes a run whose parts are all present and whose row counts add up.  The
 :class:`~g15.pipeline.schema.Manifest` type enforces that last invariant itself.
 
+Shard boundaries
+----------------
+``chunk_points`` is a *nominal* shard size, not a divisibility requirement.
+``total_points`` that is not a multiple of ``chunk_points`` ends with one short
+tail shard.  Rounding such a run up and padding it with samples that were never
+configured would fabricate data, so the tail is kept and documented instead:
+
+    shard_count  = ceil(total_points / chunk_points)
+    rows(k)      = chunk_points                        for k < shard_count - 1
+    rows(last)   = total_points - (shard_count - 1) * chunk_points
+
+The tail is an ordinary shard in every other respect: it still has
+``rows >= 1``, a contiguous ``part_id`` and a real SHA-256, and the manifest
+still covers ``total_points`` exactly.  ``docs/interface.md`` section 5.1 states
+the same rule, and ``docs/acceptance.md`` section 2 relies on it for the
+benchmark shape (9 x 102400 + 78400 = 1,000,000).  A configuration is therefore
+never rejected for being non-divisible; the arithmetic is documented instead.
+
 Timing
 ------
 ``docs/acceptance.md`` section 2 fixes the one legitimate 1,000,000-point
@@ -22,6 +40,15 @@ generation, fault injection, serialisation, file writes and SHA-256, and
 *excludes* interpreter start-up, the downstream consumer and reporting.
 :func:`produce_run_detailed` returns that number; :func:`produce_run` is the
 frozen ``docs/interface.md`` section 6 signature and discards it.
+
+Timestamp range
+---------------
+``timestamp_ns`` is ``int64`` UTC Unix nanoseconds, so the run start instant
+plus ``total_points / sample_rate_hz`` seconds must stay below ``2**63 - 1``.
+The kernel computes the offset in ``int64`` and would wrap silently past that
+point, producing negative timestamps for the tail of a long run.  A run that
+cannot be represented is therefore refused *before* the run directory exists -
+see :func:`_check_timestamp_range` - rather than published with corrupt clocks.
 
 Fault truth
 -----------
@@ -53,6 +80,7 @@ from g15.pipeline.schema import (
 )
 from g15.pipeline.serialization import write_chunk_atomic
 from g15.simulation.engine import (
+    NANOSECONDS_PER_SECOND,
     ScenarioParameters,
     load_scenario_parameters,
     simulate_chunk,
@@ -83,6 +111,11 @@ _RUN_STAMP_FORMAT: Final[str] = "%Y%m%dT%H%M%SZ"
 
 #: Characters allowed in the scenario part of a run identifier.
 _UNSAFE_SLUG: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9._-]+")
+
+#: Largest value an ``int64`` nanosecond timestamp can hold (``2**63 - 1``).
+#: ``SimulationChunk.timestamp_ns`` is ``int64`` (``docs/interface.md`` 5.1),
+#: so this is a hard upper bound, not a policy choice.
+_INT64_MAX_NS: Final[int] = (1 << 63) - 1
 
 
 class _Absent:
@@ -176,6 +209,122 @@ def _positive_int(value: object, path: str) -> int:
     if value <= 0:
         raise ValueError(f"{path} must be positive, got {value}")
     return value
+
+
+def _last_timestamp_ns(
+    total_points: int, start_time_utc_ns: int, sample_rate_hz: int
+) -> int:
+    """Return the timestamp of the final sample, in exact Python integers.
+
+    This mirrors :func:`g15.simulation.engine.timestamp_ns_for` step by step,
+    but evaluates it in arbitrary-precision integers so the caller can compare
+    the result with the ``int64`` limit before any array exists.
+
+    Args:
+        total_points: Number of samples in the run; must be positive.
+        start_time_utc_ns: Run start instant as UTC Unix nanoseconds.
+        sample_rate_hz: Sampling frequency in hertz; must be positive.
+
+    Returns:
+        The timestamp of sample ``total_points - 1`` in nanoseconds.
+    """
+    whole_seconds, remainder = divmod(total_points - 1, sample_rate_hz)
+    sub_second_ns = (
+        remainder * NANOSECONDS_PER_SECOND + sample_rate_hz // 2
+    ) // sample_rate_hz
+    return start_time_utc_ns + whole_seconds * NANOSECONDS_PER_SECOND + sub_second_ns
+
+
+def _timestamp_offset_fits(
+    sample_index: int, start_time_utc_ns: int, sample_rate_hz: int
+) -> bool:
+    """Return whether ``sample_index`` maps to an ``int64``-representable stamp.
+
+    Mirrors ``engine.timestamp_ns_for`` exactly: the relative offset is built in
+    ``int64`` first and the start instant is added to it afterwards, so two
+    separate sums have to fit.
+
+    Args:
+        sample_index: Zero-based absolute sampling index.
+        start_time_utc_ns: Run start instant as UTC Unix nanoseconds.
+        sample_rate_hz: Sampling frequency in hertz; must be positive.
+
+    Returns:
+        True when both intermediate sums stay inside ``int64``.
+    """
+    whole_seconds, remainder = divmod(sample_index, sample_rate_hz)
+    sub_second_ns = (
+        remainder * NANOSECONDS_PER_SECOND + sample_rate_hz // 2
+    ) // sample_rate_hz
+    offset_ns = whole_seconds * NANOSECONDS_PER_SECOND + sub_second_ns
+    return (
+        offset_ns <= _INT64_MAX_NS and (start_time_utc_ns + offset_ns) <= _INT64_MAX_NS
+    )
+
+
+def _max_total_points(start_time_utc_ns: int, sample_rate_hz: int) -> int:
+    """Largest ``total_points`` whose last timestamp still fits in ``int64``.
+
+    The predicate is monotone in the sample index, so an exact bound is found by
+    bisection.  Being exact matters: a conservative bound would reject a
+    boundary-legal configuration, and the whole point of the guard is to refuse
+    only the runs that genuinely cannot be represented.
+
+    Args:
+        start_time_utc_ns: Run start instant as UTC Unix nanoseconds.
+        sample_rate_hz: Sampling frequency in hertz; must be positive.
+
+    Returns:
+        The sample count that still fits, or ``0`` when even the first sample
+        would overflow.
+    """
+    if not _timestamp_offset_fits(0, start_time_utc_ns, sample_rate_hz):
+        return 0
+    # Guaranteed not to fit: one well past the int64 horizon at this rate.
+    high = (
+        (_INT64_MAX_NS - start_time_utc_ns) // NANOSECONDS_PER_SECOND + 2
+    ) * sample_rate_hz + 2
+    low = 0
+    while low < high:
+        middle = (low + high + 1) // 2
+        if _timestamp_offset_fits(middle, start_time_utc_ns, sample_rate_hz):
+            low = middle
+        else:
+            high = middle - 1
+    return low + 1
+
+
+def _check_timestamp_range(params: ScenarioParameters) -> None:
+    """Refuse a run whose timestamps cannot be represented in ``int64``.
+
+    ``simulate_chunk`` computes ``start + seq / rate`` in ``int64`` arithmetic,
+    which wraps silently instead of raising.  A long enough run therefore
+    produces negative or non-monotonic ``timestamp_ns`` values that still pass
+    every shape and finiteness check.  This guard converts that silent
+    corruption into an immediate ``ValueError``, before the run directory is
+    created, so no shard and no manifest is ever published.
+
+    Args:
+        params: Validated scenario parameters.
+
+    Raises:
+        ValueError: if ``total_points`` exceeds what ``int64`` nanoseconds can
+            represent for this start instant and sampling rate.
+    """
+    limit = _max_total_points(params.start_time_utc_ns, params.sample_rate_hz)
+    if params.total_points <= limit:
+        return
+    worst = _last_timestamp_ns(
+        params.total_points, params.start_time_utc_ns, params.sample_rate_hz
+    )
+    raise ValueError(
+        f"scenario.total_points={params.total_points} overflows int64 UTC "
+        f"nanoseconds: with sample_rate_hz={params.sample_rate_hz} and "
+        f"start_time_utc_ns={params.start_time_utc_ns} the last timestamp would "
+        f"be {worst} ns, but int64 stops at {_INT64_MAX_NS} ns (about 292 "
+        f"years). At most {limit} points fit for this start instant and rate; "
+        "shorten the run or move start_time_utc closer to 1970."
+    )
 
 
 def _scenario_slug(scenario_id: object) -> str:
@@ -304,25 +453,32 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _fault_hook() -> Callable[..., tuple[Any, list[Any]]] | None:
-    """Return C1's injection function, or ``None`` while Issue #6 is unmerged.
+    """Return the fault-injection callable, or ``None`` if it cannot be imported.
 
-    ``g15.simulation.faults`` is owned by C1 and is an empty placeholder on the
-    current ``main``.  Until it lands, only event-free configurations may run
-    without injection.  This function returns ``None``; the producer rejects
-    configurations that require manual or stochastic faults before any output.
+    Issue #6 shipped ``g15.simulation.faults.inject_faults`` and was merged with
+    ``#27``, so a missing import here is no longer an "unimplemented feature"
+    condition - it means a broken or partial installation.  This function is
+    kept as a **branch defence** so that such an installation still fails with a
+    clear message instead of an ``ImportError`` traceback, and so that
+    event-free runs keep working.  A configuration that actually asks for
+    injected faults is rejected by :func:`produce_run_detailed` before any
+    output is written.
 
     Returns:
         ``inject_faults`` when importable, otherwise ``None``.
     """
     try:
-        # Local import: C1's module is not on ``main`` yet, so a module-level
-        # import would make the whole producer unusable until Issue #6 merges.
+        # Local import keeps the producer importable on its own and lets this
+        # function double as the availability probe.
         # pylint: disable=import-outside-toplevel
         from g15.simulation.faults import inject_faults
-    except ImportError:
+    except ImportError as exc:
         _LOG.warning(
-            "fault injection unavailable: g15.simulation.faults is not "
-            "implemented yet (Issue #6); only event-free runs may continue"
+            "fault injection unavailable: cannot import "
+            "g15.simulation.faults.inject_faults (%s). Issue #6 shipped in #27, "
+            "so this points at a broken installation rather than a missing "
+            "feature; only event-free configurations can run.",
+            exc,
         )
         return None
     return inject_faults
@@ -352,6 +508,14 @@ def _write_parts(
     hook: Callable[..., tuple[Any, list[Any]]] | None,
 ) -> tuple[list[ChunkManifestEntry], dict[str, Any]]:
     """Generate and publish every shard of the run.
+
+    ``chunk_points`` is nominal: a ``total_points`` that is not a multiple of it
+    ends with one short tail shard of ``total_points % chunk_points`` rows.  The
+    tail is never padded, never merged into its predecessor, and never dropped;
+    it is published as an ordinary shard with a contiguous ``part_id`` and its
+    own digest, and the manifest still covers ``total_points`` exactly.  See the
+    module docstring for the closed form and ``docs/interface.md`` section 5.1
+    for the contract.
 
     Args:
         config: Scenario configuration.
@@ -524,6 +688,9 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
             violates the contract; no ``complete`` manifest is published then.
     """
     params = load_scenario_parameters(config)
+    # Refused before any directory exists: an unrepresentable clock must not
+    # leave a half-published run behind (see the module docstring).
+    _check_timestamp_range(params)
     chunk_points = _positive_int(
         _field(config, "chunk_points"), "scenario.chunk_points"
     )

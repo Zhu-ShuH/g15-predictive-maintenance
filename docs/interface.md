@@ -204,7 +204,11 @@ health_rules_file: 'configs/health_rules.yaml'
 | `vibration` | `float64` | 单位 `g`；正常模式必须有限数 |
 | `temperature` | `float64` | 单位 `degC`；正常模式必须有限数 |
 
-`device_id` 和 `run_id` 在分片对应的 manifest 元数据中给出；一个运行只对应一个设备（多设备通过多个 run 支持，避免本期接口歧义）。消费者读取时必须 `np.load(path, allow_pickle=False)`；不得读取对象 pickle。边界分片可小于 chunk_points。类型或数值错误按消费者错误策略拒收并记日志。
+`device_id` 和 `run_id` 在分片对应的 manifest 元数据中给出；一个运行只对应一个设备（多设备通过多个 run 支持，避免本期接口歧义）。消费者读取时必须 `np.load(path, allow_pickle=False)`；不得读取对象 pickle。类型或数值错误按消费者错误策略拒收并记日志。
+
+**短尾片（`total_points` 不是 `chunk_points` 整数倍）**：`chunk_points` 是名义分片大小，不是整除要求，生产者不得因为不整除而拒绝配置，也不得为凑整而补点。分片数 `n = ceil(total_points / chunk_points)`；前 `n-1` 片每片 `chunk_points` 行，**最后一片为 `total_points - (n-1) * chunk_points` 行**（因此必然满足 `1 ≤ rows < chunk_points`）。短尾片在其余方面与普通分片完全相同：`part_id` 仍从 0 连续、`rows` 与文件内实际行数一致、SHA-256 覆盖实际字节、Manifest 的 `rows` 之和仍等于 `total_points`。短尾片不得与前一合并、不得丢弃、不得用重复或填充采样补齐。`docs/acceptance.md` 第 2 节规定的基准形状正是这种情形：1000000 点、`chunk_points=102400` 得到 10 片，即 9×102400 + 78400。
+
+**时间戳可表示范围**：`timestamp_ns` 为 `int64` UTC Unix 纳秒，上限 `2**63-1`（约 292 年跨度）。生产入口在创建运行目录之前用整数运算核算 `start_time_utc + total_points / sample_rate_hz` 是否会越界，越界则以 `ValueError` 拒绝，不写出任何分片或清单；生成端不得依赖 `int64` 回绕后的结果。
 
 **百万点口径已由组长确认**：按 `seq` 的采样次数计点；双信号的标量值总数另列，性能报告必须同时记录 `sample_count` 和 `scalar_value_count`，不能把两个值合并宣称为两个已验证采样点。
 

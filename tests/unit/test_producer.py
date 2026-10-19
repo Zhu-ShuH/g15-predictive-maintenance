@@ -145,6 +145,33 @@ def test_shorter_than_one_chunk_produces_a_single_shard(tmp_path: Path) -> None:
     assert manifest.parts[0].rows == 100
 
 
+def test_non_divisible_length_ends_with_one_short_tail(tmp_path: Path) -> None:
+    """1000 / 256 is documented as four shards: 256, 256, 256, 232.
+
+    ``docs/interface.md`` section 5.1 says the tail is a short shard, never
+    padded, never merged, never dropped.  This pins the closed form from the
+    module docstring so a future "round up to full chunks" change fails here.
+    """
+    run_dir = produce_run(
+        scenario_config(total_points=1000, chunk_points=256), tmp_path
+    )
+
+    _, manifest = load_manifest(run_dir)
+
+    assert [entry.part_id for entry in manifest.parts] == [0, 1, 2, 3]
+    assert [entry.rows for entry in manifest.parts] == [256, 256, 256, 232]
+    assert sum(entry.rows for entry in manifest.parts) == 1000
+    # Only the last shard is short, and it is short by the exact remainder.
+    assert all(entry.rows == 256 for entry in manifest.parts[:-1])
+    assert manifest.parts[-1].rows == 1000 % 256
+
+    tail = manifest.parts[-1]
+    chunk = read_chunk(run_dir / tail.path, tail)
+    # Real rows, no padding: the tail ends on the run's last sample.
+    assert chunk.vibration.shape == (232,)
+    assert int(chunk.seq[-1]) == 999
+
+
 def test_shards_are_readable_and_contiguous(tmp_path: Path) -> None:
     """Each shard must verify against its entry and continue the previous one."""
     run_dir = produce_run(
@@ -444,6 +471,63 @@ def test_invalid_chunk_points_is_rejected(tmp_path: Path, chunk_points: object) 
 
     with pytest.raises(ValueError, match="chunk_points"):
         produce_run(config, tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# int64 timestamp range (R-1)
+# --------------------------------------------------------------------------- #
+
+#: A realistic start instant, ``2026-10-14T00:00:00Z`` in UTC nanoseconds.
+START_NS = 1_791_936_000_000_000_000
+
+
+def test_a_run_past_the_int64_horizon_publishes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that cannot be timestamped is refused before any output exists.
+
+    Regression for R-1: ``simulate_chunk`` builds ``timestamp_ns`` in ``int64``
+    and wraps silently, so a long enough run published negative stamps that
+    passed every shape and finiteness check.  ``simulate_chunk`` is stubbed out
+    so a missing guard fails fast instead of generating 10**12 samples.
+    """
+
+    def _forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("guard did not fire: simulate_chunk was called")
+
+    monkeypatch.setattr(producer, "simulate_chunk", _forbidden)
+    output_root = tmp_path / "runs"
+
+    with pytest.raises(ValueError, match="overflows int64"):
+        produce_run_detailed(
+            scenario_config(total_points=10**12, chunk_points=1024), output_root
+        )
+
+    assert not output_root.exists(), "a refused run must not create anything"
+
+
+def test_timestamp_guard_boundary_is_exact() -> None:
+    """The guard must reject the first unrepresentable point, not more.
+
+    A conservative bound would also refuse a boundary-legal configuration, so
+    the check is verified from both sides: ``limit`` fits, ``limit + 1`` does
+    not.  Verified for the shipped rate and for a rate that does not divide the
+    nanosecond.
+    """
+    for rate in (100, 7):
+        limit = producer._max_total_points(START_NS, rate)
+
+        assert producer._timestamp_offset_fits(
+            limit - 1, START_NS, rate
+        ), f"last sample of a {limit}-point run must fit at rate {rate}"
+        assert not producer._timestamp_offset_fits(
+            limit, START_NS, rate
+        ), f"sample {limit} must not fit at rate {rate}"
+
+
+def test_shipped_benchmark_is_far_below_the_limit() -> None:
+    """The 1,000,000-point acceptance run must never trip the guard."""
+    assert producer._max_total_points(START_NS, 100) > 1_000_000 * 1000
 
 
 # --------------------------------------------------------------------------- #
