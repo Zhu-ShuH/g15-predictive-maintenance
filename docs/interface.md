@@ -289,6 +289,13 @@ build_report(run_dir: Path, database_path: Path) -> Path
 确定性由配置 seed、稳定子流与绝对样本索引决定，不能声称实际使用了传入 RNG。
 随机故障的事件调度规则仍按 #6 单独评审，不由共享类型迁移补造。
 
+`simulate_chunk` 的 `count` 可为 `0`：在配置与 `start_seq` 均合法时，
+这是合法的空块调用，返回四个长度为 `0` 的一维数组；`seq`、`timestamp_ns`
+仍为 `int64`，`vibration`、`temperature` 仍为 `float64`。空块不产生采样点，
+也不消费调用方生成器状态；`count < 0` 仍须拒绝，`count=0` 不跳过输入校验。
+此约定只描述仿真函数调用，不允许 `total_points=0` 的生产运行，也不允许
+把空块作为 NPZ 分片发布；生产配置和分片非空约束继续按 §4、§5 执行。
+
 **设计约束**：特征、评分、告警规则尽量使用无副作用的纯函数；文件 I/O 仅位于 pipeline/storage/reporting；不跨模块 import 私有 `_name`；不在 import 时执行仿真或访问文件。不要把 `assert` 用于生产输入校验，应使用 `ValueError`/专门异常并映射到明确的 CLI 退出码。
 
 ## 7. 仿真模型规范
