@@ -62,6 +62,10 @@ __all__ = [
 #: Number of nanoseconds in one second, used for the exact UTC time base.
 NANOSECONDS_PER_SECOND: int = 1_000_000_000
 
+#: Inclusive bounds of the ``int64`` time base used by ``timestamp_ns``.
+_INT64_MIN: int = -(2**63)
+_INT64_MAX: int = 2**63 - 1
+
 #: Unix epoch in UTC, the origin of ``timestamp_ns``.
 _EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
 
@@ -322,7 +326,8 @@ def timestamp_ns_for(
         ``sample_rate_hz`` is positive.
 
     Raises:
-        ValueError: for a negative index or count, or a non-positive rate.
+        ValueError: for a negative index or count, a non-positive rate, or a
+            range whose timestamps would not fit in ``int64`` Unix nanoseconds.
     """
     if start_seq < 0:
         raise ValueError(f"start_seq must be non-negative, got {start_seq}")
@@ -330,6 +335,20 @@ def timestamp_ns_for(
         raise ValueError(f"count must be non-negative, got {count}")
     if sample_rate_hz <= 0:
         raise ValueError(f"sample_rate_hz must be positive, got {sample_rate_hz}")
+    if count == 0:
+        return np.empty(0, dtype=np.int64)
+
+    # Both bounds are checked with Python integers before any NumPy arithmetic:
+    # int64 overflow in the vectorised path wraps silently and would return a
+    # plausible-but-wrong clock instead of an error.
+    last_seq = start_seq + count - 1
+    last_offset = last_seq * NANOSECONDS_PER_SECOND // sample_rate_hz
+    last_ns = last_offset + start_time_utc_ns
+    if last_ns > _INT64_MAX or last_ns < _INT64_MIN:
+        raise ValueError(
+            f"timestamps for seq [{start_seq}, {start_seq + count}) do not fit "
+            f"in int64 nanoseconds (last value {last_ns})"
+        )
 
     seq = np.arange(start_seq, start_seq + count, dtype=np.int64)
     whole_seconds = seq // sample_rate_hz
