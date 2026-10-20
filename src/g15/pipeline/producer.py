@@ -708,7 +708,10 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
         ValueError: if a scenario field is missing or not a positive integer, a
             declared signal unit is not the frozen section 5.2 unit, or the
             simulation kernel rejects the configuration.
-        OSError: if the run directory cannot be created or written.
+        OSError: if the run directory cannot be created or written.  A
+            failure while writing the fault truth leaves the already written
+            shards on disk but publishes **no** manifest, so the run is never
+            consumable as complete (Issue #45).
         RuntimeError: if faults are requested but the injection module is
             unavailable; no output directory or complete manifest is published.
         g15.pipeline.schema.DataContractError: if a shard or the manifest
@@ -743,12 +746,17 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
     entries, truth = _write_parts(
         config, run_dir, params.total_points, chunk_points, hook
     )
+    # The truth is written before the manifest on purpose (Issue #45): a
+    # complete manifest must never outlive the truth it is supposed to
+    # describe.  A failed truth write leaves the shards on disk but publishes
+    # no manifest, which is exactly the semantics of a failed shard write --
+    # the consumer rejects the run because the manifest is absent.
+    fault_events = _write_truth(run_dir, run_id, truth)
     manifest = _build_manifest(config, params, run_id, entries, units)
     _write_json_atomic(run_dir / "manifest.json", manifest.to_dict())
     elapsed = time.perf_counter() - started
     # --- official measurement window ends here ---
 
-    fault_events = _write_truth(run_dir, run_id, truth)
     _record_completion(
         run_dir,
         run_id,

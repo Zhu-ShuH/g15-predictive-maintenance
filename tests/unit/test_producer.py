@@ -455,6 +455,65 @@ def test_failed_run_publishes_no_complete_manifest(tmp_path: Path, monkeypatch) 
     assert not (run_dir / "private_truth").exists()
 
 
+def test_failed_truth_write_publishes_no_complete_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Issue #45: a failed truth write must not publish a complete manifest.
+
+    The truth is written before the manifest, so a truth write failure leaves
+    the shards on disk but publishes no manifest.  A consumer that follows
+    ``docs/interface.md`` section 5.2 rejects such a run because the manifest
+    is absent -- it must never see a ``complete`` manifest whose truth file
+    does not exist.
+    """
+    module = types.ModuleType("g15.simulation.faults")
+
+    class FakeEvent:
+        """A single injected event, as ``inject_faults`` would return it."""
+
+        event_id = "F001"
+        device_id = "DEV-001"
+        type = "spike"
+        start_seq = 10
+        end_seq_exclusive = 20
+        amplitude = 5.0
+
+        def to_dict(self) -> dict[str, object]:
+            """Return the frozen truth representation."""
+            return {
+                "event_id": self.event_id,
+                "device_id": self.device_id,
+                "type": self.type,
+                "start_seq": self.start_seq,
+                "end_seq_exclusive": self.end_seq_exclusive,
+                "amplitude": self.amplitude,
+            }
+
+    def fake_inject(chunk, config, rng=None):  # noqa: ANN001, ARG001
+        """Return the chunk untouched plus one event."""
+        return chunk, [FakeEvent()]
+
+    module.inject_faults = fake_inject  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "g15.simulation.faults", module)
+
+    def failing_truth(run_dir, run_id, truth):  # noqa: ANN001
+        """Fail the way a full disk would."""
+        raise OSError(28, "No space left on device (simulated)")
+
+    monkeypatch.setattr(producer, "_write_truth", failing_truth)
+
+    with pytest.raises(OSError, match="No space left on device"):
+        produce_run(scenario_config(total_points=1000, chunk_points=256), tmp_path)
+
+    run_dir = single_run_dir(tmp_path)
+    manifest = run_dir / "manifest.json"
+    assert not manifest.exists(), "a complete manifest must not survive a truth failure"
+    assert not (run_dir / "private_truth").exists()
+    # The shards stay on disk, exactly like a failed shard write; the absent
+    # manifest is what makes the run unconsumable.
+    assert len(list((run_dir / "raw").glob("part-*.npz"))) == 4
+
+
 def test_missing_chunk_points_is_rejected(tmp_path: Path) -> None:
     """``scenario.chunk_points`` has no safe default."""
     config = scenario_config()
