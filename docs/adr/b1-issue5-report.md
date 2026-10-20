@@ -249,7 +249,7 @@ assert bool(np.all(chunk.vibration < 0.0))
 2. A 已明确：本 PR 点名的性能测试与两份 ADR/报告可保留；ADR-0001 留给仿真草稿，Issue #2 用 0002–0004，ADR 仍待评审。**现状**：上述文件均已在 main 上；ADR-0001 仍是草稿状态，本 PR 只回填已定稿的未决项，不改其「待 A 评审」属性。
 3. 共享类型与 RNG 行为由 **#17**（`refactor(contracts): 评审共享类型与 RNG 契约后迁移 SimulationChunk`，负责人 A，协作 B1/C4/C3/C1）跟踪。**本 PR 不擅自迁移 `common/types.py`**；`rng` 可选且不使用与原签名/行为的差异，待 #17 同步接口记录。**已定稿**：#17 合并为 `e8e2924`，`SimulationChunk` 唯一公共定义在 `src/g15/common/types.py`，`engine.py` 保留同名再导出；`rng` 保留可选、明确不得消费，`docs/interface.md` §15 已记录。
 4. 合并后配合 C1（#6 故障注入）联测事件跨分片与重叠策略。
-5. 配合 C4（#11 producer）与 C5 做含落盘的正式百万点基准，在 Ubuntu 24.04 + RHEL 9 各跑一次并留证。正式百万点须等完整生产入口及双 Linux 实测。
+5. 配合 C4（#11 producer）与 C5 做含落盘的正式百万点基准。按 `docs/acceptance.md` §2，Ubuntu 24.04 与 RHEL 9 **每个系统都要在独立空运行目录连续测 3 次、保留全部结果，3 次均须严格 < 60 秒，并给出中位数、最大值与峰值内存（未测内存则写未测）**；不得用一次运行或回填降低验收次数。正式百万点须等完整生产入口及双 Linux 实测。
 
 **建议 PR 标题**：`feat(sim): 实现仿真内核（退化趋势 + 噪声）(#5)`（已使用）
 

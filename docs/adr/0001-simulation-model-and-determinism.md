@@ -115,7 +115,7 @@ simulate_chunk(config, start_seq, count, rng: np.random.Generator) -> Simulation
    - `ScenarioConfig` 仍**不由 B1 定义**——`engine.py` 通过「结构化读取」接受任意带 `scenario`/`signals` 字段的映射或对象，这一条不因 `#17` 改变；
    - 依赖方向按 `docs/interface.md` §2 记录为 `simulation -> common`、`pipeline -> common`。
 2. **`rng` 参数的去留** —— **已定稿（#17，采纳 B1 的方案 (a)）**：保留 `rng: np.random.Generator | None = None`，仅为调用契约兼容；实现**不得消费**调用方生成器状态，`docs/interface.md` §6 / §15 已写明「不能声称实际使用了传入 RNG」。因此该参数既不会改变数值，也不会破坏分片无关性。
-3. **百万点正式计时口径** —— **仍未完成**：教师要求 100 万点 <60 秒，小组口径为「生成 + 落盘」（`docs/acceptance.md`）。本 ADR 的 §6 与 `docs/adr/b1-issue5-report.md` 的「百万点基准实测」小节都只提供**算法段 / `np.savez` 近似写盘段**数字，**不含** `produce_run` 与完整 Manifest 落盘；截至 2026-10-19，`src/g15/pipeline/producer.py` 在 main 上仍是 0 字节占位，`#11` 仍 open，因此**尚无任何正式数字可引用**。正式测量须等 `#11` 合入后，由 C4 + C5 在 Ubuntu 24.04 与 RHEL 9 上各跑一次并留证；双 Linux 留证由 C6（`#10`）负责。
+3. **百万点正式计时口径** —— **仍未完成**：教师要求 100 万点 <60 秒，小组口径为「生成 + 落盘」（`docs/acceptance.md`）。本 ADR 的 §6 与 `docs/adr/b1-issue5-report.md` 的「百万点基准实测」小节都只提供**算法段 / `np.savez` 近似写盘段**数字，**不含** `produce_run` 与完整 Manifest 落盘；截至 2026-10-19，`src/g15/pipeline/producer.py` 在 main 上仍是 0 字节占位，`#11` 仍 open，因此**尚无任何正式数字可引用**。正式测量须等 `#11` 合入后，按 `docs/acceptance.md` §2 执行：Ubuntu 24.04 与 RHEL 9 **每个系统都在独立空运行目录连续测 3 次、保留全部结果，3 次均须严格 < 60 秒，并给出中位数、最大值与峰值内存（未测内存则写未测）**；仅测算法内核不能代替完整生产基准，也不得用回填降低验收次数。双 Linux 留证由 C6（`#10`）负责。
 4. **负值策略**：**仍未决**，当前实现不钳位（只校验有限性）。若 A 或 B2 要求仿真阶段保证非负，需要单独决策并说明对 `docs/interface.md` §7.1 的偏离。
 
 ## 6. 实测记录
