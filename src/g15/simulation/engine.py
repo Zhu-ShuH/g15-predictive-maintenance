@@ -51,6 +51,7 @@ from g15.simulation.degradation import SignalParameters, linear_trend
 from g15.simulation.noise import STREAM_TEMPERATURE, STREAM_VIBRATION, gaussian_noise
 
 __all__ = [
+    "MAX_SAMPLE_RATE_HZ",
     "NANOSECONDS_PER_SECOND",
     "SimulationChunk",
     "ScenarioParameters",
@@ -61,6 +62,17 @@ __all__ = [
 
 #: Number of nanoseconds in one second, used for the exact UTC time base.
 NANOSECONDS_PER_SECOND: int = 1_000_000_000
+
+#: Highest sampling rate the integer-nanosecond clock can represent.
+#:
+#: ``timestamp_ns`` is an ``int64`` count of nanoseconds, so the shortest
+#: interval it can express is one nanosecond.  Above this rate the sampling
+#: period is sub-nanosecond: the vectorised path of :func:`timestamp_ns_for`
+#: would round consecutive samples to the same timestamp and, because
+#: ``remainder * NANOSECONDS_PER_SECOND`` exceeds ``int64`` once the rate passes
+#: ``2**63 // 10**9``, wrap around and silently emit negative values.  The bound
+#: is a contract limit rather than a performance guard (Issue #46).
+MAX_SAMPLE_RATE_HZ: int = NANOSECONDS_PER_SECOND
 
 #: Inclusive bounds of the ``int64`` time base used by ``timestamp_ns``.
 _INT64_MIN: int = -(2**63)
@@ -79,7 +91,8 @@ def _offset_ns(sample_index: int, sample_rate_hz: int) -> int:
 
     Args:
         sample_index: Absolute sampling index; must be non-negative.
-        sample_rate_hz: Sampling frequency in hertz; must be positive.
+        sample_rate_hz: Sampling frequency in hertz; must be positive and at
+            most :data:`MAX_SAMPLE_RATE_HZ`.
 
     Returns:
         Nanoseconds since the start instant, rounded half up.
@@ -297,6 +310,12 @@ def load_scenario_parameters(config: object) -> ScenarioParameters:
         raise ValueError(
             f"scenario.sample_rate_hz must be positive, got {sample_rate_hz}"
         )
+    if sample_rate_hz > MAX_SAMPLE_RATE_HZ:
+        raise ValueError(
+            f"scenario.sample_rate_hz must be at most {MAX_SAMPLE_RATE_HZ}, got "
+            f"{sample_rate_hz}: a sub-nanosecond period cannot be represented by "
+            "int64 nanoseconds"
+        )
 
     total_points = _as_int(
         _field(scenario, "total_points", "scenario.total_points"),
@@ -342,15 +361,17 @@ def timestamp_ns_for(
         start_seq: Absolute index of the first sample; must be non-negative.
         count: Number of samples; must be non-negative.
         start_time_utc_ns: Run start instant as UTC Unix nanoseconds.
-        sample_rate_hz: Sampling frequency in hertz; must be positive.
+        sample_rate_hz: Sampling frequency in hertz; must be positive and no
+            greater than :data:`MAX_SAMPLE_RATE_HZ`.
 
     Returns:
         An ``int64`` array of shape ``(count,)``, strictly increasing because
-        ``sample_rate_hz`` is positive.
+        ``sample_rate_hz`` is positive and at most one sample per nanosecond.
 
     Raises:
-        ValueError: for a negative index or count, a non-positive rate, or a
-            range whose timestamps would not fit in ``int64`` Unix nanoseconds.
+        ValueError: for a negative index or count, a non-positive rate, a rate
+            above :data:`MAX_SAMPLE_RATE_HZ`, or a range whose timestamps would
+            not fit in ``int64`` Unix nanoseconds.
     """
     if start_seq < 0:
         raise ValueError(f"start_seq must be non-negative, got {start_seq}")
@@ -358,6 +379,14 @@ def timestamp_ns_for(
         raise ValueError(f"count must be non-negative, got {count}")
     if sample_rate_hz <= 0:
         raise ValueError(f"sample_rate_hz must be positive, got {sample_rate_hz}")
+    if sample_rate_hz > MAX_SAMPLE_RATE_HZ:
+        # A parameter check rather than a bounds check, so it also applies to an
+        # empty chunk: the rate itself is outside the contract either way.
+        raise ValueError(
+            f"sample_rate_hz must be at most {MAX_SAMPLE_RATE_HZ}, got "
+            f"{sample_rate_hz}: a sub-nanosecond period cannot be represented by "
+            "int64 nanoseconds and would repeat or wrap the timestamps"
+        )
     if count == 0:
         return np.empty(0, dtype=np.int64)
 

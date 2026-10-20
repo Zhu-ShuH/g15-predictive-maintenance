@@ -20,6 +20,7 @@ import pytest
 
 from g15.simulation.degradation import SignalParameters, linear_trend
 from g15.simulation.engine import (
+    MAX_SAMPLE_RATE_HZ,
     NANOSECONDS_PER_SECOND,
     SimulationChunk,
     load_scenario_parameters,
@@ -512,6 +513,50 @@ def test_non_dividing_sample_rate_keeps_half_up_rounding() -> None:
     stamps = timestamp_ns_for(0, 4, 0, 7)
 
     assert list(stamps) == [0, 142_857_143, 285_714_286, 428_571_429]
+
+
+def test_sample_rate_at_the_nanosecond_bound_is_exact() -> None:
+    """One sample per nanosecond is the fastest clock ``int64`` can express."""
+    stamps = timestamp_ns_for(0, 5, 0, MAX_SAMPLE_RATE_HZ)
+
+    assert MAX_SAMPLE_RATE_HZ == NANOSECONDS_PER_SECOND
+    assert list(stamps) == [0, 1, 2, 3, 4]
+    assert bool(np.all(np.diff(stamps) == 1))
+
+
+def test_sample_rate_above_the_nanosecond_bound_is_rejected() -> None:
+    """A sub-nanosecond period cannot be represented, so it must be refused."""
+    for rate in (MAX_SAMPLE_RATE_HZ + 1, 10**10, 9_223_372_034):
+        with pytest.raises(ValueError, match="sample_rate_hz must be at most"):
+            timestamp_ns_for(0, 1, 0, rate)
+
+
+def test_former_overflow_rate_no_longer_returns_a_negative_timestamp() -> None:
+    """Issue #46: ``9_223_372_034`` Hz used to wrap to ``-1000000001`` ns."""
+    rate = 9_223_372_034
+    remainder = rate - 1
+    # The exact offset, computed in Python ints, is one whole nanosecond.
+    assert (remainder * NANOSECONDS_PER_SECOND + rate // 2) // rate == (
+        NANOSECONDS_PER_SECOND
+    )
+
+    with pytest.raises(ValueError, match="sample_rate_hz must be at most"):
+        timestamp_ns_for(remainder, 1, 0, rate)
+
+
+def test_scenario_above_the_nanosecond_bound_is_rejected() -> None:
+    """``simulate_chunk`` must refuse the rate before generating any sample."""
+    with pytest.raises(ValueError, match=r"scenario\.sample_rate_hz must be at most"):
+        simulate_chunk(scenario(sample_rate_hz=MAX_SAMPLE_RATE_HZ + 1), 0, 16)
+
+
+def test_largest_legal_rate_keeps_strictly_increasing_stamps() -> None:
+    """The slowest representable period must not repeat a timestamp."""
+    config = scenario(sample_rate_hz=MAX_SAMPLE_RATE_HZ, total_points=8, chunk_points=8)
+    chunk = simulate_chunk(config, 0, 8)
+
+    assert bool(np.all(np.diff(chunk.timestamp_ns) == 1))
+    assert bool(np.all(np.diff(chunk.timestamp_ns) > 0))
 
 
 def test_start_time_accepts_datetime_and_iso_string() -> None:
