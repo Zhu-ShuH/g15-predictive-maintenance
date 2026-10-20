@@ -1,6 +1,7 @@
 """Exercise the real pre-push entry point against an isolated local bare remote."""
 
 import json
+import ntpath
 import os
 import shutil
 from pathlib import Path
@@ -79,9 +80,12 @@ def find_posix_shell(git=None, which=None, is_file=None, is_windows=None):
         is_windows = os.name == "nt"
     git = which("git") if git is None else git
     if is_windows and git:
-        candidate = Path(git).parent.parent / "bin" / "sh.exe"
+        # The layout is a Windows path, so parse it with ntpath even when the
+        # check itself runs on Linux CI; posixpath would treat the separators
+        # as ordinary characters and build a bogus relative path.
+        candidate = ntpath.join(ntpath.dirname(ntpath.dirname(git)), "bin", "sh.exe")
         if is_file(candidate):
-            return str(candidate), "git-for-windows"
+            return candidate, "git-for-windows"
     found = which("sh")
     if found:
         return found, "path"
@@ -105,7 +109,8 @@ def check_shell_resolution():
         git=git_path, which=lambda name: None, is_file=present, is_windows=True
     )
     assert source == "git-for-windows", source
-    assert path.replace("\\", "/").endswith("Git/bin/sh.exe"), path
+    assert path.replace("\\", "/").endswith("/bin/sh.exe"), path
+    assert path.replace("\\", "/").startswith("C:/Program Files/Git"), path
     results.append(
         {
             "case": "shell from the Git for Windows layout",
