@@ -21,10 +21,12 @@ Design notes
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import PurePosixPath
 from typing import Any, Final
 
 import numpy as np
@@ -77,6 +79,16 @@ CHUNK_FILE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^part-(\d{6,})\.npz$")
 
 _SHA256_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 
+#: Shape of ``start_time_utc``: a *complete* calendar date, a time of day, and a
+#: mandatory UTC offset.  ``T`` is the canonical separator; a single space is
+#: accepted because ISO 8601 permits it and because :mod:`g15.config` accepts a
+#: configuration that uses it -- a manifest read here must never be stricter than
+#: the producer that wrote it.  The fraction is optional and limited to
+#: microseconds, the resolution ``datetime`` can represent.
+_ISO8601_UTC_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$"
+)
+
 _MANIFEST_KEYS: Final[frozenset[str]] = frozenset(
     {
         "schema_version",
@@ -117,7 +129,8 @@ class ManifestStatus(str, Enum):
     """Publication state of a run directory.
 
     Only :attr:`COMPLETE` is consumable (section 5.2).  :attr:`FAILED` exists so
-    a broken run can be inspected without being mistaken for a finished one.
+    a broken run can be inspected without being mistaken for a finished one; it
+    is the only status allowed to publish an empty ``parts`` list.
     """
 
     COMPLETE = "complete"
@@ -147,6 +160,55 @@ def is_safe_relative_path(value: object) -> bool:
     return all(part not in {"", ".", ".."} for part in value.split("/"))
 
 
+def _require_utc_timestamp(value: object, name: str) -> None:
+    """Reject anything that is not a complete, UTC-anchored ISO-8601 instant.
+
+    Checking only a trailing ``Z`` or calling :meth:`datetime.fromisoformat`
+    alone is not enough: ``fromisoformat`` happily accepts a bare date
+    (``2026-10-19``, silently midnight) and a date-time without an offset, and a
+    suffix check accepts ``2026-13-45T99:99:99Z``.  The grammar is therefore
+    pinned by :data:`_ISO8601_UTC_PATTERN` first, then parsed for calendar
+    validity, then constrained to a zero offset.  ``-00:00`` is rejected
+    separately: RFC 3339 reads it as "the local offset is unknown", which is
+    not the same claim as "this instant is UTC".
+
+    Args:
+        value: Candidate ``start_time_utc`` value.
+        name: Field name used in the error message.
+
+    Raises:
+        ManifestError: if the value is not a string, does not match the frozen
+            grammar, is not a real calendar instant, is not expressed in UTC,
+            or uses the ``-00:00`` "unknown offset" form.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ManifestError(f"{name} must be a non-empty string, got {value!r}")
+    if not _ISO8601_UTC_PATTERN.match(value):
+        raise ManifestError(
+            f"{name} must be an ISO-8601 instant "
+            "'YYYY-MM-DDThh:mm:ss[{.ffffff}](Z|<offset>)' with a timezone, "
+            f"got {value!r}"
+        )
+    # RFC 3339 gives ``-00:00`` the meaning "the local offset is unknown",
+    # which is not the same claim as "this instant is UTC" (``Z`` or
+    # ``+00:00``).  ``fromisoformat`` collapses both to a zero offset, so the
+    # distinction has to be made on the text.  The manifest states when the
+    # run started; an unknown offset cannot support that claim.
+    if value.endswith("-00:00"):
+        raise ManifestError(
+            f"{name} must use 'Z' or '+00:00' for UTC, "
+            f"'-00:00' means an unknown offset in RFC 3339: {value!r}"
+        )
+    try:
+        moment = dt.datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ManifestError(f"{name} is not a real instant: {value!r}") from exc
+    if moment.utcoffset() != dt.timedelta(0):
+        raise ManifestError(
+            f"{name} must be UTC, got offset {moment.utcoffset()} in {value!r}"
+        )
+
+
 @dataclass(frozen=True)
 class ChunkManifestEntry:
     """One ``parts`` element of the manifest (section 5.2).
@@ -154,7 +216,9 @@ class ChunkManifestEntry:
     Attributes:
         part_id: Zero-based shard index, contiguous across the run.
         path: POSIX path relative to the run directory, e.g.
-            ``raw/part-000000.npz``.
+            ``raw/part-000000.npz``.  When the file name is canonical
+            (``part-NNNNNN.npz``, six digits or more) its number must equal
+            ``part_id``.
         rows: Number of samples stored in the shard.
         sha256: Lower-case hexadecimal SHA-256 of the shard file.
     """
@@ -169,7 +233,8 @@ class ChunkManifestEntry:
 
         Raises:
             ManifestError: for a negative ``part_id``, an unsafe or non-POSIX
-                path, a non-positive ``rows``, or a malformed digest.
+                path, a canonical file name whose number disagrees with
+                ``part_id``, a non-positive ``rows``, or a malformed digest.
         """
         if not isinstance(self.part_id, int) or isinstance(self.part_id, bool):
             raise ManifestError(f"part_id must be an integer, got {self.part_id!r}")
@@ -179,6 +244,20 @@ class ChunkManifestEntry:
             raise ManifestError(
                 "path must be a relative POSIX path without '.' or '..' components, "
                 f"got {self.path!r}"
+            )
+        # The file name is the only part of ``path`` the contract constrains: a
+        # canonical ``part-NNNNNN.npz`` name encodes the index, so an entry that
+        # disagrees with it describes a different file than the one a consumer
+        # will open.  Parent directories stay free-form (section 5.2 shows
+        # ``raw/`` but never freezes it), and a non-canonical name is accepted
+        # because ``write_chunk_atomic`` accepts one when ``part_id`` is passed
+        # explicitly -- there is no number to contradict in that case.
+        from_name = CHUNK_FILE_PATTERN.match(PurePosixPath(self.path).name)
+        if from_name is not None and int(from_name.group(1)) != self.part_id:
+            raise ManifestError(
+                f"path {self.path!r} encodes part_id {int(from_name.group(1))}, but "
+                f"the entry records part_id={self.part_id}; the manifest would "
+                "describe a different shard than the one on disk"
             )
         if not isinstance(self.rows, int) or isinstance(self.rows, bool):
             raise ManifestError(f"rows must be an integer, got {self.rows!r}")
@@ -211,11 +290,12 @@ class Manifest:
         device_id: Device the run belongs to; one run carries one device.
         seed: Simulation seed, needed to reproduce the run.
         sample_rate_hz: Sampling frequency used by the producer.
-        start_time_utc: ISO-8601 UTC start instant of the first sample.
+        start_time_utc: Complete ISO-8601 instant of the first sample, always
+            anchored to UTC (``Z`` or a zero offset such as ``+00:00``).
         total_points: Declared number of samples in the run.
         units: Physical unit per signal, ``vibration`` and ``temperature``.
         status: Publication state; only ``complete`` may be consumed.
-        parts: Shards in ascending ``part_id`` order.
+        parts: Shards in ascending ``part_id`` order; empty only when ``failed``.
     """
 
     # A manifest is a flat record; splitting it would only obscure the contract.
@@ -238,19 +318,22 @@ class Manifest:
 
         Raises:
             ManifestError: if the schema version is wrong, an identifier is
-                empty, a count is not positive, the units are not exactly the
+                empty, ``start_time_utc`` is not a complete UTC-anchored
+                instant, a count is not positive, the units are not exactly the
                 two documented signals, the parts are not contiguous from zero,
-                or a ``complete`` manifest does not cover ``total_points``.
+                or a ``complete`` manifest has no parts or does not cover
+                ``total_points``.
         """
         if self.schema_version != SCHEMA_VERSION:
             raise ManifestError(
                 f"schema_version must be {SCHEMA_VERSION!r}, got "
                 f"{self.schema_version!r}"
             )
-        for name in ("run_id", "scenario_id", "start_time_utc"):
+        for name in ("run_id", "scenario_id"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ManifestError(f"{name} must be a non-empty string, got {value!r}")
+        _require_utc_timestamp(self.start_time_utc, "start_time_utc")
         if not isinstance(self.device_id, str):
             raise ManifestError(f"device_id must be a string, got {self.device_id!r}")
         for name in ("seed", "sample_rate_hz", "total_points"):
@@ -281,11 +364,24 @@ class Manifest:
     def _check_parts(self) -> None:
         """Check that ``parts`` is contiguous from zero and covers the run.
 
+        A ``failed`` run may publish **no** parts: "the producer gave up before
+        the first shard was durable" is a real, inspectable state, and refusing
+        to express it would force a writer to publish a bogus ``complete``
+        manifest instead.  A ``complete`` run must list at least one part and
+        cover ``total_points`` exactly, so an empty list can never be mistaken
+        for a finished run.
+
         Raises:
-            ManifestError: on an empty, misnumbered, duplicated or short part list.
+            ManifestError: on an empty ``complete`` part list, a misnumbered or
+                duplicated part list, or a ``complete`` run that falls short.
         """
         if not self.parts:
-            raise ManifestError("parts must not be empty")
+            if self.status is ManifestStatus.FAILED:
+                return
+            raise ManifestError(
+                "a complete manifest must list at least one part; an empty run "
+                "must be published with status='failed'"
+            )
         actual = [entry.part_id for entry in self.parts]
         expected = list(range(len(self.parts)))
         if actual != expected:

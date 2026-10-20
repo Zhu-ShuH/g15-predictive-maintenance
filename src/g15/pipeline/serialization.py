@@ -16,6 +16,9 @@ integrity rule of ``docs/interface.md`` section 5.1 lives here:
 4. **Never return half-trusted data.**  :func:`read_chunk` refuses a missing
    file, a wrong digest, a wrong field set, a wrong dtype, a wrong row count,
    a discontinuous ``seq`` and a non-finite signal, raising instead of warning.
+   Given the run directory it also refuses a shard that only *looks* like the
+   published one: a byte-identical copy outside the run, or a symlink leading
+   out of it, fails the ownership check.
 5. **Validate before publishing.**  Every path rule and every ``part_id`` rule is
    checked *before* the temporary file is created, and the manifest entry --
    whose digest is only known after hashing -- is built and validated *before*
@@ -346,7 +349,47 @@ def _build_chunk(arrays: dict[str, np.ndarray[Any, Any]]) -> "SimulationChunk":
     )
 
 
-def read_chunk(path: Path, manifest_entry: ChunkManifestEntry) -> "SimulationChunk":
+def _require_inside_run_dir(
+    shard_path: Path, manifest_entry: ChunkManifestEntry, run_dir: Path
+) -> None:
+    """Refuse a shard whose real location is not the entry's location in the run.
+
+    A manifest entry names one file relative to one run directory.  Checking the
+    bare file name and the digest is not an ownership check: a byte-identical
+    copy of ``raw/part-000000.npz`` parked anywhere on disk would pass both, and
+    a consumer that trusts it reads data the run never published.  Resolving both
+    sides also rejects a symlink that tries to escape the run directory, because
+    ``resolve`` follows the link before the containment test.
+
+    Args:
+        shard_path: Path the caller is about to read.
+        manifest_entry: Entry describing the intended file.
+        run_dir: Run directory the entry is relative to.
+
+    Raises:
+        ChunkIOError: if the resolved shard is outside ``run_dir``, or if it is
+            inside but at a different relative path than the entry records.
+    """
+    try:
+        relative = shard_path.resolve().relative_to(Path(run_dir).resolve())
+    except ValueError as exc:
+        raise ChunkIOError(
+            f"{shard_path} is outside run directory {run_dir}; a copy that only "
+            "shares the entry's name and digest is not the published shard"
+        ) from exc
+    if relative.as_posix() != manifest_entry.path:
+        raise ChunkIOError(
+            f"{shard_path} is {relative.as_posix()!r} inside the run directory, "
+            f"but the manifest records {manifest_entry.path!r}"
+        )
+
+
+def read_chunk(
+    path: Path,
+    manifest_entry: ChunkManifestEntry,
+    *,
+    run_dir: Path | None = None,
+) -> "SimulationChunk":
     """Load and verify one shard described by ``manifest_entry``.
 
     Verification order is deliberate: existence, entry safety, file identity,
@@ -357,6 +400,12 @@ def read_chunk(path: Path, manifest_entry: ChunkManifestEntry) -> "SimulationChu
         path: Location of the shard on disk, normally
             ``run_dir / manifest_entry.path``.
         manifest_entry: Entry from a published manifest.
+        run_dir: Run directory the entry belongs to.  When given, the resolved
+            shard must sit exactly at ``run_dir / manifest_entry.path``, which
+            turns the name-and-digest match into a real ownership check and
+            blocks symlink escapes.  When omitted the function performs only
+            file-identity, digest and field validation, so the *consumer* entry
+            point that knows the run directory must pass it.
 
     Returns:
         The verified chunk.
@@ -364,7 +413,7 @@ def read_chunk(path: Path, manifest_entry: ChunkManifestEntry) -> "SimulationChu
     Raises:
         ManifestError: if ``manifest_entry.path`` is not a safe relative path.
         ChunkIOError: if the file is missing, is not the file the entry
-            describes, or cannot be parsed.
+            describes, lies outside ``run_dir``, or cannot be parsed.
         ChecksumMismatchError: if the digest differs from the recorded one.
         ChunkValidationError: if the content violates section 5.1 or the row
             count differs from the entry.
@@ -378,6 +427,8 @@ def read_chunk(path: Path, manifest_entry: ChunkManifestEntry) -> "SimulationChu
             f"{shard_path.name!r} does not match manifest entry "
             f"{manifest_entry.path!r}"
         )
+    if run_dir is not None:
+        _require_inside_run_dir(shard_path, manifest_entry, run_dir)
     if not shard_path.is_file():
         raise ChunkIOError(f"shard does not exist: {shard_path}")
 

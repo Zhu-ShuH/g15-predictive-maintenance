@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import zipfile
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import numpy as np
 import pytest
@@ -672,3 +672,314 @@ def test_entry_rejects_non_positive_rows() -> None:
         ChunkManifestEntry(
             part_id=0, path="raw/part-000000.npz", rows=0, sha256="0" * 64
         )
+
+
+# --------------------------------------------------------------------------- #
+# Issue #34, item 1: part_id and the file name must agree
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("part_id", "path"),
+    [
+        (0, "raw/part-000005.npz"),
+        (5, "raw/part-000000.npz"),
+        (3, "raw/nested/part-000004.npz"),
+        (999_999, "raw/part-1000000.npz"),
+    ],
+)
+def test_entry_rejects_a_part_id_that_contradicts_the_file_name(
+    part_id: int, path: str
+) -> None:
+    """A canonical name encodes the index, so the two must not disagree.
+
+    ``part_id=0`` + ``raw/part-000005.npz`` used to be accepted: the manifest
+    claimed one shard while the path pointed at another, and every consumer that
+    trusted the entry on the number and the file system on the path read the
+    wrong 102 400 samples.
+    """
+    with pytest.raises(ManifestError, match="encodes part_id"):
+        ChunkManifestEntry(part_id=part_id, path=path, rows=8, sha256="0" * 64)
+
+
+@pytest.mark.parametrize(
+    ("part_id", "path"),
+    [
+        (0, "raw/part-000000.npz"),
+        (5, "raw/part-000005.npz"),
+        # Parent directories are not frozen by section 5.2, so nesting is fine.
+        (3, "raw/deep/nested/part-000003.npz"),
+        # Six digits is the minimum, not the maximum.
+        (1_000_000, "raw/part-1000000.npz"),
+        # A bare name carries the same information as one with a parent.
+        (0, "part-000000.npz"),
+        # A non-canonical name encodes no number, so nothing can contradict it.
+        (4, "raw/shard-4.npz"),
+    ],
+)
+def test_entry_accepts_a_path_consistent_with_its_part_id(
+    part_id: int, path: str
+) -> None:
+    """Only contradiction is refused; the check never narrows valid paths."""
+    entry = ChunkManifestEntry(part_id=part_id, path=path, rows=8, sha256="0" * 64)
+
+    assert entry.part_id == part_id
+    assert entry.path == path
+
+
+def test_manifest_from_dict_rejects_a_part_id_that_contradicts_the_path(
+    tmp_path: Path,
+) -> None:
+    """The read path must apply the same rule, not only direct construction."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["parts"][0]["path"] = "raw/part-000007.npz"
+
+    with pytest.raises(ManifestError, match="encodes part_id 7"):
+        manifest_from_dict(payload)
+
+
+# --------------------------------------------------------------------------- #
+# Issue #34, item 2: start_time_utc is a complete UTC-anchored instant
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "2026-10-19",  # a bare date: fromisoformat silently means midnight
+        "2026-10-19T00:00:00",  # no timezone at all
+        "2026-10-19T00:00:00+08:00",  # a real offset, but not UTC
+        "2026-10-19T00:00:00-05:00",
+        # RFC 3339: "-00:00" means "the local offset is unknown", which is
+        # not the same claim as "this instant is UTC".
+        "2026-10-19T00:00:00-00:00",
+        "20261019T000000Z",  # basic format, not the documented shape
+        "2026-13-45T99:99:99Z",  # matches the shape, is not a real instant
+        "2026-02-30T00:00:00Z",
+        "2026-10-19T00:00:00ZZ",
+        "not-a-timestamp",
+        "",
+        "   ",
+    ],
+)
+def test_manifest_rejects_an_incomplete_or_non_utc_start_time(
+    tmp_path: Path, bad: str
+) -> None:
+    """A timestamp nobody can place on a timeline must not be published.
+
+    Only a suffix check would accept ``2026-13-45T99:99:99Z``; only
+    ``fromisoformat`` would accept the bare date and the naive form.
+    """
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    manifest = make_manifest((entry,), total_points=8)
+
+    with pytest.raises(ManifestError, match="start_time_utc"):
+        replace(manifest, start_time_utc=bad)
+
+
+def test_manifest_rejects_a_non_string_start_time(tmp_path: Path) -> None:
+    """``None`` is not a timestamp, and must not reach a consumer either."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    manifest = make_manifest((entry,), total_points=8)
+
+    with pytest.raises(ManifestError, match="start_time_utc"):
+        replace(manifest, start_time_utc=None)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "good",
+    [
+        "2026-10-14T00:00:00Z",
+        # The producer copies the configuration text verbatim, and
+        # g15.config accepts a zero offset, so refusing it here would make a
+        # run unreadable by its own reader.
+        "2026-10-14T00:00:00+00:00",
+        "2026-10-14T00:00:00.123456Z",
+        "2024-02-29T23:59:59Z",  # a real leap day
+    ],
+)
+def test_manifest_accepts_a_complete_utc_start_time(tmp_path: Path, good: str) -> None:
+    """Both UTC spellings in use across the project stay readable."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    manifest = make_manifest((entry,), total_points=8)
+
+    assert replace(manifest, start_time_utc=good).start_time_utc == good
+
+
+def test_manifest_rejects_the_unknown_offset_spelling(tmp_path: Path) -> None:
+    """``-00:00`` is not a claim that the instant is UTC.
+
+    ``fromisoformat`` maps both ``-00:00`` and ``+00:00`` to a zero offset,
+    so the two spellings can only be told apart on the text.  RFC 3339 reads
+    ``-00:00`` as "the local offset is unknown"; the manifest states when a
+    run started, so an unknown offset cannot support that claim.
+    """
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    manifest = make_manifest((entry,), total_points=8)
+
+    with pytest.raises(ManifestError, match="unknown offset"):
+        replace(manifest, start_time_utc="2026-10-19T00:00:00-00:00")
+
+    # The confirmed-UTC spelling stays acceptable.
+    assert (
+        replace(manifest, start_time_utc="2026-10-19T00:00:00+00:00").start_time_utc
+        == "2026-10-19T00:00:00+00:00"
+    )
+
+
+def test_manifest_from_dict_applies_the_start_time_rule(tmp_path: Path) -> None:
+    """The parser must not be the lenient door into the same dataclass."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["start_time_utc"] = "2026-10-19T00:00:00"
+
+    with pytest.raises(ManifestError, match="start_time_utc"):
+        manifest_from_dict(payload)
+
+
+# --------------------------------------------------------------------------- #
+# Issue #34, item 3: a shard must live where the entry says it lives
+# --------------------------------------------------------------------------- #
+
+
+def test_read_chunk_refuses_a_byte_identical_copy_outside_the_run(
+    tmp_path: Path,
+) -> None:
+    """A matching name and digest is not proof of ownership.
+
+    Copying ``raw/part-000000.npz`` to another directory keeps both checks
+    green, so the reader trusted data the run never published.  Passing
+    ``run_dir`` turns the match into a real containment check.
+    """
+    run_dir = tmp_path / "run"
+    path = shard_path(run_dir)
+    entry = write_chunk_atomic(make_chunk(), path, run_dir=run_dir)
+
+    outside = tmp_path / "elsewhere" / "raw" / "part-000000.npz"
+    outside.parent.mkdir(parents=True)
+    outside.write_bytes(path.read_bytes())
+    assert outside.name == PurePosixPath(entry.path).name
+    assert sha256_of_file(outside) == entry.sha256
+
+    with pytest.raises(ChunkIOError, match="outside run directory"):
+        read_chunk(outside, entry, run_dir=run_dir)
+
+
+def test_read_chunk_accepts_the_published_location(tmp_path: Path) -> None:
+    """The containment check must not reject the legitimate file."""
+    entry = write_chunk_atomic(make_chunk(), shard_path(tmp_path), run_dir=tmp_path)
+
+    assert read_chunk(shard_path(tmp_path), entry, run_dir=tmp_path).seq.shape[0] == 8
+
+
+def test_read_chunk_refuses_a_shard_at_another_relative_path(tmp_path: Path) -> None:
+    """Inside the run is not enough: the relative path must be the recorded one."""
+    path = shard_path(tmp_path)
+    entry = write_chunk_atomic(make_chunk(), path, run_dir=tmp_path)
+    moved = ChunkManifestEntry(
+        part_id=0, path="other/part-000000.npz", rows=8, sha256=entry.sha256
+    )
+
+    with pytest.raises(ChunkIOError, match="but the manifest records"):
+        read_chunk(path, moved, run_dir=tmp_path)
+
+
+def test_read_chunk_refuses_a_symlink_that_escapes_the_run(tmp_path: Path) -> None:
+    """Resolving the link before the containment test blocks the escape."""
+    run_dir = tmp_path / "run"
+    entry = write_chunk_atomic(make_chunk(), shard_path(run_dir), run_dir=run_dir)
+
+    decoy = tmp_path / "decoy.npz"
+    decoy.write_bytes((run_dir / "raw" / "part-000000.npz").read_bytes())
+    link = run_dir / "raw" / "part-000000.npz"
+    link.unlink()
+    try:
+        link.symlink_to(decoy)
+    except (OSError, NotImplementedError):  # pragma: no cover - needs the privilege
+        pytest.skip("this platform cannot create symlinks without elevation")
+    if not link.is_symlink():  # pragma: no cover - some Windows filesystems no-op
+        pytest.skip("the filesystem reported success but created no link")
+
+    with pytest.raises(ChunkIOError, match="outside run directory"):
+        read_chunk(link, entry, run_dir=run_dir)
+
+
+def test_read_chunk_without_run_dir_is_documented_as_weak(tmp_path: Path) -> None:
+    """Opting out of ``run_dir`` keeps only the name-and-digest checks.
+
+    This is the documented contract, not an oversight: a caller that does not
+    know the run directory cannot prove ownership, so the *consumer* entry point
+    must pass ``run_dir`` (Issue #34, item 3).  Pinning the weak behaviour here
+    makes the trade-off visible instead of implicit.
+    """
+    run_dir = tmp_path / "run"
+    entry = write_chunk_atomic(make_chunk(), shard_path(run_dir), run_dir=run_dir)
+
+    outside = tmp_path / "elsewhere" / "part-000000.npz"
+    outside.parent.mkdir(parents=True)
+    outside.write_bytes((run_dir / "raw" / "part-000000.npz").read_bytes())
+
+    assert read_chunk(outside, entry).seq.shape[0] == 8
+    with pytest.raises(ChunkIOError, match="outside run directory"):
+        read_chunk(outside, entry, run_dir=run_dir)
+
+
+# --------------------------------------------------------------------------- #
+# Issue #34, item 4: a failed run may publish zero shards
+# --------------------------------------------------------------------------- #
+
+
+def test_failed_manifest_may_publish_no_parts() -> None:
+    """A run that died before the first shard was durable must be expressible.
+
+    The old rule refused ``parts=()`` for every status, so a producer that died
+    during setup had no honest manifest to write: it either lied with
+    ``complete`` or wrote nothing at all.
+    """
+    manifest = make_manifest((), total_points=1_000_000, status=ManifestStatus.FAILED)
+
+    assert manifest.parts == ()
+    assert manifest.status is ManifestStatus.FAILED
+
+
+def test_complete_manifest_must_publish_at_least_one_part() -> None:
+    """Relaxing ``failed`` must not open the door for ``complete``."""
+    with pytest.raises(ManifestError, match="must list at least one part"):
+        make_manifest((), total_points=8)
+
+
+def test_failed_manifest_without_parts_round_trips_through_json() -> None:
+    """The empty list survives serialisation, so a consumer can see the failure."""
+    manifest = make_manifest((), total_points=1_000_000, status=ManifestStatus.FAILED)
+
+    payload = json.loads(json.dumps(manifest_to_dict(manifest)))
+
+    assert payload["status"] == "failed"
+    assert payload["parts"] == []
+    assert manifest_from_dict(payload) == manifest
+
+
+def test_failed_manifest_parts_are_still_contiguous(tmp_path: Path) -> None:
+    """A partial run may stop early, but it may not skip a shard."""
+    first = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path, 0), run_dir=tmp_path
+    )
+    third = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path, 2), run_dir=tmp_path
+    )
+
+    with pytest.raises(ManifestError, match="contiguous from 0"):
+        make_manifest((first, third), total_points=16, status=ManifestStatus.FAILED)
