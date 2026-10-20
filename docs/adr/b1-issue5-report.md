@@ -38,6 +38,8 @@ git switch -c feat/5-simulation-kernel   # 从 main (75037f4)
 
 ### 5. 跑百万点基准，取真实数字
 
+> **2026-10-20 补充**：`#11` 合入后，已用真实 `produce_run_detailed` 补出完整生产口径的三次连测（中位数 0.1551 s）。明细见 §三第 2 小节。
+
 ### 6. 提交、推送、开 PR
 
 ```
@@ -92,6 +94,8 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 
 ### 百万点基准实测
 
+#### 1. 本 Issue 交付时的口径（历史记录，保留原样）
+
 | 口径 | 点数 | 分片 | 耗时 | 判定 |
 | --- | --- | --- | --- | --- |
 | 内核（趋势 + 噪声，**不含序列化与 Manifest**） | 1,000,000 | chunk_points 102,400 | **0.057 s** | PASS |
@@ -99,9 +103,33 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 
 两次都记录了 os / cpu / cpu_count / python / numpy / points / `scalar_values=2,000,000` / chunk_points / 计时范围。
 
-> ⚠️ **这不是正式验收数字。** `docs/interface.md` §7.3 的正式口径要求计时覆盖「生成 + NPZ 分片写盘 + **完整 Manifest 落盘**」。Manifest 与原子写入器属 C4 的 `pipeline/serialization.py`、`producer.py`（#3、#11），**本 Issue 尚不具备**。第二行用的是 `np.savez`，**不是**项目的原子写入器，也**没有** Manifest 与 SHA-256 校验。正式测量须等 C4 落地后在 Ubuntu 24.04 与 RHEL 9 上重跑。
+> ⚠️ **当时这不是正式验收数字。** `docs/interface.md` §7.3 的正式口径要求计时覆盖「生成 + NPZ 分片写盘 + **完整 Manifest 落盘**」。Manifest 与原子写入器属 C4 的 `pipeline/serialization.py`、`producer.py`（#3、#11），**当时本 Issue 不具备**。第二行用的是 `np.savez`，**不是**项目的原子写入器，也**没有** Manifest 与 SHA-256 校验。
 >
 > 另：百万点口径按 `docs/interface.md` 暂按 `seq` 采样次数计点，同时记录 `sample_count=1,000,000` 与 `scalar_value_count=2,000,000`（双信号），**不把两个数合并宣称两个已验证采样点**。
+
+#### 2. 完整生产口径补测（2026-10-20，`#11` 合入后）
+
+`#11`（C4 `produce_run`）已合入 main（`614b256`），上面缺的那一段现在可以补测。用**真实生产入口**、**真实配置**、**官方计时窗口**连跑 3 次：
+
+- 配置：`configs/benchmark_1m.yaml`（`scenario_id=benchmark_1m`、`total_points=1,000,000`、`chunk_points=102,400`、`sample_rate_hz=100`、`seed=42`）
+- 入口：`g15.pipeline.producer.produce_run_detailed(config, output_root)`
+- 计时：`producer.py` 内 `time.perf_counter()` 窗口，覆盖随机初始化 → 趋势/噪声生成 → 序列化 → 文件写入 → SHA-256 → 最后 complete Manifest 原子发布，与 `docs/acceptance.md` §2 逐条吻合
+- 每次跑在**独立空目录**（`run1`/`run2`/`run3`），互不复用
+- 环境：Windows 11（10.0.26100）/ Python 3.12.15 / NumPy 2.5.4
+
+| 次数 | `elapsed_seconds`（官方窗口） | 分片 | 点数 | 标量值 |
+| --- | --- | --- | --- | --- |
+| 第 1 次 | **0.1558 s** | 10 | 1,000,000 | 2,000,000 |
+| 第 2 次 | **0.1530 s** | 10 | 1,000,000 | 2,000,000 |
+| 第 3 次 | **0.1551 s** | 10 | 1,000,000 | 2,000,000 |
+
+- **中位数 0.1551 s**，最大值 **0.1558 s**，三次全部严格 < 60 s
+- Manifest 实测：`status=complete`、`parts=10`、`rows` 之和 `1,000,000`，分片形状 `[102400 × 9, 78400]`，与 `docs/interface.md` §5.1 的短尾片约定一致
+- 产物结构：`raw/part-000000.npz` ~ `part-000009.npz` + `manifest.json` + `logs/app.jsonl`
+
+> ⚠️ **这仍然不是双 Linux 验收数字。** 上表是 **Windows 本机**、**单系统**、**C4 生产入口 + B1 内核**的联测结果，证明完整生产口径能在远低于 60 秒内完成，但 `docs/acceptance.md` §2 要求的是 Ubuntu 24.04 与 RHEL 9 **每个系统各自**在独立空运行目录连续测 3 次并留证。**Linux 侧数字仍待 C6（`#10`）与 C5（`#9`）产出**，本表不能替代。
+>
+> **峰值内存**：`ProductionSummary` 当前无内存字段（`grep -n "tracemalloc\|getrusage\|maxrss" src/g15/pipeline/producer.py` 零命中），按 `docs/acceptance.md` §2 的「未测内存则写未测」，此处**写未测**。补采集能力由 `#51` 跟踪。
 
 ### 单元测试覆盖（对应 `members/B1/AGENT.md` 验收标准 4 条）
 
@@ -220,24 +248,24 @@ assert bool(np.all(chunk.vibration < 0.0))
 
 ### 风险
 
-1. **正式百万点口径未验证**（最高风险）。本 PR 只有内核与近似写盘数字，**未**覆盖完整 Manifest 落盘，也**未**在 Linux 上跑过。须由 C4 + C5 在双系统上产出正式数字。
-2. **`SimulationChunk` 归属待定**。现定义在 `engine.py`，建议迁往 `src/g15/common/types.py`（属 A 白名单，B1 未自行迁移）。
-3. **`rng` 参数保留但不使用**。为不改 §6 冻结签名而保留，实际随机性由 `(seed, 流名, 样本序号)` 决定。
+1. **双 Linux 正式验收仍未做**（最高风险）。`#11` 已合入 main（`614b256`），本报告 §三「完整生产口径补测」已补出 Windows 本机三次连测数字（中位数 0.1551 s），但 `docs/acceptance.md` §2 要求的是 Ubuntu 24.04 与 RHEL 9 **各自**连测 3 次并留证，**Linux 侧数字仍缺**，须由 C6（`#10`）与 C5（`#9`）产出。峰值内存亦未测（`ProductionSummary` 无内存字段，由 `#51` 跟踪）。
+2. **`SimulationChunk` 归属已定**。`#17` 合并为 `e8e2924`，唯一公共定义在 `src/g15/common/types.py`，`engine.py` 保留同名再导出（本条原为待定，现为已决）。
+3. **`rng` 参数保留但不使用**。为不改 §6 冻结签名而保留，实际随机性由 `(seed, 流名, 样本序号)` 决定；`docs/interface.md` §15 已记录不得消费。
 4. **负值不钳位**。若 A 或 B2 要求钳位，属契约变更，需先评审。
 5. **ADR 仍是草稿**，确定性策略需 A 评审后方可作为冻结依据。
 
 ### 依赖
 
-- #3（分片契约，C4）—— 已按 `docs/interface.md` §5.1 实现输出，未实际联调
-- #4（配置对象，C3）—— 未实现，本 Issue 用结构化读取绕开
-- #11（producer，C4）—— 正式基准需要它
+- #3（分片契约，C4）—— **已合入**（`e972836` 前），本 Issue 输出按 §5.1 形状，实测 `[102400 × 9, 78400]` 通过
+- #4（配置对象，C3）—— **已合入**（`8d29cd3`），本 Issue 仍用结构化读取，两者兼容
+- #11（producer，C4）—— **已合入**（`614b256`），§三第 2 小节的三次连测即用它产出
 
-### 需要 A 决策的 4 项
+### 需要 A 决策的 4 项（现状）
 
-1. `SimulationChunk` 是否迁往 `src/g15/common/types.py`
-2. `simulate_chunk` 的 `rng` 参数去留
-3. 负值策略（钳位 or 只报错）
-4. 正式百万点计时口径（等 C4 的 `produce_run`）
+1. `SimulationChunk` 是否迁往 `src/g15/common/types.py` —— **已定稿**（`#17`/`e8e2924`，已迁）
+2. `simulate_chunk` 的 `rng` 参数去留 —— **已定稿**（保留、不得消费）
+3. 负值策略（钳位 or 只报错）—— **仍未决**
+4. 正式百万点计时口径 —— **口径已定**（`docs/acceptance.md` §2：每系统 3 次），**Linux 侧数字待 C6/C5**
 
 ---
 
@@ -248,8 +276,8 @@ assert bool(np.all(chunk.vibration < 0.0))
 1. ~~A 已在 PR #15 提出 `CHANGES_REQUESTED`（2026-10-16T06:41:12Z），两条恒真断言已按上述修正并重跑门禁，请求复审。~~ **已完成**：A 复审通过，PR #15 于 2026-10-17T09:23:46Z 合并为 `2c14759`，Issue #5 关闭。
 2. A 已明确：本 PR 点名的性能测试与两份 ADR/报告可保留；ADR-0001 留给仿真草稿，Issue #2 用 0002–0004，ADR 仍待评审。**现状**：上述文件均已在 main 上；ADR-0001 仍是草稿状态，本 PR 只回填已定稿的未决项，不改其「待 A 评审」属性。
 3. 共享类型与 RNG 行为由 **#17**（`refactor(contracts): 评审共享类型与 RNG 契约后迁移 SimulationChunk`，负责人 A，协作 B1/C4/C3/C1）跟踪。**本 PR 不擅自迁移 `common/types.py`**；`rng` 可选且不使用与原签名/行为的差异，待 #17 同步接口记录。**已定稿**：#17 合并为 `e8e2924`，`SimulationChunk` 唯一公共定义在 `src/g15/common/types.py`，`engine.py` 保留同名再导出；`rng` 保留可选、明确不得消费，`docs/interface.md` §15 已记录。
-4. 合并后配合 C1（#6 故障注入）联测事件跨分片与重叠策略。
-5. 配合 C4（#11 producer）与 C5 做含落盘的正式百万点基准。按 `docs/acceptance.md` §2，Ubuntu 24.04 与 RHEL 9 **每个系统都要在独立空运行目录连续测 3 次、保留全部结果，3 次均须严格 < 60 秒，并给出中位数、最大值与峰值内存（未测内存则写未测）**；不得用一次运行或回填降低验收次数。正式百万点须等完整生产入口及双 Linux 实测。
+4. 合并后配合 C1（#6 故障注入）联测事件跨分片与重叠策略。**已发生**：`#6` 合并为 `1f93018`，`simulate_chunk` 与其跨分片一致性实测通过。
+5. 配合 C4（#11 producer）与 C5 做含落盘的正式百万点基准。按 `docs/acceptance.md` §2，Ubuntu 24.04 与 RHEL 9 **每个系统都要在独立空运行目录连续测 3 次、保留全部结果，3 次均须严格 < 60 秒，并给出中位数、最大值与峰值内存（未测内存则写未测）**；不得用一次运行或回填降低验收次数。**已部分完成**：`#11` 已合入（`614b256`），Windows 本机三次连测已补入 §三第 2 小节（中位数 0.1551 s、最大值 0.1558 s，全部 < 60 s）；**Linux 双系统三次连测仍待 C6（`#10`）与 C5（`#9`）**。
 
 **建议 PR 标题**：`feat(sim): 实现仿真内核（退化趋势 + 噪声）(#5)`（已使用）
 

@@ -108,14 +108,18 @@ simulate_chunk(config, start_seq, count, rng: np.random.Generator) -> Simulation
 
 ## 5. 未决事项（需 A / 相关角色确认）
 
-> **2026-10-19 回填**：本 ADR 草拟时的 4 项未决，第 1、2 项已由 `#17`（`e8e2924`）定稿，第 4 项仍待 A / B2 决定。第 3 项（正式计时口径）**仍未完成**：完整生产入口 `#11`（C4 `produce_run`）尚未合入 main（截至本行 `src/g15/pipeline/producer.py` 仍是 0 字节占位），因此本 ADR §6 与 `docs/adr/b1-issue5-report.md` 里的百万点数字**都只是算法段 / 近似写盘段**，不能当作 §7.3 的正式验收数字。以下保留原始条目并就地补结论，不改写当初的判断，便于后来者看到「当时为什么这么问」。
+> **2026-10-19 回填**：本 ADR 草拟时的 4 项未决，第 1、2 项已由 `#17`（`e8e2924`）定稿，第 4 项仍待 A / B2 决定。第 3 项（正式计时口径）当时**仍未完成**：完整生产入口 `#11`（C4 `produce_run`）尚未合入 main，`src/g15/pipeline/producer.py` 仍是 0 字节占位，因此本 ADR §6 与 `docs/adr/b1-issue5-report.md` 里的百万点数字**都只是算法段 / 近似写盘段**，不能当作 §7.3 的正式验收数字。
+>
+> **2026-10-20 再回填**：`#11` 已合入 main（`614b256`），`producer.py` 不再是占位。B1 已用真实生产入口按官方计时窗口在 Windows 本机连跑 3 次（中位数 **0.1551 s**、最大值 **0.1558 s**，10 片、1,000,000 点、`status=complete`），明细见 `docs/adr/b1-issue5-report.md` §三第 2 小节。**但这不是双 Linux 验收**：`docs/acceptance.md` §2 要求的 Ubuntu 24.04 与 RHEL 9 各自 3 次连测仍待 C6（`#10`）与 C5（`#9`），峰值内存亦未测（由 `#51` 跟踪）。
+>
+> 以下保留原始条目并就地补结论，不改写当初的判断，便于后来者看到「当时为什么这么问」。
 
 1. **`ScenarioConfig` 与 `SimulationChunk` 的类型定义位置** —— **已定稿（#17，`e8e2924`）**：
    - `SimulationChunk` 的唯一公共定义已迁到 `src/g15/common/types.py`；`engine.py` 保留同名再导出，实测 `engine.SimulationChunk is common.types.SimulationChunk` 为 `True`，`__module__` 为 `g15.common.types`，因此按旧路径导入的调用方与测试不受影响；
    - `ScenarioConfig` 仍**不由 B1 定义**——`engine.py` 通过「结构化读取」接受任意带 `scenario`/`signals` 字段的映射或对象，这一条不因 `#17` 改变；
    - 依赖方向按 `docs/interface.md` §2 记录为 `simulation -> common`、`pipeline -> common`。
 2. **`rng` 参数的去留** —— **已定稿（#17，采纳 B1 的方案 (a)）**：保留 `rng: np.random.Generator | None = None`，仅为调用契约兼容；实现**不得消费**调用方生成器状态，`docs/interface.md` §6 / §15 已写明「不能声称实际使用了传入 RNG」。因此该参数既不会改变数值，也不会破坏分片无关性。
-3. **百万点正式计时口径** —— **仍未完成**：教师要求 100 万点 <60 秒，小组口径为「生成 + 落盘」（`docs/acceptance.md`）。本 ADR 的 §6 与 `docs/adr/b1-issue5-report.md` 的「百万点基准实测」小节都只提供**算法段 / `np.savez` 近似写盘段**数字，**不含** `produce_run` 与完整 Manifest 落盘；截至 2026-10-19，`src/g15/pipeline/producer.py` 在 main 上仍是 0 字节占位，`#11` 仍 open，因此**尚无任何正式数字可引用**。正式测量须等 `#11` 合入后，按 `docs/acceptance.md` §2 执行：Ubuntu 24.04 与 RHEL 9 **每个系统都在独立空运行目录连续测 3 次、保留全部结果，3 次均须严格 < 60 秒，并给出中位数、最大值与峰值内存（未测内存则写未测）**；仅测算法内核不能代替完整生产基准，也不得用回填降低验收次数。双 Linux 留证由 C6（`#10`）负责。
+3. **百万点正式计时口径** —— **口径已定，本机已测，双 Linux 未测**：教师要求 100 万点 <60 秒，小组口径为「生成 + 落盘」（`docs/acceptance.md` §2）。`#11` 已于 2026-10-20 合入 main（`614b256`），`src/g15/pipeline/producer.py` 不再是占位。B1 已用真实 `produce_run_detailed` 按官方计时窗口在 Windows 本机连跑 3 次：**0.1558 / 0.1530 / 0.1551 s，中位数 0.1551 s，最大值 0.1558 s**，10 片、1,000,000 点、Manifest `status=complete`、`rows` 之和 1,000,000，明细见 `docs/adr/b1-issue5-report.md` §三第 2 小节。**但这仍不构成验收**：`docs/acceptance.md` §2 要求 Ubuntu 24.04 与 RHEL 9 **每个系统各自**在独立空运行目录连续测 3 次、保留全部结果、3 次均须严格 < 60 秒，并给出中位数、最大值与峰值内存（未测内存则写未测）。**Linux 侧数字待 C6（`#10`）与 C5（`#9`）产出**；峰值内存因 `ProductionSummary` 无内存字段而**未测**，补采集能力由 `#51` 跟踪。仅测算法内核不能代替完整生产基准，也不得用回填降低验收次数。
 4. **负值策略**：**仍未决**，当前实现不钳位（只校验有限性）。若 A 或 B2 要求仿真阶段保证非负，需要单独决策并说明对 `docs/interface.md` §7.1 的偏离。
 
 ## 6. 实测记录
