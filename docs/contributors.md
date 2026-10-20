@@ -19,13 +19,34 @@ git var GIT_AUTHOR_IDENT
 git var GIT_COMMITTER_IDENT
 ```
 
-`user.useConfigOnly=true` 禁止 Git 猜测身份，但仍可能读取已有全局配置；
-因此必须显式设置并检查 local name/email。环境变量也可能覆盖有效身份。
-上一条 `git log -1` 只能说明过去，不能验证下一次提交。
+`user.useConfigOnly=true` 是**仓库级配置约定，不是安全边界**：它只禁止 Git
+在缺少配置时猜测身份，不会屏蔽已写入的全局 `user.name`/`user.email`。真正
+生效的是 local 设置加上有效 ident 的逐项比对，所以三条命令必须都看：local
+name/email、`git config --show-origin --get user.email` 的来源，以及
+`git var GIT_AUTHOR_IDENT` / `GIT_COMMITTER_IDENT` 的实际结果。环境变量
+（`GIT_AUTHOR_*`、`GIT_COMMITTER_*`）同样可以覆盖有效身份。上一条
+`git log -1` 只能说明过去，不能验证下一次提交。
 
 PR 创建者、提交 author、committer、实际推送账号各有含义。推送凭据需另行
 核实，本地钩子无法证明使用了哪个 GitHub 账号，不读取或打印认证凭据。
 不要把他人的真实贡献改成自己的名字；A 的合法代改也应保留 A 的真实署名。
+
+### 钩子管不到的三类提交
+
+本地 `pre-push` 只在**本机推送**时运行，以下三类不经过它，不能据钩子通过
+就断定署名无误：
+
+- 网页/API 创建或修改的提交（GitHub 生成 `<id>+<login>@users.noreply.github.com`
+  形式的 noreply 邮箱）。
+- Squash 合并产生的提交：主作者是 PR 创建者，分支上的其他作者写进
+  `Co-authored-by`。这是真实归属，不是错署。
+- 已进入 `origin/main` 或目标分支历史的提交：钩子只检查本次新增范围，
+  既往贡献不重复检查。
+
+因此 `ZSH` 与 `Zhu-ShuH` 这类同一账号的多个展示名，或 163 邮箱与 noreply
+邮箱并存，**不能只凭名字或邮箱不同就判成错署**。判断要看具体账号、具体
+邮箱与经审查的完整提交 SHA；**不为整个 `users.noreply.github.com` 域设
+白名单**（该域服务所有用户，域名相同不证明账号相同）。
 
 ## 启用推送前检查
 
@@ -73,8 +94,17 @@ python tools/test_identity_hook.py
 
 该脚本使用系统临时目录中的隔离工作库和本地 bare remote，执行真实 push，
 验证错署名拒绝、合法 SHA 例外、同步主线、多 ref 和缺对象等路径；不访问
-GitHub、不读取真实推送凭据、不修改当前克隆的配置或历史。需 Python 和 Git；
-本轮只实测 Windows，Linux 结果以实际运行和 CI 记录为准。
+GitHub、不读取真实推送凭据、不修改当前克隆的配置或历史。需 Python 和 Git。
+
+查找 POSIX shell 的顺序是：先按 Git for Windows 布局取
+`<git>/../../bin/sh.exe`，该候选**实际存在**才使用；否则回退到
+`shutil.which("sh")`；两者都找不到时明确报错退出，不静默跳过。路径字符串
+本身不作为可用性证据。因此同一个脚本可在 Windows、Linux CI 与 Git Bash 中
+运行，报告会打印实际使用的 shell 及其来源（`git-for-windows` 或 `path`）。
+
+CI 在独立任务 `identity-hook` 中实际运行该脚本并保存输出，与 `skeleton`
+必需检查分开；Windows 本机结果另行留证。该任务当前**不是**必需检查，服务器
+保护规则不因本文件改动而调整。
 
 钩子是本地辅助检查，不能代替服务器保护、成员确认和真实 PR 评审；
 `--no-verify` 可跳过本地检查，但团队不允许用它绕过身份核对。

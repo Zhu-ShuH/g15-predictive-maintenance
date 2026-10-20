@@ -48,3 +48,30 @@ jobs:
           echo "### Document references (advisory)" >> "$GITHUB_STEP_SUMMARY"
           echo "Scanner outcome: $ADVISORY_OUTCOME. See the scan step for file/line diagnostics." >> "$GITHUB_STEP_SUMMARY"
           echo "This is not a required merge check. Existing skeleton checks remain blocking." >> "$GITHUB_STEP_SUMMARY"
+
+  identity-hook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify the pre-push identity hook against a local bare remote
+        run: |
+          set -o pipefail
+          python tools/test_identity_hook.py | tee identity-hook-report.json
+      - name: Record identity hook outcome
+        if: always()
+        run: |
+          echo "### Pre-push identity hook" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat identity-hook-report.json >> "$GITHUB_STEP_SUMMARY" || echo "no report produced" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Advisory local guard: it does not authenticate the GitHub push account and cannot replace server protection or review." >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload identity hook report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-hook-report
+          path: identity-hook-report.json
+          if-no-files-found: warn
