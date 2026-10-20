@@ -1,6 +1,7 @@
 """Exercise the real pre-push entry point against an isolated local bare remote."""
 
 import json
+import ntpath
 import os
 import shutil
 from pathlib import Path
@@ -49,6 +50,135 @@ def expect(repo, name, args, allowed, extra=None, reason=None):
             "output": p.stderr,
         }
     )
+
+
+def find_posix_shell(git=None, which=None, is_file=None, is_windows=None):
+    """Locate a POSIX shell for the hook entry point.
+
+    The preferred location is the Git for Windows layout
+    (<git>/../../bin/sh.exe). A sh executable on PATH is accepted as a
+    fallback so the tool also runs on Linux, in CI and in Git Bash style
+    environments. Path strings are never trusted blindly: a candidate is used
+    only after an explicit file-existence check.
+
+    Args:
+        git: Injected git executable path, defaults to shutil.which.
+        which: Injected which lookup, defaults to shutil.which.
+        is_file: Injected existence predicate, defaults to Path.is_file.
+        is_windows: Injected platform flag, defaults to os.name == "nt".
+
+    Returns:
+        A (path, source) pair, where source is "git-for-windows" or "path".
+
+    Raises:
+        RuntimeError: when no POSIX shell is found anywhere.
+    """
+    which = shutil.which if which is None else which
+    if is_file is None:
+        is_file = lambda candidate: Path(candidate).is_file()
+    if is_windows is None:
+        is_windows = os.name == "nt"
+    git = which("git") if git is None else git
+    if is_windows and git:
+        # The layout is a Windows path, so parse it with ntpath even when the
+        # check itself runs on Linux CI; posixpath would treat the separators
+        # as ordinary characters and build a bogus relative path.
+        candidate = ntpath.join(ntpath.dirname(ntpath.dirname(git)), "bin", "sh.exe")
+        if is_file(candidate):
+            return candidate, "git-for-windows"
+    found = which("sh")
+    if found:
+        return found, "path"
+    raise RuntimeError(
+        "A POSIX shell is required: no sh.exe in the Git for Windows layout "
+        "and no sh on PATH"
+    )
+
+
+def check_shell_resolution():
+    """Cover the preferred layout, the PATH fallback and the total-miss case.
+
+    The platform flag is injected so all three branches run identically on
+    Windows and on Linux CI instead of only exercising the host's own layout.
+    """
+    present = lambda candidate: True
+    absent = lambda candidate: False
+    git_path = "C:\\Program Files\\Git\\cmd\\git.exe"
+
+    path, source = find_posix_shell(
+        git=git_path, which=lambda name: None, is_file=present, is_windows=True
+    )
+    assert source == "git-for-windows", source
+    assert path.replace("\\", "/").endswith("/bin/sh.exe"), path
+    assert path.replace("\\", "/").startswith("C:/Program Files/Git"), path
+    results.append(
+        {
+            "case": "shell from the Git for Windows layout",
+            "passed": True,
+            "allowed": True,
+            "exit_code": 0,
+            "output": path,
+        }
+    )
+
+    def which_without_sh(name):
+        return git_path if name == "git" else None
+
+    sh_on_path = "/usr/bin/sh"
+    path, source = find_posix_shell(
+        git=git_path,
+        which=lambda name: sh_on_path if name == "sh" else None,
+        is_file=absent,
+        is_windows=True,
+    )
+    assert source == "path" and path == sh_on_path, (path, source)
+    results.append(
+        {
+            "case": "Windows layout missing falls back to sh on PATH",
+            "passed": True,
+            "allowed": True,
+            "exit_code": 0,
+            "output": path,
+        }
+    )
+
+    path, source = find_posix_shell(
+        git=None,
+        which=lambda name: sh_on_path if name == "sh" else None,
+        is_file=absent,
+        is_windows=False,
+    )
+    assert source == "path" and path == sh_on_path, (path, source)
+    results.append(
+        {
+            "case": "POSIX host resolves sh on PATH",
+            "passed": True,
+            "allowed": True,
+            "exit_code": 0,
+            "output": path,
+        }
+    )
+
+    try:
+        find_posix_shell(
+            git=git_path, which=which_without_sh, is_file=absent, is_windows=True
+        )
+    except RuntimeError as exc:
+        assert "POSIX shell is required" in str(exc), exc
+    else:
+        raise AssertionError("a missing POSIX shell must fail loudly")
+    results.append(
+        {
+            "case": "missing POSIX shell fails loudly",
+            "passed": True,
+            "allowed": False,
+            "exit_code": 1,
+            "output": "RuntimeError: A POSIX shell is required",
+        }
+    )
+
+
+check_shell_resolution()
 
 
 with tempfile.TemporaryDirectory(prefix="g15-hook-") as temp:
@@ -224,13 +354,7 @@ with tempfile.TemporaryDirectory(prefix="g15-hook-") as temp:
         check=True,
     )
     missing_parent_sha = obj.stdout.decode().strip()
-    sh = (
-        Path(shutil.which("git")).parent.parent / "bin" / "sh.exe"
-        if os.name == "nt"
-        else shutil.which("sh")
-    )
-    if sh is None:
-        raise RuntimeError("A POSIX shell is required")
+    sh, shell_source = find_posix_shell()
     p = subprocess.run(
         [str(sh), str(hooks / "pre-push"), "origin", str(bare)],
         cwd=repo,
@@ -250,10 +374,15 @@ with tempfile.TemporaryDirectory(prefix="g15-hook-") as temp:
         }
     )
 
-report = {"passed": len(results), "failed": 0, "cases": results}
 print(
     json.dumps(
-        {"passed": len(results), "failed": 0, "cases": [x["case"] for x in results]},
+        {
+            "passed": len(results),
+            "failed": 0,
+            "shell": str(sh),
+            "shell_source": shell_source,
+            "cases": [x["case"] for x in results],
+        },
         indent=2,
     )
 )
