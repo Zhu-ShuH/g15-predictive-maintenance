@@ -434,6 +434,86 @@ def test_timestamp_ns_for_is_pure_and_vectorised() -> None:
     assert direct.shape == chunk.timestamp_ns.shape
 
 
+# --------------------------------------------------------------------------- #
+# int64 clock guard (hand-computed boundaries)
+# --------------------------------------------------------------------------- #
+
+_INT64_MAX = 2**63 - 1
+_INT64_MIN = -(2**63)
+
+
+def test_clock_guard_accepts_the_exact_int64_upper_bound() -> None:
+    """The last representable nanosecond must still be produced, not refused.
+
+    ``sample_rate_hz=7`` does not divide 1e9, so sample 1 sits
+    ``round_half_up(1e9 / 7) = 142_857_143`` ns after the start instant.  With
+    ``start_time_utc_ns = _INT64_MAX - 142_857_143`` the clock lands exactly on
+    ``_INT64_MAX``, which is representable and must be accepted.
+    """
+    offset = (1 * NANOSECONDS_PER_SECOND + 7 // 2) // 7
+    assert offset == 142_857_143
+
+    stamps = timestamp_ns_for(1, 1, _INT64_MAX - offset, 7)
+
+    assert list(stamps) == [_INT64_MAX]
+
+
+def test_clock_guard_uses_half_up_rounding_not_floor() -> None:
+    """A floor-rounded bound would let this one-sample chunk wrap silently.
+
+    ``floor(1e9 / 6) = 166_666_666`` but the kernel rounds half up to
+    ``166_666_667``.  Starting at ``_INT64_MAX - 166_666_666`` therefore ends
+    one nanosecond past ``_INT64_MAX``; the guard must refuse it rather than
+    return ``_INT64_MIN``.
+    """
+    floor_offset = NANOSECONDS_PER_SECOND // 6
+    half_up_offset = (NANOSECONDS_PER_SECOND + 6 // 2) // 6
+    assert floor_offset == 166_666_666
+    assert half_up_offset == 166_666_667
+
+    with pytest.raises(ValueError, match="do not fit in int64"):
+        timestamp_ns_for(1, 1, _INT64_MAX - floor_offset, 6)
+
+
+def test_clock_guard_rejects_a_start_instant_below_int64() -> None:
+    """An out-of-range start must raise ValueError, not OverflowError.
+
+    NumPy raises ``OverflowError: int too big to convert`` when the scalar start
+    instant does not fit its ``int64`` cast, and that error is outside the
+    documented ``ValueError`` family.
+    """
+    with pytest.raises(ValueError, match="outside the int64"):
+        timestamp_ns_for(0, 2, _INT64_MIN - 1, 1)
+
+    # The exact lower bound is representable and must pass.
+    assert list(timestamp_ns_for(0, 1, _INT64_MIN, 1)) == [_INT64_MIN]
+
+
+def test_clock_guard_checks_the_first_sample_not_only_the_last() -> None:
+    """A start inside int64 can still overflow once the sample offset is added."""
+    with pytest.raises(ValueError, match="do not fit in int64"):
+        timestamp_ns_for(1, 1, _INT64_MAX, 6)
+
+
+def test_clock_guard_is_skipped_for_an_empty_chunk() -> None:
+    """``count=0`` yields an empty int64 array even for an out-of-range start.
+
+    ``docs/interface.md`` section 6 allows an empty in-memory chunk; no
+    timestamp is produced, so no range applies and nothing may be rejected.
+    """
+    stamps = timestamp_ns_for(0, 0, _INT64_MAX + 1, 100)
+
+    assert stamps.dtype == np.int64
+    assert stamps.shape == (0,)
+
+
+def test_non_dividing_sample_rate_keeps_half_up_rounding() -> None:
+    """Rates that do not divide 1e9 must round half up, not truncate."""
+    stamps = timestamp_ns_for(0, 4, 0, 7)
+
+    assert list(stamps) == [0, 142_857_143, 285_714_286, 428_571_429]
+
+
 def test_start_time_accepts_datetime_and_iso_string() -> None:
     """Both spellings of the start instant must give the same nanoseconds."""
     as_string = load_scenario_parameters(
