@@ -181,7 +181,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 消费者只读取公开 Manifest、NPZ 和该消费配置；`sample_rate_hz` 从 Manifest 取得。C3 与 B2/C2/C4 在接口评审时确认上述键名、路径解析与默认行为，增加测试证明消费配置没有故障位置。
 
-**参数约束**：`total_points > 0`，`sample_rate_hz > 0`，`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。两份配置的窗口整除关系在消费入口校验。
+**参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。两份配置的窗口整除关系在消费入口校验。
 
 **随机性**：采用 `numpy.random.default_rng(seed)`；为不同设备和噪声/故障机制建立稳定的子随机流，避免算法修改导致无关随机数漂移。同配置、同 seed、同版本生成数值应逐点一致；`run_id` 和 wall-clock 运行时间允许不同。时钟基于起始 UTC + 采样序号计算，不以每循环累加浮点时间。
 
@@ -209,6 +209,13 @@ health_rules_file: 'configs/health_rules.yaml'
 **短尾片（`total_points` 不是 `chunk_points` 整数倍）**：`chunk_points` 是名义分片大小，不是整除要求，生产者不得因为不整除而拒绝配置，也不得为凑整而补点。分片数 `n = ceil(total_points / chunk_points)`；前 `n-1` 片每片 `chunk_points` 行，**最后一片为 `total_points - (n-1) * chunk_points` 行**（因此必然满足 `1 ≤ rows < chunk_points`）。短尾片在其余方面与普通分片完全相同：`part_id` 仍从 0 连续、`rows` 与文件内实际行数一致、SHA-256 覆盖实际字节、Manifest 的 `rows` 之和仍等于 `total_points`。短尾片不得与前一合并、不得丢弃、不得用重复或填充采样补齐。`docs/acceptance.md` 第 2 节规定的基准形状正是这种情形：1000000 点、`chunk_points=102400` 得到 10 片，即 9×102400 + 78400。
 
 **时间戳可表示范围**：`timestamp_ns` 为 `int64` UTC Unix 纳秒，上限 `2**63-1`（约 292 年跨度）。生产入口在创建运行目录之前用整数运算核算 `start_time_utc + total_points / sample_rate_hz` 是否会越界，越界则以 `ValueError` 拒绝，不写出任何分片或清单；生成端不得依赖 `int64` 回绕后的结果。
+
+**采样率上界**：`sample_rate_hz <= 1_000_000_000`（1 GHz，即相邻样本间隔不小于 1 ns）。该上界是**契约约束，不是性能守卫**：
+
+- `timestamp_ns` 是 `int64` 纳秒计数，最短可表示间隔为 1 ns；采样率更高时采样周期不足 1 ns，相邻样本被舍入成同一个时间戳，`np.diff` 恒为 0，而长度、dtype 与 `isfinite` 检查全部照常通过。
+- 向量化路径的中间量 `remainder * 10**9`（`remainder <= sample_rate_hz - 1`）在采样率超过 `2**63 // 10**9 = 9223372036` 时于 `int64` 上回绕，函数不报错而返回错误甚至为负的时间戳。取 1 GHz 作上界同时使该乘积可证不溢出（不超过 `10**18 - 10**9`）。
+
+三处校验必须一致：生产配置校验（`g15 validate` / `config.py`）、`load_scenario_parameters` 与 `timestamp_ns_for` 都拒绝超过上界的采样率并抛 `ValueError`。**不允许出现「配置能通过校验、内核却拒绝」的落差**；`config.py` 的同步由 C3 负责。
 
 **百万点口径已由组长确认**：按 `seq` 的采样次数计点；双信号的标量值总数另列，性能报告必须同时记录 `sample_count` 和 `scalar_value_count`，不能把两个值合并宣称为两个已验证采样点。
 
@@ -260,7 +267,9 @@ validate_config(config: ScenarioConfig) -> None
 load_consumer_config(path: Path) -> ConsumerConfig
 
 # simulation/engine.py
+MAX_SAMPLE_RATE_HZ: int = 1_000_000_000  # 采样率契约上限，见 5.1
 simulate_chunk(config: ScenarioConfig, start_seq: int, count: int, rng: np.random.Generator | None = None) -> SimulationChunk
+timestamp_ns_for(start_seq: int, count: int, start_time_utc_ns: int, sample_rate_hz: int) -> NDArray[np.int64]
 
 # simulation/faults.py
 inject_faults(chunk: SimulationChunk, config: ScenarioConfig, rng: np.random.Generator | None = None) -> tuple[SimulationChunk, list[FaultEvent]]
