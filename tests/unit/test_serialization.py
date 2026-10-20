@@ -753,6 +753,9 @@ def test_manifest_from_dict_rejects_a_part_id_that_contradicts_the_path(
         "2026-10-19T00:00:00",  # no timezone at all
         "2026-10-19T00:00:00+08:00",  # a real offset, but not UTC
         "2026-10-19T00:00:00-05:00",
+        # RFC 3339: "-00:00" means "the local offset is unknown", which is
+        # not the same claim as "this instant is UTC".
+        "2026-10-19T00:00:00-00:00",
         "20261019T000000Z",  # basic format, not the documented shape
         "2026-13-45T99:99:99Z",  # matches the shape, is not a real instant
         "2026-02-30T00:00:00Z",
@@ -810,6 +813,29 @@ def test_manifest_accepts_a_complete_utc_start_time(tmp_path: Path, good: str) -
     manifest = make_manifest((entry,), total_points=8)
 
     assert replace(manifest, start_time_utc=good).start_time_utc == good
+
+
+def test_manifest_rejects_the_unknown_offset_spelling(tmp_path: Path) -> None:
+    """``-00:00`` is not a claim that the instant is UTC.
+
+    ``fromisoformat`` maps both ``-00:00`` and ``+00:00`` to a zero offset,
+    so the two spellings can only be told apart on the text.  RFC 3339 reads
+    ``-00:00`` as "the local offset is unknown"; the manifest states when a
+    run started, so an unknown offset cannot support that claim.
+    """
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    manifest = make_manifest((entry,), total_points=8)
+
+    with pytest.raises(ManifestError, match="unknown offset"):
+        replace(manifest, start_time_utc="2026-10-19T00:00:00-00:00")
+
+    # The confirmed-UTC spelling stays acceptable.
+    assert (
+        replace(manifest, start_time_utc="2026-10-19T00:00:00+00:00").start_time_utc
+        == "2026-10-19T00:00:00+00:00"
+    )
 
 
 def test_manifest_from_dict_applies_the_start_time_rule(tmp_path: Path) -> None:

@@ -238,7 +238,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留在半成品状态，因此读入侧**不得以“能解析”推断“可信”**。以下四条为冻结规则，`g15.pipeline.schema` 与 `g15.pipeline.serialization` 是它们的可执行形式（Issue #34 收口）。
 
-1. **`start_time_utc` 是完整且锚定 UTC 的时刻。** 形如 `YYYY-MM-DDThh:mm:ss[.ffffff]`，其后必须带时区（`Z` 或 `±hh:mm`）且偏移为 **0**。`Z` 与 `+00:00` 等价，**两者都接受**——生产者会把配置文本原样写入清单，而配置校验接受零偏移，读入侧比生产者更严会让一次运行被自己的读者拒绝。仅日期（`2026-10-14`）、无时区、非零偏移（如 `+08:00`）、非法日历值（如 `2026-13-45T99:99:99Z`）以及任意文本一律拒绝。不要只检查结尾的 `Z`，也不要只调用 `fromisoformat`：后者会把 `2026-10-14` 静默当成当日零点。
+1. **`start_time_utc` 是完整且锚定 UTC 的时刻。** 形如 `YYYY-MM-DDThh:mm:ss[.ffffff]`，其后必须带时区（`Z` 或 `±hh:mm`）且偏移为 **0**。`Z` 与 `+00:00` 等价，**两者都接受**——生产者会把配置文本原样写入清单，而配置校验接受零偏移，读入侧比生产者更严会让一次运行被自己的读者拒绝。**`-00:00` 一律拒绝**：按 RFC 3339，它的含义是「本地偏移**未知**」，与「确认是 UTC」不是同一件事；清单声明的是运行开始时刻，偏移未知的时刻支撑不了这个声明。仅日期（`2026-10-14`）、无时区、非零偏移（如 `+08:00`）、非法日历值（如 `2026-13-45T99:99:99Z`）以及任意文本一律拒绝。不要只检查结尾的 `Z`，也不要只调用 `fromisoformat`：后者会把 `2026-10-14` 静默当成当日零点，且会把 `-00:00` 与 `+00:00` 一视同仁。
 
 2. **`part_id` 必须与文件名编码的序号一致。** `path` 先满足安全相对 POSIX 路径规则，随后**只取** `PurePosixPath(path).name` 比对：若它匹配 `part-NNNNNN.npz`（**六位及以上**，如 `part-000000.npz`、`part-1000000.npz`），其数字必须等于 `part_id`；`part_id=0` 配 `raw/part-000005.npz` 必须拒绝。父目录不冻结（`raw/` 是约定而非约束），非规范名（如 `raw/shard-4.npz`）不含序号，故不做比对。
 
@@ -278,8 +278,10 @@ simulate_chunk(config: ScenarioConfig, start_seq: int, count: int, rng: np.rando
 inject_faults(chunk: SimulationChunk, config: ScenarioConfig, rng: np.random.Generator | None = None) -> tuple[SimulationChunk, list[FaultEvent]]
 
 # pipeline/serialization.py
-write_chunk_atomic(chunk: SimulationChunk, output_path: Path) -> ChunkManifestEntry
-read_chunk(path: Path, manifest_entry: ChunkManifestEntry) -> SimulationChunk
+write_chunk_atomic(chunk: SimulationChunk, output_path: Path, *, run_dir: Path | None = None, part_id: int | None = None) -> ChunkManifestEntry
+read_chunk(path: Path, manifest_entry: ChunkManifestEntry, *, run_dir: Path | None = None) -> SimulationChunk
+
+省略 `run_dir` 只做文件身份/摘要/字段校验，**消费入口必须传**（见 §5.2.1 第 4 条）；`write_chunk_atomic` 的 `run_dir` 用于归属校验、`part_id` 用于显式指定分片编号，二者省略时按调用方默认行为处理。
 
 # pipeline/producer.py
 produce_run(config: ScenarioConfig, output_root: Path) -> Path  # 返回 run_dir

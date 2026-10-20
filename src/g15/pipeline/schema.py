@@ -168,7 +168,9 @@ def _require_utc_timestamp(value: object, name: str) -> None:
     (``2026-10-19``, silently midnight) and a date-time without an offset, and a
     suffix check accepts ``2026-13-45T99:99:99Z``.  The grammar is therefore
     pinned by :data:`_ISO8601_UTC_PATTERN` first, then parsed for calendar
-    validity, then constrained to a zero offset.
+    validity, then constrained to a zero offset.  ``-00:00`` is rejected
+    separately: RFC 3339 reads it as "the local offset is unknown", which is
+    not the same claim as "this instant is UTC".
 
     Args:
         value: Candidate ``start_time_utc`` value.
@@ -176,7 +178,8 @@ def _require_utc_timestamp(value: object, name: str) -> None:
 
     Raises:
         ManifestError: if the value is not a string, does not match the frozen
-            grammar, is not a real calendar instant, or is not expressed in UTC.
+            grammar, is not a real calendar instant, is not expressed in UTC,
+            or uses the ``-00:00`` "unknown offset" form.
     """
     if not isinstance(value, str) or not value.strip():
         raise ManifestError(f"{name} must be a non-empty string, got {value!r}")
@@ -185,6 +188,16 @@ def _require_utc_timestamp(value: object, name: str) -> None:
             f"{name} must be an ISO-8601 instant "
             "'YYYY-MM-DDThh:mm:ss[{.ffffff}](Z|<offset>)' with a timezone, "
             f"got {value!r}"
+        )
+    # RFC 3339 gives ``-00:00`` the meaning "the local offset is unknown",
+    # which is not the same claim as "this instant is UTC" (``Z`` or
+    # ``+00:00``).  ``fromisoformat`` collapses both to a zero offset, so the
+    # distinction has to be made on the text.  The manifest states when the
+    # run started; an unknown offset cannot support that claim.
+    if value.endswith("-00:00"):
+        raise ManifestError(
+            f"{name} must use 'Z' or '+00:00' for UTC, "
+            f"'-00:00' means an unknown offset in RFC 3339: {value!r}"
         )
     try:
         moment = dt.datetime.fromisoformat(value)
