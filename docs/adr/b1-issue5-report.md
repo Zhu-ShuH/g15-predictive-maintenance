@@ -137,7 +137,7 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 
 | 项 | 值 |
 | --- | --- |
-| `git rev-parse HEAD` | `8561014c2fecd14ce065eb52de77f083f9c13cc2`（= PR #53 head） |
+| `git rev-parse HEAD` | `8561014c2fecd14ce065eb52de77f083f9c13cc2`（B 轮测量时点；这是**当时**的 PR #53 head，PR 后续已前进到更新的提交） |
 | 分支 | `docs/5-full-production-benchmark` |
 | `origin/main` | `7cfe71dec399054bd49d4edebb1c1881846b6b34` |
 | `src/` `tests/` `configs/` 工作树改动 | **无**（`git status --porcelain -- src tests configs` 空） |
@@ -351,7 +351,7 @@ if __name__ == "__main__":
 - 每次的 `manifest.json` SHA-256 各不相同（`run_id` 含时间戳与随机后缀），可作为逐次追溯锚点
 - **两组仍是同一进程内的顺序调用，不是独立进程**；「独立空运行目录」指每次 `mkdtemp()/g<组>r<次>` 且 `mkdir(exist_ok=False)`，不等于独立进程隔离，这一点如实写明
 
-> **A 轮 / B 轮 / C 轮的关系**：A 轮（0.1558/0.1530/0.1551 s）**当时未留逐次证据**，不能补成原始记录；B 轮（0.1623…0.2610 s）保留了耗时与产物校验结论，但**未保存逐次 Manifest 摘要**，同样无法事后补造。C 轮是唯一一轮「每次运行都有独立 Manifest 摘要与逐片校验结果」的记录，因此**以 C 轮为准**。三轮数字的差异属机器负载波动，不构成性能回归——三轮的代码 blob、配置、分片数与点数完全相同。
+> **A 轮 / B 轮 / C 轮的关系**：A 轮（0.1558/0.1530/0.1551 s）**当时未留逐次证据**，不能补成原始记录；B 轮（0.1623…0.2610 s）保留了耗时与产物校验结论，但**未保存逐次 Manifest 摘要**，同样无法事后补造。C 轮是唯一一轮「每次运行都有独立 Manifest 摘要与逐片校验结果」的记录，因此**以 C 轮为准**。三轮的代码 blob、配置、分片数与点数完全相同；**三轮数字为何不同，本轮没有做归因测量**（没有隔离负载、缓存、CPU 频率等变量），因此只如实并列三组数字，不写成「负载波动」或「性能回归」这类超出证据的结论。
 
 ### 三项 `test_config.py` 失败的独立留证（与 PR #53 无关的既有环境差异）
 
@@ -362,7 +362,7 @@ if __name__ == "__main__":
 | 被测树 | `HEAD` | 命令 | 退出码 | 结果 |
 | --- | --- | --- | --- | --- |
 | 固定 main | `7cfe71dec399054bd49d4edebb1c1881846b6b34` | `pytest tests/unit/test_config.py -q` | **1** | 3 failed, 90 passed |
-| PR #53 head | `8561014c2fecd14ce065eb52de77f083f9c13cc2` | `pytest tests/unit/test_config.py -q` | **1** | 3 failed, 90 passed |
+| PR #53 当时的 head | `8561014c2fecd14ce065eb52de77f083f9c13cc2` | `pytest tests/unit/test_config.py -q` | **1** | 3 failed, 90 passed |
 
 两棵树的 `src/`、`tests/`、`configs/` 工作树改动均为空（`git status --porcelain -- src tests configs` 无输出），失败集合逐条相同：
 
@@ -370,7 +370,7 @@ if __name__ == "__main__":
 - `test_incomplete_window_policy_is_checked`
 - `test_health_rules_path_is_independent_of_cwd`
 
-**完整失败摘要（PR head 上取得）**
+**完整失败摘要（在 `8561014c` 上取得，即 B 轮测量时点的 PR head）**
 
 ```
 tests\unit\test_config.py:742: in test_zero_window_points_is_rejected
@@ -408,7 +408,18 @@ if not resolved.is_file():
 
 `_repository_root` 自 `config_path.parent` 向上找 `pyproject.toml`，找不到才回退到文件自身目录。测试 `consumer_document()`（`tests/unit/test_config.py:61`）把 `health_rules.yaml` 写在 `tmp_path` 里、并把 `health_rules_file` 设为相对路径 `health_rules.yaml`，**期望相对配置文件目录解析**。
 
-本机实测的解析基准。**下表所有「工作树根」都指同一个目录**：当时的工作树 `<worktree>`（即 `.tmp-m53`）。它包含 `pyproject.toml`，因此它既是工作树的根，也是 `_repository_root` 向上找到的返回值。初稿把同一目录分别写成「仓库根」与 `<仓库>\.tmp-m53`，读起来像两个不同的位置，这里统一成「工作树根」：
+本机实测的解析基准。**下表所有「工作树根」都指同一个目录**：当时的工作树 `<worktree>`（即 `.tmp-m53`）。它包含 `pyproject.toml`，因此它既是工作树的根，也是 `_repository_root` 向上找到的返回值。初稿把同一目录分别写成「仓库根」与 `<仓库>\.tmp-m53`，读起来像两个不同的位置，这里统一成「工作树根」。
+
+**目录布局与解析路径**（`<wt>` = 工作树根；这是按实际目录结构记录的布局，不是推测）：
+
+```
+<wt>/pyproject.toml                                  <- 祖先标记文件（本来就存在）
+<wt>/health_rules.yaml                               <- 实现实际查找的位置（默认不存在）
+<wt>/pytest-of-hejiahui/test_xxx0/scenario.yaml      <- 临时配置（health_rules_file: health_rules.yaml）
+<wt>/pytest-of-hejiahui/test_xxx0/health_rules.yaml  <- 测试自己写入的规则文件
+```
+
+解析链：`config_path = <wt>/pytest-of-hejiahui/test_xxx0/scenario.yaml` → `_repository_root(config_path)` 自 `test_xxx0/` 向上找 `pyproject.toml`，在 `<wt>/` 命中 → 返回 `<wt>` → 拼接相对路径 `health_rules.yaml` → `<wt>/health_rules.yaml` → `is_file()` 为 False → `ConfigError`。
 
 | 项 | 实测值 |
 | --- | --- |
@@ -416,11 +427,11 @@ if not resolved.is_file():
 | 该目录当时可写？ | **否**，`PermissionError: [WinError 5] 拒绝访问` |
 | `tempfile.gettempdir()` 实际返回 | **工作树根**（`TEMP` 不可写后回退到 cwd） |
 | pytest `tmp_path` 实际位置 | `<工作树根>\pytest-of-hejiahui\...` |
-| `_repository_root(config_path)` | `<工作树根>`（因为 `<工作树根>\pyproject.toml` 存在） |
+| `_repository_root(config_path)` 实际返回 | `<工作树根>`（因为 `<工作树根>\pyproject.toml` 存在） |
 | 测试写入规则文件的位置 | `<tmp_path>\health_rules.yaml` |
 | 实现实际查找的位置 | `<工作树根>\health_rules.yaml`（不存在） |
 
-**对照实验**：在**工作树根**临时放一个 `health_rules.yaml`（内容 `rules: []`），重跑同一命令 → **`93 passed`，退出码 0**；删除该文件后恢复 3 failed。即在这台机器上，失败的充分必要条件是「规则文件被解析到工作树根而那里没有该文件」。该工作树根的完整路径同样含中文，所以这个对照同时排除了「中文路径本身导致解析失败」的解释——把文件放到那个含中文的目录下就能通过。初稿把这一点写成「中文只是控制台按 GBK 渲染的乱码」，是对现象的解释而非对照实验直接测到的结论，这里只保留对照实验支持的部分。
+**对照实验**（只陈述做过的操作与结果）：在**工作树根**临时放一个 `health_rules.yaml`（内容 `rules: []`），重跑同一命令 → **`93 passed`，退出码 0**；删除该文件后重跑 → 恢复 3 failed。工作树根的完整路径同样含中文，因此「把文件放到这个含中文的目录下就能通过」这一事实，**不支持**「中文路径本身导致解析失败」的解释；初稿把原因写成「中文只是控制台按 GBK 渲染的乱码」，那是对现象的解释、不是对照实验直接测到的结论，已删除。本报告只据此记录「本次失败与规则文件的解析位置相关」，不把它上升为对任意环境都成立的普遍结论。
 
 **为什么 CI 不失败**：Linux CI 上 pytest 的 basetemp 在 `/tmp/pytest-of-*`（仓库外），祖先没有 `pyproject.toml`，`_repository_root` 回退到 `tmp_path` 自身，规则文件正好在那里，测试通过。本机因 `TEMP` 不可写而把 basetemp 退到仓库内，才触发。
 
