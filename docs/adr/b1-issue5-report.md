@@ -182,6 +182,177 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 >
 > **峰值内存**：本报告**未测**。A 在 #51 已裁定口径（M2）：由独立进程从外部测峰值 RSS，**不扩 `ProductionSummary`**。因此「未测」的理由是「本轮未做外部进程测量」，不是「`ProductionSummary` 没有字段」。具体实现由 `#51` 跟踪。
 
+**C 轮（2026-10-21，逐次留证，回应 A 在 `5599100429` 的四条要求）**
+
+被测身份（本轮重新核对，代码 blob 与 B 轮完全一致，差异只在报告文档）：
+
+| 项 | 值 |
+| --- | --- |
+| `git rev-parse HEAD` | `604bc99b7da4bb6327f88e068342ef51a7fde17f` |
+| 与 B 轮的代码差异 | `git diff --stat 8561014..604bc99` 只有 `docs/adr/b1-issue5-report.md`；`producer.py` / `engine.py` / `configs/benchmark_1m.yaml` 的 git blob 三个全 **SAME** |
+| `producer.py` SHA-256 | `4402bd2e75f1f4d1f42e735e1fe4d4fbb10665ca9771c1c8984a6e7e0e75a53e` |
+| `engine.py` SHA-256 | `c2c66c33063d109369b32c5f99a5ef45e0f98c075631f1c7a1f46670fb037991` |
+| `configs/benchmark_1m.yaml` SHA-256 | `47ceeee975bae5ef0a47dddcb00b4468fb74430fcd6e5cee5a906640e0b4c1ab` |
+| 实际加载的模块 | `g15` 来自本工作树 `src/`（脚本打印 `g15.__file__` = `<worktree>/src/g15/__init__.py`） |
+| OS / Python / NumPy | Windows-11-10.0.26100-SP0 / 3.12.15 / 2.5.4 |
+| CPU / 逻辑核心 | Intel64 Family 6 Model 198 Stepping 2 / **20** |
+
+**完整可复制的测量与独立校验脚本**（本轮实际执行的那一份，未做任何删改；`REPO` 由脚本自身位置推出，`sys.path.insert(0, REPO/"src")` 保证加载的是被测树而非 site-packages）：
+
+```python
+"""#53 B 轮完整测量 + 事后独立校验脚本（可复制执行）。
+
+运行：PYTHONPATH=<worktree>/src python .tmp-measure.py
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import platform
+import sys
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+
+REPO = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO / "src"))
+
+from g15.config import load_config                       # noqa: E402
+from g15.pipeline import producer                        # noqa: E402
+from g15.pipeline.serialization import read_chunk        # noqa: E402
+
+CONFIG = REPO / "configs" / "benchmark_1m.yaml"
+
+
+def sha256_of(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def verify(run_dir: Path) -> dict:
+    """事后独立校验：重算每片 SHA-256、重读 NPZ、检查 seq 连续与 rows 之和。"""
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    shard_sha_ok = 0
+    seq_contiguous = True
+    dtypes_ok = True
+    rows_match = True
+    previous_last_seq = None
+    rows_sum = 0
+
+    for entry in manifest["parts"]:
+        part_path = run_dir / entry["path"]
+        if sha256_of(part_path) == entry["sha256"]:
+            shard_sha_ok += 1
+        chunk = read_chunk(part_path, type("E", (), entry)())
+        if (chunk.seq.dtype != np.int64 or chunk.timestamp_ns.dtype != np.int64
+                or chunk.vibration.dtype != np.float64
+                or chunk.temperature.dtype != np.float64):
+            dtypes_ok = False
+        if len(chunk.seq) != entry["rows"]:
+            rows_match = False
+        if previous_last_seq is not None and int(chunk.seq[0]) != previous_last_seq + 1:
+            seq_contiguous = False
+        if len(chunk.seq) > 1 and not bool(np.all(np.diff(chunk.seq) == 1)):
+            seq_contiguous = False
+        previous_last_seq = int(chunk.seq[-1])
+        rows_sum += len(chunk.seq)
+
+    return {
+        "manifest_sha256": sha256_of(manifest_path),
+        "parts": len(manifest["parts"]),
+        "rows_sum": rows_sum,
+        "status": manifest["status"],
+        "shard_sha_ok": f"{shard_sha_ok}/{len(manifest['parts'])}",
+        "seq_contiguous": seq_contiguous,
+        "dtypes_ok": dtypes_ok,
+        "rows_match": rows_match,
+    }
+
+
+def main() -> None:
+    print(json.dumps({
+        "kind": "environment",
+        "python": sys.version.split()[0],
+        "numpy": np.__version__,
+        "platform": platform.platform(),
+        "cpu": platform.processor(),
+        "cpu_count": __import__("os").cpu_count(),
+        "g15_module": __import__("g15").__file__,
+        "producer_module": producer.__file__,
+        "config_path": str(CONFIG),
+        "config_sha256": sha256_of(CONFIG),
+        "producer_sha256": sha256_of(Path(producer.__file__)),
+        "engine_sha256": sha256_of(Path(__import__("g15.simulation.engine", fromlist=["x"]).__file__)),
+    }, ensure_ascii=False))
+
+    config = load_config(CONFIG)
+    for group in (1, 2):
+        for index in (1, 2, 3):
+            label = f"g{group}r{index}"
+            root = Path(tempfile.mkdtemp(prefix=f"g15-{label}-"))
+            run_root = root / label
+            run_root.mkdir(exist_ok=False)
+
+            started_at = utc_now()
+            t0 = time.perf_counter()
+            summary = producer.produce_run_detailed(config, run_root)
+            elapsed = time.perf_counter() - t0
+            ended_at = utc_now()
+
+            t1 = time.perf_counter()
+            checked = verify(summary.run_dir)
+            verify_elapsed = time.perf_counter() - t1
+
+            record = {
+                "kind": "run",
+                "label": label,
+                "group": group,
+                "index": index,
+                "start_utc": started_at,
+                "end_utc": ended_at,
+                "elapsed_seconds": repr(summary.elapsed_seconds),
+                "parts": summary.part_count,
+                "total_points": summary.total_points,
+                "scalar_values": summary.scalar_value_count,
+                "fault_events": summary.fault_events,
+                "verify_elapsed_seconds": repr(verify_elapsed),
+                "run_dir": str(summary.run_dir),
+                **checked,
+            }
+            print(json.dumps(record, ensure_ascii=False), flush=True)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**六次逐条原始摘要**（`elapsed_seconds` 与 `verify_elapsed_seconds` 均为 `repr(float)` 全精度；`verify` 列是**事后独立校验**的耗时，**不计入**生产计时窗口）：
+
+| 标签 | 开始 (UTC) | 结束 (UTC) | `elapsed_seconds` | 分片 | rows 之和 | status | `manifest.json` SHA-256 | 逐片 SHA | seq 连续 | dtype | rows 匹配 | `verify` 耗时 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `g1r1` | 2026-10-21T14:07:27Z | 2026-10-21T14:07:27Z | `0.23739449999993667` | 10 | 1,000,000 | complete | `be4228c86bbb4c6bf4bee7672e94304f424a7b9202ed27bcf1cd3420b8034b23` | 10/10 | True | True | True | `0.08640260000174749` |
+| `g1r2` | 2026-10-21T14:07:27Z | 2026-10-21T14:07:27Z | `0.2753052000007301` | 10 | 1,000,000 | complete | `54fbcd07ec6fe69750c430d21c893abac8f8cf4665a95283a9904916ae5acd7e` | 10/10 | True | True | True | `0.08519320000050357` |
+| `g1r3` | 2026-10-21T14:07:27Z | 2026-10-21T14:07:28Z | `0.20490909999716678` | 10 | 1,000,000 | complete | `059d426b6e341b214864b76f8fc9c3d11ba5d96f6131ebd2e65b0455f2b6493c` | 10/10 | True | True | True | `0.09271760000046925` |
+| `g2r1` | 2026-10-21T14:07:28Z | 2026-10-21T14:07:28Z | `0.21457110000119428` | 10 | 1,000,000 | complete | `3e66de9e2e74f2965b9bf4f8738d88e2737b69161788a198f09e185a481bf808` | 10/10 | True | True | True | `0.08247069999924861` |
+| `g2r2` | 2026-10-21T14:07:28Z | 2026-10-21T14:07:28Z | `0.22041830000307527` | 10 | 1,000,000 | complete | `735670c39745cad48c44096b8ac423f132c3506538909085965a13749139b7c4` | 10/10 | True | True | True | `0.08146820000183652` |
+| `g2r3` | 2026-10-21T14:07:28Z | 2026-10-21T14:07:29Z | `0.20028409999940777` | 10 | 1,000,000 | complete | `c37f28fee512f6deb95f4caf9fab06dc2ae4c34f19a32b80b4f18f4492c7e3c8` | 10/10 | True | True | True | `0.0823646999997436` |
+
+- 第 1 组：中位数 **0.2374 s**，最大值 **0.2753 s**
+- 第 2 组：中位数 **0.2146 s**，最大值 **0.2204 s**
+- 合并 6 次：中位数 **0.2175 s**，最大值 **0.2753 s**，**全部严格 < 60 s**
+- 每次的 `manifest.json` SHA-256 各不相同（`run_id` 含时间戳与随机后缀），可作为逐次追溯锚点
+- **两组仍是同一进程内的顺序调用，不是独立进程**；「独立空运行目录」指每次 `mkdtemp()/g<组>r<次>` 且 `mkdir(exist_ok=False)`，不等于独立进程隔离，这一点如实写明
+
+> **A 轮 / B 轮 / C 轮的关系**：A 轮（0.1558/0.1530/0.1551 s）**当时未留逐次证据**，不能补成原始记录；B 轮（0.1623…0.2610 s）保留了耗时与产物校验结论，但**未保存逐次 Manifest 摘要**，同样无法事后补造。C 轮是唯一一轮「每次运行都有独立 Manifest 摘要与逐片校验结果」的记录，因此**以 C 轮为准**。三轮数字的差异属机器负载波动，不构成性能回归——三轮的代码 blob、配置、分片数与点数完全相同。
+
 ### 三项 `test_config.py` 失败的独立留证（与 PR #53 无关的既有环境差异）
 
 `pytest -q` 全量运行时有 3 条用例在 `tests/unit/test_config.py` 失败。A 在 PR #53 审查中指出「当前证据不足以认定中文路径是根因」，**这个批评成立，先前的归因是错的**。下面给出实测证据与更正后的归因。
@@ -237,19 +408,19 @@ if not resolved.is_file():
 
 `_repository_root` 自 `config_path.parent` 向上找 `pyproject.toml`，找不到才回退到文件自身目录。测试 `consumer_document()`（`tests/unit/test_config.py:61`）把 `health_rules.yaml` 写在 `tmp_path` 里、并把 `health_rules_file` 设为相对路径 `health_rules.yaml`，**期望相对配置文件目录解析**。
 
-本机实测的解析基准：
+本机实测的解析基准。**下表所有「工作树根」都指同一个目录**：当时的工作树 `<worktree>`（即 `.tmp-m53`）。它包含 `pyproject.toml`，因此它既是工作树的根，也是 `_repository_root` 向上找到的返回值。初稿把同一目录分别写成「仓库根」与 `<仓库>\.tmp-m53`，读起来像两个不同的位置，这里统一成「工作树根」：
 
 | 项 | 实测值 |
 | --- | --- |
 | `TEMP` / `TMP` 环境变量 | `C:\Users\hejiahui\AppData\Local\Temp` |
-| 该目录可写？ | **否**，`PermissionError: [WinError 5] 拒绝访问` |
-| `tempfile.gettempdir()` 实际返回 | **仓库根目录**（`TEMP` 不可写后回退到 cwd） |
-| pytest `tmp_path` 实际位置 | `<仓库>\.tmp-m53\pytest-of-hejiahui\...`，**祖先存在 `pyproject.toml`** |
-| `_repository_root(config_path)` | `<仓库>\.tmp-m53` |
-| 期望解析位置 | `<tmp_path>/health_rules.yaml`（测试写入处） |
-| 实际解析位置 | `<仓库>\.tmp-m53\health_rules.yaml`（不存在） |
+| 该目录当时可写？ | **否**，`PermissionError: [WinError 5] 拒绝访问` |
+| `tempfile.gettempdir()` 实际返回 | **工作树根**（`TEMP` 不可写后回退到 cwd） |
+| pytest `tmp_path` 实际位置 | `<工作树根>\pytest-of-hejiahui\...` |
+| `_repository_root(config_path)` | `<工作树根>`（因为 `<工作树根>\pyproject.toml` 存在） |
+| 测试写入规则文件的位置 | `<tmp_path>\health_rules.yaml` |
+| 实现实际查找的位置 | `<工作树根>\health_rules.yaml`（不存在） |
 
-**决定性对照实验**：在仓库根临时放一个 `health_rules.yaml`（`rules: []`），重跑同一命令 → **`93 passed`，退出码 0**；删除该文件后恢复 3 failed。即失败的必要充分条件是「规则文件被解析到仓库根而那里没有该文件」，与路径是否含中文无关——路径里的中文只是控制台按 GBK 渲染时显示的乱码，实际 `Path` 对象正确。
+**对照实验**：在**工作树根**临时放一个 `health_rules.yaml`（内容 `rules: []`），重跑同一命令 → **`93 passed`，退出码 0**；删除该文件后恢复 3 failed。即在这台机器上，失败的充分必要条件是「规则文件被解析到工作树根而那里没有该文件」。该工作树根的完整路径同样含中文，所以这个对照同时排除了「中文路径本身导致解析失败」的解释——把文件放到那个含中文的目录下就能通过。初稿把这一点写成「中文只是控制台按 GBK 渲染的乱码」，是对现象的解释而非对照实验直接测到的结论，这里只保留对照实验支持的部分。
 
 **为什么 CI 不失败**：Linux CI 上 pytest 的 basetemp 在 `/tmp/pytest-of-*`（仓库外），祖先没有 `pyproject.toml`，`_repository_root` 回退到 `tmp_path` 自身，规则文件正好在那里，测试通过。本机因 `TEMP` 不可写而把 basetemp 退到仓库内，才触发。
 
@@ -372,7 +543,7 @@ assert bool(np.all(chunk.vibration < 0.0))
 
 ### 风险
 
-1. **双 Linux 正式验收仍未做**（最高风险）。`#11` 已合入 main（`614b256`），本报告 §三「完整生产口径补测」已补出 Windows 本机三次连测数字（中位数 0.1551 s），但 `docs/acceptance.md` §2 要求的是 Ubuntu 24.04 与 RHEL 9 **各自**连测 3 次并留证，**Linux 侧数字仍缺**，须由 C6（`#10`）与 C5（`#9`）产出。峰值内存亦未测（`ProductionSummary` 无内存字段，由 `#51` 跟踪）。
+1. **双 Linux 正式验收仍未做**（最高风险）。`#11` 已合入 main（`614b256`），本报告 §三「完整生产口径补测」已补出 Windows 本机三次连测数字（中位数 0.1551 s），但 `docs/acceptance.md` §2 要求的是 Ubuntu 24.04 与 RHEL 9 **各自**连测 3 次并留证，**Linux 侧数字仍缺**，须由 C6（`#10`）与 C5（`#9`）产出。峰值内存亦未测（本轮未做外部进程测量，**不是** `ProductionSummary` 缺字段；口径由 `#51` 跟踪）。
 2. **`SimulationChunk` 归属已定**。`#17` 合并为 `e8e2924`，唯一公共定义在 `src/g15/common/types.py`，`engine.py` 保留同名再导出（本条原为待定，现为已决）。
 3. **`rng` 参数保留但不使用**。为不改 §6 冻结签名而保留，实际随机性由 `(seed, 流名, 样本序号)` 决定；`docs/interface.md` §15 已记录不得消费。
 4. **负值不钳位**。若 A 或 B2 要求钳位，属契约变更，需先评审。
