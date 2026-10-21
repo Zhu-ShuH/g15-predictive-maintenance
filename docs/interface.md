@@ -274,6 +274,7 @@ Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留�
 
 ```python
 # config.py
+MAX_SAMPLE_RATE_HZ: int = 1_000_000_000  # 配置层公开上限，与内核同值，见 5.1
 load_config(path: Path) -> ScenarioConfig
 validate_config(config: ScenarioConfig) -> None
 load_consumer_config(path: Path) -> ConsumerConfig
