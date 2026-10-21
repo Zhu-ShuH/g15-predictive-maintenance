@@ -24,6 +24,7 @@ import yaml
 
 from g15.cli import main
 from g15.config import (
+    MAX_SAMPLE_RATE_HZ,
     SCHEMA_VERSION,
     ConfigError,
     ConsumerConfig,
@@ -541,6 +542,36 @@ def test_non_positive_integers_are_rejected(
     expect_invalid(tmp_path, document, f"scenario.{field}", "must be positive")
 
 
+def test_sample_rate_at_the_contract_ceiling_is_accepted(tmp_path: Path) -> None:
+    """1 GHz is the frozen ceiling of ``docs/interface.md`` section 5.1."""
+    document = base_document()
+    document["scenario"]["sample_rate_hz"] = MAX_SAMPLE_RATE_HZ
+    path = write_document(tmp_path, document)
+
+    config = load_config(path)
+
+    assert config.scenario.sample_rate_hz == MAX_SAMPLE_RATE_HZ
+    assert validate_config(config) is None
+
+
+@pytest.mark.parametrize("value", [1_000_000_001, 9_223_372_034, 10**10])
+def test_sample_rate_above_the_ceiling_is_rejected(tmp_path: Path, value: int) -> None:
+    """A sub-nanosecond period overflows ``int64`` nanoseconds in the kernel.
+
+    The contract forbids a document that passes validation yet is rejected by
+    ``simulation/engine.py``, so the ceiling is enforced at load time too.
+    """
+    document = base_document()
+    document["scenario"]["sample_rate_hz"] = value
+
+    expect_invalid(
+        tmp_path,
+        document,
+        "scenario.sample_rate_hz",
+        f"must be at most {MAX_SAMPLE_RATE_HZ}",
+    )
+
+
 def test_negative_seed_is_rejected(tmp_path: Path) -> None:
     """``default_rng`` requires a non-negative seed."""
     document = base_document()
@@ -841,6 +872,22 @@ def test_cli_validate_returns_2_and_names_the_field(
     captured = capsys.readouterr()
     assert code == 2
     assert "scenario.sample_rate_hz" in captured.err
+
+
+def test_cli_validate_returns_2_for_a_rate_above_the_ceiling(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """The sampling-rate ceiling is a config error like any other (Issue #52)."""
+    document = base_document()
+    document["scenario"]["sample_rate_hz"] = 2_000_000_000
+    path = write_document(tmp_path, document)
+
+    code = main(["validate", "--config", str(path)])
+
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "scenario.sample_rate_hz" in captured.err
+    assert f"must be at most {MAX_SAMPLE_RATE_HZ}" in captured.err
 
 
 def test_cli_validate_returns_2_for_a_missing_file(

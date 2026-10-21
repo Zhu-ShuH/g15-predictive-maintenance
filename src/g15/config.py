@@ -13,8 +13,8 @@ Validation is split into two phases:
   wrong containers, missing keys, unknown keys and unparseable timestamps;
 * :func:`validate_config` is the single source of truth for types and values:
   ``type(value) is int`` (so ``True`` never passes as ``1``), ``math.isfinite``,
-  positivity, the probability range, the chunk/window divisibility rule and the
-  half-open event intervals.
+  positivity, the probability range, the sampling-rate ceiling of section 5.1,
+  the chunk/window divisibility rule and the half-open event intervals.
 
 :func:`load_config` always runs both phases, so callers only ever see objects
 that passed every check. Loading performs no simulation, writes no files and
@@ -35,6 +35,7 @@ __all__ = [
     "FAULT_MODES",
     "FAULT_TYPES",
     "INCOMPLETE_WINDOW_POLICIES",
+    "MAX_SAMPLE_RATE_HZ",
     "SCHEMA_VERSION",
     "ConfigError",
     "ConsumerConfig",
@@ -66,6 +67,16 @@ ALLOWED_UNITS = {
     "vibration": frozenset({"g"}),
     "temperature": frozenset({"degC"}),
 }
+
+#: Highest sampling rate accepted by the contract (``docs/interface.md`` 5.1).
+#:
+#: ``timestamp_ns`` is an ``int64`` count of nanoseconds, so at most one sample
+#: per nanosecond can be represented: a sub-nanosecond period would overflow
+#: the integer clock inside ``simulation/engine.py``. ``engine.py`` keeps its
+#: own copy of the same bound; the two layers must stay in sync because the
+#: contract forbids a document that passes validation yet is rejected by the
+#: kernel.
+MAX_SAMPLE_RATE_HZ: int = 1_000_000_000
 
 _SCENARIO_FIELDS = (
     "id",
@@ -148,7 +159,8 @@ class ScenarioBlock:  # pylint: disable=too-many-instance-attributes
         seed: Seed handed to ``numpy.random.default_rng``; must be non-negative.
         start_time_utc: Run start instant, always timezone-aware and UTC.
         device_id: Device identifier carried into the manifest.
-        sample_rate_hz: Sampling frequency in hertz; must be positive.
+        sample_rate_hz: Sampling frequency in hertz; must be positive and at
+            most :data:`MAX_SAMPLE_RATE_HZ` (``docs/interface.md`` section 5.1).
         total_points: Declared run length in samples; must be positive.
         chunk_points: Shard size in samples; must be positive and a multiple of
             the consumer ``window_points``.
@@ -649,6 +661,12 @@ def _validate_scenario(scenario: ScenarioBlock) -> None:
     _check_utc_datetime(scenario.start_time_utc, "scenario.start_time_utc")
     _as_str(scenario.device_id, "scenario.device_id")
     _check_positive(scenario.sample_rate_hz, "scenario.sample_rate_hz")
+    if scenario.sample_rate_hz > MAX_SAMPLE_RATE_HZ:
+        raise ConfigError(
+            "scenario.sample_rate_hz",
+            f"must be at most {MAX_SAMPLE_RATE_HZ}, got {scenario.sample_rate_hz}: "
+            "a sub-nanosecond period cannot be represented by int64 nanoseconds",
+        )
     _check_positive(scenario.total_points, "scenario.total_points")
     _check_positive(scenario.chunk_points, "scenario.chunk_points")
 
