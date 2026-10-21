@@ -20,6 +20,14 @@ rebuild it after ``kill -9``: nothing here depends on process memory or on the
 wall clock. The alarm dedupe key is ``(device_id, rule_id, start_seq)`` and
 :meth:`Alarm.dedupe_key` builds it; ``device_id`` is attached by the consumer,
 which is the only layer that knows which run is being consumed.
+
+The state also records the rule identity that produced it. Without that, a state
+persisted under one ``scoring_version`` would silently carry its
+``consecutive_breaches`` into a run scored by different thresholds, and a rule
+change would fire an alarm on the first breaching window -- exactly the
+"re-tune the yaml, no code change" workflow the version number exists to make
+safe. A mismatch is therefore rejected unless the carried state has no history
+to inherit (see :func:`_require_state_identity`).
 """
 
 from __future__ import annotations
@@ -98,6 +106,12 @@ class AlarmState:
             out-of-order windows that would corrupt the counters.
         recovered_at_seq: Position of the window that cleared the last alarm, or
             ``None`` if no alarm has been cleared yet.
+        scoring_version: ``scoring_version`` of the rules that produced this
+            state. ``None`` means "not recorded yet" (a fresh streak, or a row
+            written before the field existed); a value that disagrees with the
+            rules is rejected once the state carries history.
+        rule_id: ``rule_id`` of the rules that produced this state, validated
+            alongside ``scoring_version``.
     """
 
     active_level: str | None = None
@@ -106,6 +120,8 @@ class AlarmState:
     alarm_windows: int = 0
     last_window_start_seq: int | None = None
     recovered_at_seq: int | None = None
+    scoring_version: str | None = None
+    rule_id: str | None = None
 
 
 def classify_level(health_score: float, rules: HealthRules) -> str | None:
@@ -147,12 +163,14 @@ def evaluate_alarm(
         step, and each step is emitted once.
 
     Raises:
-        ValueError: if the window position is missing or not increasing, or if
-            the health result was produced by a different rule set.
+        ValueError: if the window position is missing or not increasing, if the
+            health result was produced by a different rule set, or if ``state``
+            was produced by a different rule set while still carrying history.
     """
     start_seq = _require_window(health)
     _require_monotonic(start_seq, state)
     _require_rule_identity(health, rules)
+    _require_state_identity(state, rules)
 
     target = classify_level(health.health_score, rules)
     if target is None:
@@ -171,6 +189,8 @@ def evaluate_alarm(
         alarm_windows=state.alarm_windows + (1 if alarms else 0),
         last_window_start_seq=start_seq,
         recovered_at_seq=state.recovered_at_seq,
+        scoring_version=rules.scoring_version,
+        rule_id=rules.rule_id,
     )
     return alarms, new_state
 
@@ -198,6 +218,8 @@ def _healthy_window(
             alarm_windows=0,
             last_window_start_seq=start_seq,
             recovered_at_seq=start_seq,
+            scoring_version=rules.scoring_version,
+            rule_id=rules.rule_id,
         )
     return AlarmState(
         active_level=state.active_level,
@@ -206,6 +228,8 @@ def _healthy_window(
         alarm_windows=state.alarm_windows,
         last_window_start_seq=start_seq,
         recovered_at_seq=state.recovered_at_seq,
+        scoring_version=rules.scoring_version,
+        rule_id=rules.rule_id,
     )
 
 
@@ -316,4 +340,57 @@ def _require_rule_identity(health: HealthResult, rules: HealthRules) -> None:
         raise ValueError(
             f"health rule_id {health.rule_id!r} does not match rules "
             f"{rules.rule_id!r}"
+        )
+
+
+def _carries_history(state: AlarmState) -> bool:
+    """Return whether the state holds counters that must not cross rule sets.
+
+    Args:
+        state: State carried in.
+
+    Returns:
+        ``True`` when the state is mid-streak or latched. A state with no active
+        level, no accumulated breach and no alarm yet has nothing to inherit, so
+        it can adopt the current rule identity instead of forcing a reset.
+    """
+    return (
+        state.active_level is not None
+        or state.consecutive_breaches != 0
+        or state.alarm_windows != 0
+    )
+
+
+def _require_state_identity(state: AlarmState, rules: HealthRules) -> None:
+    """Check the carried state was produced by the same rule set.
+
+    Args:
+        state: State restored from the previous window or from SQLite.
+        rules: Rule set scoring the current window.
+
+    Raises:
+        ValueError: if the state records a different ``scoring_version`` or
+            ``rule_id`` while it still carries a streak or a latched alarm. Such
+            a state would let breaches counted under old thresholds satisfy the
+            debounce of new ones, which raises an alarm on the first breaching
+            window after a retune and cannot be explained from the alarm record
+            alone. States with no history to inherit are accepted, because they
+            cannot change the outcome.
+    """
+    for field, expected in (
+        ("scoring_version", rules.scoring_version),
+        ("rule_id", rules.rule_id),
+    ):
+        recorded = getattr(state, field)
+        if recorded is None or recorded == expected:
+            continue
+        if not _carries_history(state):
+            return
+        raise ValueError(
+            f"AlarmState was produced by {field}={recorded!r} but rules are "
+            f"{expected!r}; the state still carries "
+            f"consecutive_breaches={state.consecutive_breaches}, "
+            f"active_level={state.active_level!r}, "
+            f"alarm_windows={state.alarm_windows}. Start a new streak with "
+            "AlarmState() when the rule set changes"
         )

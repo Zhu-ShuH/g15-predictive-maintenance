@@ -31,12 +31,17 @@ from g15.analysis.health import (
 WINDOW = 256
 
 
-def make_rules(**thresholds: int | float) -> HealthRules:
+def make_rules(
+    *,
+    scoring_version: str = "test-v1",
+    rule_id: str = "test_rule",
+    **thresholds: int | float,
+) -> HealthRules:
     """Return a single-feature rule set whose score maps linearly onto RMS."""
     document = {
         "schema_version": "1.0",
-        "scoring_version": "test-v1",
-        "rule_id": "test_rule",
+        "scoring_version": scoring_version,
+        "rule_id": rule_id,
         "thresholds": {
             "yellow": 70.0,
             "red": 40.0,
@@ -337,3 +342,106 @@ def test_alarm_is_immutable() -> None:
     alarms, _ = feed(rules, AlarmState(), [(0, 20.0)])
     with pytest.raises(AttributeError):
         alarms[0].level = "yellow"  # type: ignore[misc]
+
+
+def make_retuned_rules() -> HealthRules:
+    """Return the same features with a new identity and a 3-window debounce.
+
+    This is the shape of a rule retune: ``health_rules.yaml`` is edited, the
+    version is bumped, and no Python changes. A state persisted under the old
+    version must not be allowed to satisfy the new debounce.
+    """
+    return make_rules(
+        scoring_version="test-v2",
+        rule_id="test_rule_v2",
+        yellow=80.0,
+        red=60.0,
+        consecutive_windows=3,
+    )
+
+
+def test_state_records_the_rule_identity_that_produced_it() -> None:
+    """A state leaves the machine tagged, so a later run can detect a retune."""
+    rules = make_rules()
+    _, state = feed(rules, AlarmState(), [(0, 60.0)])
+
+    assert state.scoring_version == "test-v1"
+    assert state.rule_id == "test_rule"
+
+
+def test_state_from_another_version_is_rejected_when_it_carries_a_streak() -> None:
+    """Two old breaches must not count towards a new rule's debounce.
+
+    Without the identity check the three-window debounce of ``test-v2`` is
+    satisfied by a single breaching window, because the two breaches counted
+    under ``test-v1`` thresholds are silently inherited.
+    """
+    rules = make_retuned_rules()
+    carried = AlarmState(
+        consecutive_breaches=2,
+        last_window_start_seq=0,
+        scoring_version="test-v1",
+        rule_id="test_rule",
+    )
+
+    with pytest.raises(ValueError, match="scoring_version"):
+        evaluate_alarm(health_at(rules, WINDOW, 50.0), carried, rules)
+
+
+def test_latched_state_from_another_version_is_rejected() -> None:
+    """A latched alarm must be reset deliberately, not carried over."""
+    rules = make_retuned_rules()
+    carried = AlarmState(
+        active_level="yellow",
+        last_window_start_seq=0,
+        scoring_version="test-v1",
+        rule_id="test_rule",
+    )
+
+    with pytest.raises(ValueError, match="active_level='yellow'"):
+        evaluate_alarm(health_at(rules, WINDOW, 50.0), carried, rules)
+
+
+def test_state_with_a_different_rule_id_is_rejected() -> None:
+    """The rule id is checked as well, not just the version string."""
+    rules = make_retuned_rules()
+    carried = AlarmState(
+        consecutive_breaches=1,
+        last_window_start_seq=0,
+        scoring_version="test-v2",
+        rule_id="test_rule",
+    )
+
+    with pytest.raises(ValueError, match="rule_id"):
+        evaluate_alarm(health_at(rules, WINDOW, 50.0), carried, rules)
+
+
+def test_state_without_history_adopts_the_current_rule_identity() -> None:
+    """A stale identity on a state with nothing to inherit is harmless.
+
+    A healthy window written before the retune leaves no streak and no alarm, so
+    rejecting it would block consumption for no reason; the state is re-tagged
+    with the current identity instead.
+    """
+    rules = make_retuned_rules()
+    carried = AlarmState(
+        last_window_start_seq=0,
+        scoring_version="test-v1",
+        rule_id="test_rule",
+    )
+
+    alarms, state = evaluate_alarm(health_at(rules, WINDOW, 50.0), carried, rules)
+
+    assert alarms == []
+    assert state.consecutive_breaches == 1
+    assert state.scoring_version == "test-v2"
+    assert state.rule_id == "test_rule_v2"
+
+
+def test_state_without_a_recorded_identity_stays_backward_compatible() -> None:
+    """``AlarmState()`` still starts a streak, as it did before the field existed."""
+    rules = make_rules()
+    alarms, state = feed(rules, AlarmState(), [(0, 60.0)])
+
+    assert len(alarms) == 1
+    assert state.scoring_version == "test-v1"
