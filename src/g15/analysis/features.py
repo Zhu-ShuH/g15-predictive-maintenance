@@ -43,8 +43,14 @@ __all__ = [
 #: Version of the feature definitions in this module.
 #:
 #: Bump it when a definition changes in a way that moves numbers for the same
-#: input (for example switching ``std`` to ``ddof=1``). Reports copy it so that a
-#: stored feature vector can be traced back to the code that produced it.
+#: input (for example switching ``std`` to ``ddof=1``).
+#:
+#: Scope, stated because it is easy to over-read: this constant is **not** a
+#: field of :class:`FeatureRecord` and currently has no persistence path. It is
+#: module metadata for logs and run manifests only. Storing a per-row version
+#: would add a column to ``feature_windows``, which is a schema decision still
+#: open in issue #57 -- do not assume a stored row can be traced by itself until
+#: that issue closes.
 FEATURES_VERSION: Final[str] = "1.0"
 
 #: Feature names in reporting order.

@@ -127,7 +127,8 @@ class HealthRules:
             score can be traced back to the rules that produced it.
         rule_id: Identifier of the rule set; part of the alarm dedupe key
             ``(device_id, rule_id, start_seq)`` in ``docs/acceptance.md``.
-        yellow_threshold: Health score at or below which the window is yellow.
+        yellow_threshold: Health score at or below which the window is yellow;
+            must be below 100, otherwise a perfect score would be an alarm.
         red_threshold: Health score at or below which the window is red; must be
             lower than ``yellow_threshold`` so a lower score is never a milder
             alarm.
@@ -353,6 +354,12 @@ def parse_health_rules(document: object) -> HealthRules:
     )
     yellow = _score(thresholds, "yellow", "thresholds")
     red = _score(thresholds, "red", "thresholds")
+    if yellow >= 100.0:
+        raise HealthRulesError(
+            "thresholds.yellow",
+            f"must be below 100, got {yellow}: a perfect score of 100 would "
+            "then be classified yellow and every window would raise an alarm",
+        )
     if red >= yellow:
         raise HealthRulesError(
             "thresholds.red",

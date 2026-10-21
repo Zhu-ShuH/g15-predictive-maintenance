@@ -302,6 +302,7 @@ def test_shipped_rule_file_keeps_the_acceptance_thresholds_reachable() -> None:
         (lambda doc: doc["features"][0].update(weight=True), "features[0].weight"),
         (lambda doc: doc["thresholds"].update(red=80.0), "thresholds.red"),
         (lambda doc: doc["thresholds"].update(yellow=0.0), "thresholds.yellow"),
+        (lambda doc: doc["thresholds"].update(yellow=100.0), "thresholds.yellow"),
         (
             lambda doc: doc["thresholds"].update(consecutive_windows=0),
             "thresholds.consecutive_windows",
@@ -391,3 +392,20 @@ def test_load_accepts_a_string_path(tmp_path: Path) -> None:
     )
     rules = load_health_rules(str(path))
     assert rules.rule_id == "test_rule"
+
+
+def test_yellow_threshold_of_one_hundred_would_alarm_every_window() -> None:
+    """`score <= yellow` is the alarm test, so yellow=100 alarms even at 100.
+
+    Accepting it silently turns a "watch everything" typo into a rule set where
+    no window is ever healthy, which then looks like a broken model rather than a
+    broken config.
+    """
+    document = make_document()
+    document["thresholds"].update(yellow=100.0)
+
+    with pytest.raises(HealthRulesError) as error:
+        parse_health_rules(document)
+
+    assert error.value.path == "thresholds.yellow"
+    assert "every window" in error.value.reason
