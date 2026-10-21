@@ -107,7 +107,7 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 >
 > 另：百万点口径按 `docs/interface.md` 暂按 `seq` 采样次数计点，同时记录 `sample_count=1,000,000` 与 `scalar_value_count=2,000,000`（双信号），**不把两个数合并宣称两个已验证采样点**。
 
-#### 2. 完整生产口径补测（2026-10-20，`#11` 合入后）
+#### 2. 完整生产口径补测（2026-10-20 / 10-21，`#11` 合入后）
 
 `#11`（C4 `produce_run`）已合入 main（`614b256`），上面缺的那一段现在可以补测。用**真实生产入口**、**真实配置**、**官方计时窗口**连跑 3 次：
 
@@ -117,19 +117,143 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 - 每次跑在**独立空目录**（`run1`/`run2`/`run3`），互不复用
 - 环境：Windows 11（10.0.26100）/ Python 3.12.15 / NumPy 2.5.4
 
+**A 轮（2026-10-20，head `8561014` 首次测）**
+
 | 次数 | `elapsed_seconds`（官方窗口） | 分片 | 点数 | 标量值 |
 | --- | --- | --- | --- | --- |
 | 第 1 次 | **0.1558 s** | 10 | 1,000,000 | 2,000,000 |
 | 第 2 次 | **0.1530 s** | 10 | 1,000,000 | 2,000,000 |
 | 第 3 次 | **0.1551 s** | 10 | 1,000,000 | 2,000,000 |
 
-- **中位数 0.1551 s**，最大值 **0.1558 s**，三次全部严格 < 60 s
+- 中位数 **0.1551 s**，最大值 **0.1558 s**
 - Manifest 实测：`status=complete`、`parts=10`、`rows` 之和 `1,000,000`，分片形状 `[102400 × 9, 78400]`，与 `docs/interface.md` §5.1 的短尾片约定一致
 - 产物结构：`raw/part-000000.npz` ~ `part-000009.npz` + `manifest.json` + `logs/app.jsonl`
 
+> 这一轮的完整源码 SHA、模块来源、配置哈希与逐次原始输出**当时未留证**，只有汇总数字。A 在 PR #53 的审查（`2026-10-20T17:09:13Z`）要求补全，因此补了下面的「B 轮」。
+
+**B 轮（2026-10-21，带完整可追溯记录重测）**
+
+被测版本与调用方式（全部可复核）：
+
+| 项 | 值 |
+| --- | --- |
+| `git rev-parse HEAD` | `8561014c2fecd14ce065eb52de77f083f9c13cc2`（= PR #53 head） |
+| 分支 | `docs/5-full-production-benchmark` |
+| `origin/main` | `7cfe71dec399054bd49d4edebb1c1881846b6b34` |
+| `src/` `tests/` `configs/` 工作树改动 | **无**（`git status --porcelain -- src tests configs` 空） |
+| `producer.py` SHA-256 | `4402bd2e75f1f4d1f42e735e1fe4d4fbb10665ca9771c1c8984a6e7e0e75a53e` |
+| `engine.py` SHA-256 | `c2c66c33063d109369b32c5f99a5ef45e0f98c075631f1c7a1f46670fb037991` |
+| `configs/benchmark_1m.yaml` SHA-256 | `47ceeee975bae5ef0a47dddcb00b4468fb74430fcd6e5cee5a906640e0b4c1ab`（685 B） |
+| 实际加载的模块 | `g15` 包来自本工作树 `src/`（`sys.path.insert(0, "<repo>/src")`），非 site-packages |
+| CPU / 逻辑核心 | Intel64 Family 6 Model 198 Stepping 2 / **20** |
+| OS / Python / NumPy | Windows 11 10.0.26100 / 3.12.15 / 2.5.4 |
+
+调用方式（完整可复制，见 PR #53 回复中的脚本）：`load_config("configs/benchmark_1m.yaml")` → 每组每次新建独立空目录 `mkdtemp()/g<组>r<次>`（`mkdir(exist_ok=False)`）→ `produce_run_detailed(cfg, dir)` → 读 `ProductionSummary.elapsed_seconds`。**两次运行是同一进程内的顺序调用，不是独立进程**，这一点如实写明。
+
+两组各三次原始输出（`elapsed_seconds` 保留 Python float 全精度）：
+
+| 组 | 次 | 开始 (UTC) | 结束 (UTC) | `elapsed_seconds` | 分片 | rows 之和 | status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 2026-10-21T05:13:08Z | 2026-10-21T05:13:09Z | `0.1623431000000437` | 10 | 1,000,000 | complete |
+| 1 | 2 | 2026-10-21T05:13:09Z | 2026-10-21T05:13:09Z | `0.22019989999989775` | 10 | 1,000,000 | complete |
+| 1 | 3 | 2026-10-21T05:13:09Z | 2026-10-21T05:13:09Z | `0.26104460000010477` | 10 | 1,000,000 | complete |
+| 2 | 1 | 2026-10-21T05:13:09Z | 2026-10-21T05:13:09Z | `0.16782149999994544` | 10 | 1,000,000 | complete |
+| 2 | 2 | 2026-10-21T05:13:09Z | 2026-10-21T05:13:09Z | `0.1784910999999738` | 10 | 1,000,000 | complete |
+| 2 | 3 | 2026-10-21T05:13:09Z | 2026-10-21T05:13:09Z | `0.16414430000008906` | 10 | 1,000,000 | complete |
+
+- 第 1 组：中位数 **0.2202 s**，最大值 **0.2610 s**
+- 第 2 组：中位数 **0.1678 s**，最大值 **0.1785 s**
+- 合并 6 次：中位数 **0.1732 s**，最大值 **0.2610 s**，**全部严格 < 60 s**
+- 测量值精度：`perf_counter()` 在 Windows 上分辨率约 100 ns 量级，表中保留 `repr(float)` 全精度，读数不确定度远小于 1 ms，不影响 <60 s 判定
+
+**产物独立校验（事后重新读取，非生成时计算）**
+
+每次运行后都重新打开每个 NPZ 独立核验，`sha_dtype_ok`、`seq_cont`、`rows_ok` 六次全为 `True`：
+
+- 逐片重新计算 SHA-256 与 `manifest.parts[i].sha256` 比对 → 10/10 一致
+- `read_chunk()` 重新读回，四数组 dtype = `int64 / int64 / float64 / float64`
+- 每片 `len(seq) == entry.rows`；全部 10 片 `seq` 首尾相接且 `np.diff(seq) == 1`
+- `rows` 之和 = `1,000,000` = `manifest.total_points`
+- 每次 `manifest.json` 的 SHA-256 各不相同（如 `efbec0c7…` / `91751e6d…` / `57ca59cd…`），符合 `run_id` 每次不同
+
+> **校验耗时未计入生产计时。** 上述 SHA 重算与 `read_chunk` 复核发生在 `produce_run_detailed` 返回**之后**，不在 `perf_counter()` 窗口内，因此上表数字纯为生产口径，未混入校验成本。
+
 > ⚠️ **这仍然不是双 Linux 验收数字。** 上表是 **Windows 本机**、**单系统**、**C4 生产入口 + B1 内核**的联测结果，证明完整生产口径能在远低于 60 秒内完成，但 `docs/acceptance.md` §2 要求的是 Ubuntu 24.04 与 RHEL 9 **每个系统各自**在独立空运行目录连续测 3 次并留证。**Linux 侧数字仍待 C6（`#10`）与 C5（`#9`）产出**，本表不能替代。
 >
-> **峰值内存**：`ProductionSummary` 当前无内存字段（`grep -n "tracemalloc\|getrusage\|maxrss" src/g15/pipeline/producer.py` 零命中），按 `docs/acceptance.md` §2 的「未测内存则写未测」，此处**写未测**。补采集能力由 `#51` 跟踪。
+> **峰值内存**：本报告**未测**。A 在 #51 已裁定口径（M2）：由独立进程从外部测峰值 RSS，**不扩 `ProductionSummary`**。因此「未测」的理由是「本轮未做外部进程测量」，不是「`ProductionSummary` 没有字段」。具体实现由 `#51` 跟踪。
+
+### 三项 `test_config.py` 失败的独立留证（与 PR #53 无关的既有环境差异）
+
+`pytest -q` 全量运行时有 3 条用例在 `tests/unit/test_config.py` 失败。A 在 PR #53 审查中指出「当前证据不足以认定中文路径是根因」，**这个批评成立，先前的归因是错的**。下面给出实测证据与更正后的归因。
+
+**命令与退出码（同一台机器，同一 Python 3.12.15 / NumPy 2.5.4）**
+
+| 被测树 | `HEAD` | 命令 | 退出码 | 结果 |
+| --- | --- | --- | --- | --- |
+| 固定 main | `7cfe71dec399054bd49d4edebb1c1881846b6b34` | `pytest tests/unit/test_config.py -q` | **1** | 3 failed, 90 passed |
+| PR #53 head | `8561014c2fecd14ce065eb52de77f083f9c13cc2` | `pytest tests/unit/test_config.py -q` | **1** | 3 failed, 90 passed |
+
+两棵树的 `src/`、`tests/`、`configs/` 工作树改动均为空（`git status --porcelain -- src tests configs` 无输出），失败集合逐条相同：
+
+- `test_zero_window_points_is_rejected`
+- `test_incomplete_window_policy_is_checked`
+- `test_health_rules_path_is_independent_of_cwd`
+
+**完整失败摘要（PR head 上取得）**
+
+```
+tests\unit\test_config.py:742: in test_zero_window_points_is_rejected
+    expect_invalid(...)
+tests\unit\test_config.py:85: in expect_invalid
+    assert fragment in message, message
+E   AssertionError: health_rules_file: file not found:
+    C:\Users\hejiahui\PycharmProjects\<仓库目录>\health_rules.yaml
+E   assert 'window_points' in 'health_rules_file: file not found: ...'
+
+tests\unit\test_config.py:757: in test_incomplete_window_policy_is_checked
+E   AssertionError: health_rules_file: file not found: ...\health_rules.yaml
+E   assert 'incomplete_window' in 'health_rules_file: file not found: ...'
+
+tests\unit\test_config.py:789: in test_health_rules_path_is_independent_of_cwd
+    first = load_consumer_config(path).health_rules_path
+src\g15\config.py:1100: in load_consumer_config
+src\g15\config.py:1079: in _build_consumer_config
+src\g15\config.py:1051: in _resolve_health_rules
+E   g15.config.ConfigError: health_rules_file: file not found: ...\health_rules.yaml
+```
+
+三条是同一个原因：前两条本来要断言「`window_points` / `incomplete_window` 非法」，但配置在更早的 `_resolve_health_rules` 就抛了 `ConfigError`，断言片段自然对不上。
+
+**根因：`_resolve_health_rules` 的解析基准是「最近的含 `pyproject.toml` 的祖先」，而本机 pytest 的 `tmp_path` 落在仓库内部**
+
+`src/g15/config.py` 的解析链（`inspect.getsource` 实测）：
+
+```python
+resolved = _repository_root(config_path) / candidate
+resolved = resolved.resolve()
+if not resolved.is_file():
+    raise ConfigError("health_rules_file", f"file not found: {resolved}")
+```
+
+`_repository_root` 自 `config_path.parent` 向上找 `pyproject.toml`，找不到才回退到文件自身目录。测试 `consumer_document()`（`tests/unit/test_config.py:61`）把 `health_rules.yaml` 写在 `tmp_path` 里、并把 `health_rules_file` 设为相对路径 `health_rules.yaml`，**期望相对配置文件目录解析**。
+
+本机实测的解析基准：
+
+| 项 | 实测值 |
+| --- | --- |
+| `TEMP` / `TMP` 环境变量 | `C:\Users\hejiahui\AppData\Local\Temp` |
+| 该目录可写？ | **否**，`PermissionError: [WinError 5] 拒绝访问` |
+| `tempfile.gettempdir()` 实际返回 | **仓库根目录**（`TEMP` 不可写后回退到 cwd） |
+| pytest `tmp_path` 实际位置 | `<仓库>\.tmp-m53\pytest-of-hejiahui\...`，**祖先存在 `pyproject.toml`** |
+| `_repository_root(config_path)` | `<仓库>\.tmp-m53` |
+| 期望解析位置 | `<tmp_path>/health_rules.yaml`（测试写入处） |
+| 实际解析位置 | `<仓库>\.tmp-m53\health_rules.yaml`（不存在） |
+
+**决定性对照实验**：在仓库根临时放一个 `health_rules.yaml`（`rules: []`），重跑同一命令 → **`93 passed`，退出码 0**；删除该文件后恢复 3 failed。即失败的必要充分条件是「规则文件被解析到仓库根而那里没有该文件」，与路径是否含中文无关——路径里的中文只是控制台按 GBK 渲染时显示的乱码，实际 `Path` 对象正确。
+
+**为什么 CI 不失败**：Linux CI 上 pytest 的 basetemp 在 `/tmp/pytest-of-*`（仓库外），祖先没有 `pyproject.toml`，`_repository_root` 回退到 `tmp_path` 自身，规则文件正好在那里，测试通过。本机因 `TEMP` 不可写而把 basetemp 退到仓库内，才触发。
+
+**这条是否需要修**：`_resolve_health_rules` 当前把「相对规则文件」解析到仓库根而非配置文件目录，是**实现与测试期望不一致**，属 `src/g15/config.py`（C3 范围）与 `tests/unit/test_config.py` 的既有分歧，不在 B1 白名单内，本报告只留证、不改代码。建议由 C3 在 `#52` 之后单独确认契约（相对路径到底相对谁），再决定改实现还是改测试。
 
 ### 单元测试覆盖（对应 `members/B1/AGENT.md` 验收标准 4 条）
 
