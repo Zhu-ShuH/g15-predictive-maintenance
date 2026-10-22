@@ -163,11 +163,13 @@ def evaluate_alarm(
         step, and each step is emitted once.
 
     Raises:
-        ValueError: if the window position is missing or not increasing, if the
-            health result was produced by a different rule set, or if ``state``
-            was produced by a different rule set while still carrying history.
+        ValueError: if the window position is missing or not increasing, if
+            ``state`` has a field that cannot be a real state, if the health
+            result was produced by a different rule set, or if ``state`` carries
+            history it cannot attribute to the current rule set.
     """
     start_seq = _require_window(health)
+    _require_state_shape(state)
     _require_monotonic(start_seq, state)
     _require_rule_identity(health, rules)
     _require_state_identity(state, rules)
@@ -359,6 +361,55 @@ def _carries_history(state: AlarmState) -> bool:
         or state.consecutive_breaches != 0
         or state.alarm_windows != 0
     )
+
+
+def _require_state_shape(state: AlarmState) -> None:
+    """Reject a restored state whose fields cannot be a real state.
+
+    Restoration is the one place where field values come from outside the
+    process, so a hand-edited or wrongly migrated ``state_json`` must fail with a
+    named field rather than surface later as a ``KeyError`` in
+    :func:`_is_escalation` or as a silently negative counter.
+
+    Args:
+        state: State carried in.
+
+    Raises:
+        ValueError: if a level is not one of :data:`LEVELS`, a counter is not a
+            non-negative integer, or a position is not a non-negative integer or
+            ``None``, or if a state carrying history has no window position (a
+            replay could then not be detected).
+    """
+    if state.active_level is not None and state.active_level not in LEVELS:
+        raise ValueError(
+            f"AlarmState.active_level must be one of {LEVELS} or None, "
+            f"got {state.active_level!r}"
+        )
+    for field in ("consecutive_breaches", "normal_windows", "alarm_windows"):
+        value = getattr(state, field)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"AlarmState.{field} must be an int, got {value!r}")
+        if value < 0:
+            raise ValueError(f"AlarmState.{field} must be >= 0, got {value}")
+    for field in ("last_window_start_seq", "recovered_at_seq"):
+        value = getattr(state, field)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(
+                f"AlarmState.{field} must be an int or None, got {value!r}"
+            )
+        if value < 0:
+            raise ValueError(f"AlarmState.{field} must be >= 0, got {value}")
+    if _carries_history(state) and state.last_window_start_seq is None:
+        raise ValueError(
+            "AlarmState carries history "
+            f"(consecutive_breaches={state.consecutive_breaches}, "
+            f"active_level={state.active_level!r}, "
+            f"alarm_windows={state.alarm_windows}) but last_window_start_seq is "
+            "None, so a replayed window could not be detected; restore the "
+            "position or start over with AlarmState()"
+        )
 
 
 def _require_state_identity(state: AlarmState, rules: HealthRules) -> None:

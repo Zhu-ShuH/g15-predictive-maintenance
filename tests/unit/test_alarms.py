@@ -540,3 +540,40 @@ def test_fresh_state_is_the_only_documented_way_to_drop_a_streak() -> None:
 
     assert alarms == []
     assert state.consecutive_breaches == 1
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        (AlarmState(active_level="green"), "active_level"),
+        (AlarmState(consecutive_breaches=-1), "consecutive_breaches"),
+        (AlarmState(alarm_windows=True), "alarm_windows"),
+        (AlarmState(last_window_start_seq="4096"), "last_window_start_seq"),
+        (AlarmState(recovered_at_seq=-5), "recovered_at_seq"),
+    ],
+)
+def test_a_restored_state_with_impossible_fields_is_rejected(
+    state: AlarmState, message: str
+) -> None:
+    """Restoration is the one boundary where field values come from outside.
+
+    A bad level string used to reach ``LEVEL_RANK`` as a ``KeyError``, and a
+    negative counter would silently lower the debounce, so both must fail with
+    the field named instead.
+    """
+    rules = make_rules()
+
+    with pytest.raises(ValueError, match=message):
+        evaluate_alarm(health_at(rules, WINDOW, 50.0), state, rules)
+
+
+def test_history_without_a_window_position_is_rejected() -> None:
+    """Without the last position a replayed window cannot be detected."""
+    carried = AlarmState(
+        consecutive_breaches=2,
+        scoring_version="test-v1",
+        rule_id="test_rule",
+    )
+
+    with pytest.raises(ValueError, match="last_window_start_seq is None"):
+        evaluate_alarm(health_at(make_rules(), WINDOW, 50.0), carried, make_rules())
