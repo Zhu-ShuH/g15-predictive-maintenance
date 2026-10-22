@@ -10,6 +10,7 @@ behaviour of scoring and alarms.
 from __future__ import annotations
 
 import dataclasses
+import json
 
 import pytest
 
@@ -445,3 +446,97 @@ def test_state_without_a_recorded_identity_stays_backward_compatible() -> None:
 
     assert len(alarms) == 1
     assert state.scoring_version == "test-v1"
+
+
+def _json_round_trip(state: AlarmState, *, drop: tuple[str, ...] = ()) -> AlarmState:
+    """Serialise a state the way a ``state_json`` column would and read it back.
+
+    ``drop`` removes fields to reproduce a row written before the identity
+    columns existed, which is the case a six-field restore hits.
+    """
+    payload = {
+        key: value
+        for key, value in dataclasses.asdict(state).items()
+        if key not in drop
+    }
+    return AlarmState(**json.loads(json.dumps(payload)))
+
+
+def _streak_under_old_rules(count: int = 2) -> AlarmState:
+    """Return a state carrying ``count`` breaches scored by ``test-v1``."""
+    rules = make_rules(consecutive_windows=3)
+    _, state = feed(rules, AlarmState(), [(0, 50.0), (256, 50.0)][:count])
+    assert state.consecutive_breaches == count
+    return state
+
+
+def test_six_field_json_restore_with_a_streak_is_rejected() -> None:
+    """A legacy row that lost the identity fields is not evidence of a fresh start.
+
+    This is the case a pre-``state_json``-v1 row hits: the six state fields are
+    restored, both identity fields default to ``None``, and treating that as
+    fresh would let the restored counters satisfy the debounce of whatever rules
+    are loaded now.
+    """
+    carried = _json_round_trip(
+        _streak_under_old_rules(), drop=("scoring_version", "rule_id")
+    )
+    rules = make_retuned_rules()
+
+    assert carried.scoring_version is None
+    assert carried.consecutive_breaches == 2
+    with pytest.raises(ValueError, match="does not record scoring_version"):
+        evaluate_alarm(health_at(rules, 512, 50.0), carried, rules)
+
+
+def test_partially_identified_restore_with_a_streak_is_rejected() -> None:
+    """Losing only the version is enough to make the streak unattributable."""
+    carried = _json_round_trip(_streak_under_old_rules(), drop=("scoring_version",))
+    rules = make_rules(consecutive_windows=3)
+
+    assert carried.rule_id == "test_rule"
+    assert carried.scoring_version is None
+    with pytest.raises(ValueError, match="does not record scoring_version"):
+        evaluate_alarm(health_at(rules, 512, 50.0), carried, rules)
+
+
+def test_missing_rule_id_on_a_latched_state_is_rejected() -> None:
+    """The check covers ``rule_id`` as well, not just the version."""
+    carried = AlarmState(
+        active_level="yellow",
+        last_window_start_seq=0,
+        scoring_version="test-v1",
+    )
+
+    with pytest.raises(ValueError, match="does not record rule_id"):
+        evaluate_alarm(health_at(make_rules(), WINDOW, 50.0), carried, make_rules())
+
+
+def test_json_restore_of_a_fully_identified_streak_matches_the_in_memory_result() -> (
+    None
+):
+    """A round trip that keeps both fields must not change the outcome.
+
+    Without this the rejection above could be satisfied by breaking the honest
+    restore path too.
+    """
+    rules = make_retuned_rules()
+    carried = _json_round_trip(_streak_under_old_rules())
+    carried = dataclasses.replace(
+        carried, scoring_version="test-v2", rule_id="test_rule_v2"
+    )
+
+    alarms, state = evaluate_alarm(health_at(rules, 512, 50.0), carried, rules)
+
+    assert [a.level for a in alarms] == ["red"]
+    assert state.consecutive_breaches == 3
+    assert state.scoring_version == "test-v2"
+
+
+def test_fresh_state_is_the_only_documented_way_to_drop_a_streak() -> None:
+    """``AlarmState()`` stays the documented way to drop a streak, nothing else."""
+    rules = make_retuned_rules()
+    alarms, state = evaluate_alarm(health_at(rules, 512, 50.0), AlarmState(), rules)
+
+    assert alarms == []
+    assert state.consecutive_breaches == 1

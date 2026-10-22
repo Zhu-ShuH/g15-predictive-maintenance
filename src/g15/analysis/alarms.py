@@ -364,33 +364,51 @@ def _carries_history(state: AlarmState) -> bool:
 def _require_state_identity(state: AlarmState, rules: HealthRules) -> None:
     """Check the carried state was produced by the same rule set.
 
+    The two failure modes are deliberately kept apart, because "I cannot tell
+    which rules produced this" is a different bug from "this was produced by
+    other rules":
+
+    * a state that carries a streak or a latched alarm **must** name its rule set
+      -- a missing identity on a state row is not evidence of a fresh start, it
+      is evidence of a row written before the identity existed (a six-field
+      ``state_json`` restored by an old consumer). Treating it as fresh would let
+      the restored counters satisfy the debounce of whatever rules happen to be
+      loaded now, which is exactly the silent inheritance the identity check
+      exists to stop;
+    * a state with nothing to inherit (no active level, no breach, no alarm) is
+      accepted whatever it records, because it cannot change the outcome, and
+      re-tagging it avoids blocking consumption after a retune.
+
     Args:
         state: State restored from the previous window or from SQLite.
         rules: Rule set scoring the current window.
 
     Raises:
-        ValueError: if the state records a different ``scoring_version`` or
-            ``rule_id`` while it still carries a streak or a latched alarm. Such
-            a state would let breaches counted under old thresholds satisfy the
-            debounce of new ones, which raises an alarm on the first breaching
-            window after a retune and cannot be explained from the alarm record
-            alone. States with no history to inherit are accepted, because they
-            cannot change the outcome.
+        ValueError: if the state carries history but does not record both
+            identity fields, or if a recorded field disagrees with ``rules``.
     """
+    if not _carries_history(state):
+        return
+    history = (
+        f"consecutive_breaches={state.consecutive_breaches}, "
+        f"active_level={state.active_level!r}, alarm_windows={state.alarm_windows}"
+    )
     for field, expected in (
         ("scoring_version", rules.scoring_version),
         ("rule_id", rules.rule_id),
     ):
         recorded = getattr(state, field)
-        if recorded is None or recorded == expected:
-            continue
-        if not _carries_history(state):
-            return
-        raise ValueError(
-            f"AlarmState was produced by {field}={recorded!r} but rules are "
-            f"{expected!r}; the state still carries "
-            f"consecutive_breaches={state.consecutive_breaches}, "
-            f"active_level={state.active_level!r}, "
-            f"alarm_windows={state.alarm_windows}. Start a new streak with "
-            "AlarmState() when the rule set changes"
-        )
+        if recorded is None:
+            raise ValueError(
+                f"AlarmState carries history ({history}) but does not record "
+                f"{field}, so the rule set that produced it cannot be "
+                f"established. Restore both identity fields from state_json, or "
+                f"start a new streak with AlarmState() if the old streak is to "
+                f"be dropped; the current rules are {expected!r}"
+            )
+        if recorded != expected:
+            raise ValueError(
+                f"AlarmState was produced by {field}={recorded!r} but rules are "
+                f"{expected!r}; the state still carries {history}. Start a new "
+                "streak with AlarmState() when the rule set changes"
+            )
