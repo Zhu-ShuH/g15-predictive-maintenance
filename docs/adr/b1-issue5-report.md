@@ -148,7 +148,7 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 | CPU / 逻辑核心 | Intel64 Family 6 Model 198 Stepping 2 / **20** |
 | OS / Python / NumPy | Windows 11 10.0.26100 / 3.12.15 / 2.5.4 |
 
-调用方式（完整可复制，见 PR #53 回复中的脚本）：`load_config("configs/benchmark_1m.yaml")` → 每组每次新建独立空目录 `mkdtemp()/g<组>r<次>`（`mkdir(exist_ok=False)`）→ `produce_run_detailed(cfg, dir)` → 读 `ProductionSummary.elapsed_seconds`。**两次运行是同一进程内的顺序调用，不是独立进程**，这一点如实写明。
+调用方式（完整脚本见下方「C 轮」一节内嵌的 `#53 C 轮完整测量 + 事后独立校验脚本`，B 轮当时只在 PR #53 回复里贴过片段）：`load_config("configs/benchmark_1m.yaml")` → 每组每次新建独立空目录 `mkdtemp()/g<组>r<次>`（`mkdir(exist_ok=False)`）→ `produce_run_detailed(cfg, dir)` → 读 `ProductionSummary.elapsed_seconds`。**两次运行是同一进程内的顺序调用，不是独立进程**，这一点如实写明。
 
 两组各三次原始输出（`elapsed_seconds` 保留 Python float 全精度）：
 
@@ -200,7 +200,7 @@ CI（GitHub Actions，push + pull_request 两次触发）：`skeleton (3.11)` �
 **完整可复制的测量与独立校验脚本**（本轮实际执行的那一份，未做任何删改；`REPO` 由脚本自身位置推出，`sys.path.insert(0, REPO/"src")` 保证加载的是被测树而非 site-packages）：
 
 ```python
-"""#53 B 轮完整测量 + 事后独立校验脚本（可复制执行）。
+"""#53 C 轮完整测量 + 事后独立校验脚本（可复制执行）。
 
 运行：PYTHONPATH=<worktree>/src python .tmp-measure.py
 """
