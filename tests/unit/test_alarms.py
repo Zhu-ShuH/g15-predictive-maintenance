@@ -577,3 +577,22 @@ def test_history_without_a_window_position_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="last_window_start_seq is None"):
         evaluate_alarm(health_at(make_rules(), WINDOW, 50.0), carried, make_rules())
+
+
+@pytest.mark.parametrize("bad", [True, 4096.0, "4096"])
+def test_window_position_must_be_a_real_integer(bad: object) -> None:
+    """``True`` and ``4096.0`` pass loose numeric checks but are not positions."""
+    rules = make_rules()
+    health = dataclasses.replace(health_at(rules, 0, 50.0), window_start_seq=bad)
+
+    with pytest.raises(ValueError, match="window_start_seq must be an int"):
+        evaluate_alarm(health, AlarmState(), rules)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_classify_level_refuses_a_non_finite_score(bad: object) -> None:
+    """``NaN`` compares false against both thresholds and would read as healthy."""
+    rules = make_rules()
+
+    with pytest.raises(ValueError, match="finite"):
+        classify_level(bad, rules)  # type: ignore[arg-type]

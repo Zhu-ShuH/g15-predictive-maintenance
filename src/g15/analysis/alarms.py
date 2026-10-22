@@ -134,7 +134,16 @@ def classify_level(health_score: float, rules: HealthRules) -> str | None:
     Returns:
         ``red`` at or below ``thresholds.red``, ``yellow`` at or below
         ``thresholds.yellow``, otherwise ``None``.
+
+    Raises:
+        ValueError: if the score is not a finite number. ``NaN`` compares false
+            against both thresholds, so returning ``None`` would report a broken
+            score as healthy.
     """
+    if isinstance(health_score, bool) or not isinstance(health_score, (int, float)):
+        raise ValueError(f"health_score must be a number, got {health_score!r}")
+    if not math.isfinite(float(health_score)):
+        raise ValueError(f"health_score must be finite, got {health_score!r}")
     if health_score <= rules.red_threshold:
         return "red"
     if health_score <= rules.yellow_threshold:
@@ -285,7 +294,9 @@ def _require_window(health: HealthResult) -> int:
         The non-negative window position.
 
     Raises:
-        ValueError: if the position is missing or negative.
+        ValueError: if the position is missing, not an integer, or negative. A
+            boolean is rejected even though it passes ``isinstance(_, int)``,
+            because ``True`` as a window position means a bug upstream.
     """
     start_seq = health.window_start_seq
     if start_seq is None:
@@ -293,9 +304,11 @@ def _require_window(health: HealthResult) -> int:
             "health.window_start_seq is required to raise an alarm; pass "
             "window_start_seq to extract_features"
         )
+    if isinstance(start_seq, bool) or not isinstance(start_seq, int):
+        raise ValueError(f"window_start_seq must be an int, got {start_seq!r}")
     if start_seq < 0:
         raise ValueError(f"window_start_seq must be non-negative, got {start_seq}")
-    return int(start_seq)
+    return start_seq
 
 
 def _require_monotonic(start_seq: int, state: AlarmState) -> None:
