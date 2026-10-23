@@ -1,1 +1,100 @@
-# TODO: 待 B2/C3 根据评审后的规则契约完成；目前不是可运行配置。
+# 健康评分与告警规则（Issue #7，owner B2）
+#
+# 公式见 docs/interface.md §8.3：
+#   risk_i = clip((f_i - b_i) / r_i, 0, 1)
+#   health = clip(100 * (1 - Σ w_i * risk_i), 0, 100)
+# 本文件是这些 b_i / r_i / w_i 的唯一来源；Python 里不写死任何阈值。
+#
+# 这是**启发式风险指标**，不是剩余寿命预测，也不是训练过的诊断模型。
+# 100% 只可能指 docs/acceptance.md §3 那套预设受控注入集上的事件召回率。
+#
+# 容差是怎么定的（重要，别当成拟合结果）：
+#   受控轮廓的噪声是 σ=0.05 g，注入幅度是 5.0 g，两者相差两个数量级。
+#   因此 r_i 取的是"数量级余量"而不是对样本分布做拟合：
+#     · 正常窗口的 ptp 最大约 0.41 g、crest_factor 最大约 1.47，
+#       对应 r_i 取 2.5 g / 1.0，正常偏置只有 1%~5% 风险；
+#     · 故障窗口的对应特征直接顶到 r_i 以上，risk 饱和到 1。
+#   所以规则在 5 g 这一档上不敏感于具体 seed。调整前请先改版本号。
+
+schema_version: '1.0'
+# 评分口径版本：写进每条健康分与每条告警，便于回溯"这个分数是哪套规则算的"。
+scoring_version: 'heuristic-v1'
+# 告警去重键 (device_id, rule_id, start_seq) 的中间项，见 docs/acceptance.md §3。
+rule_id: 'health_heuristic'
+description: >-
+  五个加权特征（mean / rms / std / ptp / crest_factor）的线性风险映射；
+  kurtosis_excess、dominant_freq_hz、zero_crossing_rate 提取并入库但权重为 0，
+  原因见各自条目的注释。
+
+thresholds:
+  # 健康分 <= yellow 判黄；<= red 判红。red 必须小于 yellow，否则低分反而更轻，
+  # 加载器会直接拒收这种倒挂。
+  yellow: 70.0
+  red: 40.0
+  # 连续 N 个窗口越界才报。受控验收用 N=1（docs/acceptance.md §3），
+  # 去抖/升级/恢复另由单元测试覆盖，不能用 N=1 冒充去抖已验证。
+  consecutive_windows: 1
+  # 连续 M 个正常窗口才清除告警（迟滞），防止分数在阈值附近抖动导致反复报/消。
+  recovery_windows: 1
+
+# 权重之和必须为 1.0（容差 1e-6），加载器不会替你归一化。
+features:
+  # 电平：阶跃故障的直接特征。two_sided 同时覆盖正向与负向阶跃。
+  # 正常均值 0.500±0.01；step 峰值 5.50；退化末期约 1.8。
+  - name: mean
+    baseline: 0.5
+    tolerance: 1.0
+    weight: 0.30
+    direction: two_sided
+
+  # 均方根：带直流，阶跃与持续振动都会抬高。正常 0.497~0.507。
+  - name: rms
+    baseline: 0.5025
+    tolerance: 1.0
+    weight: 0.20
+    direction: increase
+
+  # 标准差：burst/spike 抬高，阶跃不改变。正常 0.043~0.056。
+  - name: std
+    baseline: 0.05
+    tolerance: 0.6
+    weight: 0.20
+    direction: increase
+
+  # 峰峰值：burst 最强（约 10 g），spike 约 4.9 g。正常 <=0.41。
+  - name: ptp
+    baseline: 0.282
+    tolerance: 2.5
+    weight: 0.20
+    direction: increase
+
+  # 峰值因子：冲击类故障抬高。正常 1.02~1.47。
+  - name: crest_factor
+    baseline: 1.27
+    tolerance: 1.0
+    weight: 0.10
+    direction: increase
+
+  # 超额峭度：正态基准 0。当前三种注入波形（spike 为 D/4 时间常数的衰减脉冲、
+  # step 为常数偏移、burst 为整窗正弦）都不产生尖峰型分布，实测正常窗口最大 1.9，
+  # 判别力弱于 ptp/crest_factor，故权重 0：仍然提取、入库、可解释，但不参与评分。
+  - name: kurtosis_excess
+    baseline: 0.0
+    tolerance: 3.0
+    weight: 0.0
+    direction: increase
+
+  # 主频：纯噪声下每窗最强 bin 基本是随机的（实测在 0.39~49.6 Hz 间均匀跳动），
+  # 不具备单调风险语义，权重 0。保留它是为了留痕与后续换成窄带故障时的可配置性。
+  - name: dominant_freq_hz
+    baseline: 25.0
+    tolerance: 25.0
+    weight: 0.0
+    direction: two_sided
+
+  # 过零率：受均值移除影响，正常约 0.50，burst 下降但方差大，权重 0。
+  - name: zero_crossing_rate
+    baseline: 0.5
+    tolerance: 0.5
+    weight: 0.0
+    direction: two_sided
