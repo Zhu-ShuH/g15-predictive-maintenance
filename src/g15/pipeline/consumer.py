@@ -20,8 +20,10 @@ of restarting.
 
 **Refusal over guessing.** A shard whose digest changed under the same part id
 is refused. A state that cannot be attributed to the current rules is refused.
-A gap or an overlap in the sample sequence is refused. The consumer stops and
-says why rather than writing something plausible.
+A gap or an overlap in the sample sequence is refused. A shard layout that
+cannot be cut into whole windows is refused *before* anything is written. A
+run whose stored windows were cut on a different grid is refused. The consumer
+stops and says why rather than writing something plausible.
 
 What the consumer never does
 ----------------------------
@@ -89,8 +91,11 @@ class ConsumptionSummary:
         alarms_written: Alarms written by this pass.
         shards_processed: Shards analysed by this pass.
         shards_skipped: Shards already present with the same digest.
-        windows_dropped: Tail samples discarded because they did not fill a
-            whole window.
+        windows_dropped: Samples discarded because they did not fill a whole
+            window. Despite the name this counts *samples*, not windows: the
+            name is kept because it is part of the reviewed interface, and the
+            only legal source of dropped samples is the final shard's tail
+            under ``incomplete_window: drop``.
     """
 
     run_id: str
@@ -138,6 +143,9 @@ class _Analysed:
 class _RunContext:
     """Mutable state carried across the shards of one run.
 
+    A flat counter bag is deliberate: splitting it into sub-objects would put
+    the shard-to-shard bookkeeping behind two hops for no gain.
+
     Attributes:
         state: The alarm state carried from the previous shard.
         windows_written: Windows written so far.
@@ -149,7 +157,11 @@ class _RunContext:
             shard, used to detect a gap between shards.
         committed_end_seq: The end position of the last committed window,
             used to check that a resumed run continues where it stopped.
+        origin_checked: Whether the first analysed shard has been compared
+            with the run's declared origin (``seq = 0``).
     """
+
+    # pylint: disable=too-many-instance-attributes
 
     state: AlarmState
     windows_written: int = 0
@@ -159,6 +171,7 @@ class _RunContext:
     windows_dropped: int = 0
     previous_chunk_last_seq: int | None = None
     committed_end_seq: int | None = None
+    origin_checked: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -253,6 +266,25 @@ def _consume_manifest(
     """Consume every shard of a validated manifest."""
     run_id = manifest.run_id
     device_id = manifest.device_id
+
+    # Refuse an illegal grid before the first write. ``interface.md`` section
+    # 8.1 requires every non-final shard to be a whole number of windows, so a
+    # shard length that does not divide ``window_points`` is a contract
+    # violation, not something to absorb by dropping the tail of *every*
+    # shard. Cutting the remainder off each shard would silently discard a
+    # slice per shard and put the window starts off the global grid, while
+    # still returning success -- exactly the "plausible but wrong" outcome
+    # this consumer exists to avoid.
+    _check_window_grid(manifest.parts, window_points)
+
+    stored_width = repository.get_stored_window_points(run_id)
+    if stored_width is not None and stored_width != window_points:
+        raise ConsumptionError(
+            f"run {run_id!r} already holds windows of {stored_width} samples but "
+            f"window_points={window_points} is requested; the stored analysis was "
+            f"produced on a different grid. Consume into a new database, or reset "
+            f"the run explicitly if the change is intended"
+        )
 
     repository.ensure_run(
         run_id=run_id,
@@ -407,6 +439,23 @@ def _check_shard_continuity(context: _RunContext, chunk: SimulationChunk) -> Non
         raise ConsumptionError("shard is empty; an empty shard is refused")
 
     first_seq = int(chunk.seq[0])
+
+    # A run starts at sample 0 (``interface.md`` section 5.1). Checking this
+    # only when nothing has been committed yet keeps resumed runs working: a
+    # resumed run legitimately starts at the last committed position.
+    if (
+        not context.origin_checked
+        and context.previous_chunk_last_seq is None
+        and context.committed_end_seq is None
+        and first_seq != 0
+    ):
+        raise ConsumptionError(
+            f"the run starts at seq {first_seq} instead of 0; a run begins at "
+            f"sample 0, and a shifted first shard would move every window "
+            f"position of the run"
+        )
+    context.origin_checked = True
+
     previous_last = context.previous_chunk_last_seq
     if previous_last is not None and first_seq != previous_last + 1:
         raise ConsumptionError(
@@ -437,6 +486,62 @@ def _check_shard_continuity(context: _RunContext, chunk: SimulationChunk) -> Non
             )
 
 
+def _check_window_grid(parts: Sequence[ChunkManifestEntry], window_points: int) -> int:
+    """Refuse a shard layout that cannot be cut into whole windows.
+
+    ``interface.md`` section 8.1 requires ``chunk_points % window_points == 0``
+    for every non-final shard and section 4 requires the consumer's entry point
+    to check it. The manifest carries ``rows`` per shard rather than
+    ``chunk_points``, so the nominal shard length is read back from the shards
+    that are not the tail: those must all have the same length.
+
+    This runs before any write, so an illegal layout leaves the database
+    exactly as it was -- not even a ``runs`` row.
+
+    Args:
+        parts: The manifest's shards, in ascending ``part_id`` order.
+        window_points: The configured window width in samples.
+
+    Returns:
+        The shard length every non-final shard shares, or ``0`` for a run with
+        a single shard (which is the tail itself and has no non-final part).
+
+    Raises:
+        ConsumptionError: if ``window_points`` is not positive, the non-final
+            shards disagree in length, or their length is not a multiple of
+            ``window_points``.
+    """
+    if window_points <= 0:
+        raise ConsumptionError(f"window_points must be positive, got {window_points}")
+    if len(parts) <= 1:
+        return 0
+
+    non_final = list(parts[:-1])
+    lengths = {entry.rows for entry in non_final}
+    if len(lengths) != 1:
+        detail = ", ".join(
+            f"part {entry.part_id}: {entry.rows} rows" for entry in non_final
+        )
+        raise ConsumptionError(
+            f"the manifest's non-final shards do not all have the same length "
+            f"({detail}); a varying shard length would put the window grid off "
+            f"the global sample positions. Nothing was written"
+        )
+
+    chunk_points = lengths.pop()
+    if chunk_points % window_points == 0:
+        return chunk_points
+
+    blame = next(entry for entry in non_final if entry.rows == chunk_points)
+    raise ConsumptionError(
+        f"part {blame.part_id} holds {blame.rows} rows, which is not a multiple "
+        f"of window_points={window_points} ({blame.rows % window_points} samples "
+        f"left over); section 8.1 requires every non-final shard to be a whole "
+        f"number of windows, so cutting the remainder off would drop samples at "
+        f"every shard boundary. Nothing was written"
+    )
+
+
 def _build_windows(
     *,
     chunk: SimulationChunk,
@@ -446,11 +551,16 @@ def _build_windows(
 ) -> tuple[tuple[_Window, ...], int]:
     """Cut a shard into complete windows.
 
-    The tail that does not fill a whole window is dropped, following the
-    ``incomplete_window: drop`` policy of ``configs/consumer.yaml``.
+    Only the final shard may leave a remainder: :func:`_check_window_grid` has
+    already refused a layout whose non-final shards are not whole windows, so
+    a remainder here is the run's tail and nothing else.
+
+    The tail is dropped under ``incomplete_window: drop`` and refused under
+    ``incomplete_window: error`` -- the two policies of
+    ``configs/consumer.yaml``.
 
     Returns:
-        The windows and the number of dropped samples.
+        The windows and the number of dropped **samples** (not windows).
     """
     if window_points <= 0:
         raise ConsumptionError(f"window_points must be positive, got {window_points}")
@@ -461,9 +571,10 @@ def _build_windows(
 
     if dropped and incomplete_window == "error":
         raise ConsumptionError(
-            f"shard holds {count} samples, which is not a multiple of "
+            f"the final shard holds {count} samples, which is not a multiple of "
             f"window_points={window_points}; the incomplete_window policy is "
-            f"'error'"
+            f"'error', so the {dropped}-sample tail is refused rather than "
+            f"dropped"
         )
 
     records: list[_Window] = []

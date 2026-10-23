@@ -29,8 +29,11 @@ mapping so that three different kinds of information never get confused:
 
 ``reset_event``
     The audit trail of an explicit streak reset: when, why, and what the state
-    looked like before. This is the storage layer's own area -- B2's dataclass
-    does not know about it.
+    looked like before (verbatim, even when the row is too old to decode). This
+    is the storage layer's own area -- B2's dataclass does not know about it.
+    Earlier resets are kept under ``reset_history``, and a routine window write
+    re-attaches both, so an audit is never lost one window after it was
+    written.
 
 ``features_json`` uses the same idea: a ``features_version``, the eight
 feature values under their own names, the window's sample count and rate, the
@@ -38,6 +41,9 @@ window position, the rule identity, and a human-readable explanation of the
 score.
 """
 
+# One contract lives here on purpose: five tables, two JSON envelopes and the
+# per-shard transaction rules are read together or not at all.
+# pylint: disable=too-many-lines
 from __future__ import annotations
 
 import json
@@ -57,6 +63,7 @@ __all__ = [
     "STATE_SCHEMA_VERSION",
     "StorageError",
     "ChunkConflictError",
+    "RunConflictError",
     "StateCompatibilityError",
     "WindowRecord",
     "ConsumptionRepository",
@@ -97,6 +104,16 @@ _STATE_POSITIONS: frozenset[str] = frozenset(
     {"last_window_start_seq", "recovered_at_seq"}
 )
 
+#: The run-level fields that make up a run's identity. A change in any of them
+#: under an existing ``run_id`` is refused rather than merged.
+_RUN_IDENTITY_FIELDS: tuple[str, ...] = (
+    "scenario_id",
+    "schema_version",
+    "scoring_version",
+    "status",
+    "started_at",
+)
+
 
 class StorageError(Exception):
     """Raised when a row cannot be written or read as the contract requires."""
@@ -109,6 +126,18 @@ class ChunkConflictError(StorageError):
     silently overwritten: a shard whose content changed under the same name is
     not the same input, and replaying it would mix two different runs' data
     into one streak.
+    """
+
+
+class RunConflictError(StorageError):
+    """Raised when a run id reappears with different run-level metadata.
+
+    A ``run_id`` is an identity, not a label: if the scenario, the scoring
+    version or the start instant changed while the shard digests did not, the
+    stored rows belong to a different analysis than the one being requested.
+    Refusing is the same stance the consumer already takes for a shard whose
+    digest changed under the same part id -- the alternative is a database that
+    quietly mixes two rule sets under one run.
     """
 
 
@@ -163,6 +192,7 @@ def encode_state_json(
     state: AlarmState,
     *,
     reset_event: dict[str, Any] | None = None,
+    reset_history: Sequence[dict[str, Any]] | None = None,
 ) -> str:
     """Encode an alarm state into the ``state_json`` envelope.
 
@@ -170,6 +200,9 @@ def encode_state_json(
         state: The state to store.
         reset_event: Audit record of an explicit reset, or ``None`` when the
             state was not reset.
+        reset_history: Earlier reset records, oldest first. Written only when
+            there is at least one, so a run that was never reset carries no
+            empty list.
 
     Returns:
         The JSON text to store.
@@ -199,6 +232,8 @@ def encode_state_json(
         },
         "reset_event": reset_event,
     }
+    if reset_history:
+        payload["reset_history"] = list(reset_history)
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
@@ -388,6 +423,125 @@ def _as_optional_int(value: Any, field: str) -> int | None:
     return int(value)
 
 
+def _refuse_changed_run(
+    run_id: str, stored: dict[str, str], expected: dict[str, str]
+) -> None:
+    """Raise when a stored run row disagrees with the metadata being consumed.
+
+    Args:
+        run_id: The run identifier.
+        stored: The metadata already recorded for that run.
+        expected: The metadata of the manifest being consumed.
+
+    Raises:
+        RunConflictError: listing every field that differs.
+    """
+    differences = [
+        f"{field}: stored {stored[field]!r}, requested {expected[field]!r}"
+        for field in _RUN_IDENTITY_FIELDS
+        if stored.get(field) != expected[field]
+    ]
+    if not differences:
+        return
+    raise RunConflictError(
+        f"run {run_id!r} is already recorded with different metadata "
+        f"({'; '.join(differences)}); refusing to mix two analyses under one "
+        f"run id. Consume into a new database, or reset explicitly if the "
+        f"change is intended"
+    )
+
+
+def _carry_reset_event(existing_text: str | None, new_text: str) -> str:
+    """Re-attach a stored reset audit to a freshly encoded state.
+
+    A normal window write encodes the state without a reset event, because the
+    encoder knows nothing about history. Overwriting the whole envelope would
+    therefore erase the audit of an explicit reset one window later -- the
+    reset would still have happened, but nothing would say so. This helper
+    keeps the audit in place for as long as the row exists.
+
+    Args:
+        existing_text: The ``state_json`` currently stored, if any.
+        new_text: The freshly encoded envelope.
+
+    Returns:
+        ``new_text`` unchanged when there is nothing to carry, otherwise the
+        same envelope with ``reset_event`` and ``reset_history`` restored.
+    """
+    if not existing_text:
+        return new_text
+    try:
+        existing = json.loads(existing_text)
+        fresh = json.loads(new_text)
+    except (TypeError, ValueError):
+        # A row that cannot be parsed is not something a write should repair;
+        # the read path refuses it loudly instead.
+        return new_text
+    if not isinstance(existing, dict) or not isinstance(fresh, dict):
+        return new_text
+
+    carried = False
+    if fresh.get("reset_event") is None and existing.get("reset_event"):
+        fresh["reset_event"] = existing["reset_event"]
+        carried = True
+    if fresh.get("reset_history") is None and existing.get("reset_history"):
+        fresh["reset_history"] = existing["reset_history"]
+        carried = True
+    if not carried:
+        return new_text
+    return json.dumps(fresh, ensure_ascii=False, sort_keys=True)
+
+
+def _archived_state_body(text: str) -> tuple[dict[str, Any] | None, Any]:
+    """Return the ``state`` body of an envelope and its declared version.
+
+    This is the *archival* view: it deliberately does not validate. The
+    operator's explicit reset must be able to archive a legacy or
+    future-version row even though consumption would refuse it.
+
+    Args:
+        text: The stored ``state_json`` text.
+
+    Returns:
+        ``(body, version)``. ``body`` is ``None`` when the text carries no
+        object under ``state``; ``version`` is whatever the row declares, or
+        ``None`` for a legacy row written before the field existed.
+    """
+    try:
+        payload = json.loads(text)
+    except (TypeError, ValueError):
+        return None, None
+    if not isinstance(payload, dict):
+        return None, None
+    body = payload.get("state")
+    return (body if isinstance(body, dict) else None), payload.get(
+        "state_schema_version"
+    )
+
+
+def _prior_reset_events(text: str) -> list[dict[str, Any]]:
+    """Collect the reset records a row already carries, oldest first."""
+    try:
+        payload = json.loads(text)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    history: list[dict[str, Any]] = []
+    stored_history = payload.get("reset_history")
+    if isinstance(stored_history, list):
+        history.extend(item for item in stored_history if isinstance(item, dict))
+    stored_event = payload.get("reset_event")
+    if isinstance(stored_event, dict):
+        history.append(stored_event)
+    return history
+
+
+def _text_or_none(value: Any) -> str | None:
+    """Return ``value`` when it is a string, otherwise ``None``."""
+    return value if isinstance(value, str) else None
+
+
 # --------------------------------------------------------------------------
 # repository
 # --------------------------------------------------------------------------
@@ -414,28 +568,77 @@ class ConsumptionRepository:
         status: str,
         started_at: str,
     ) -> None:
-        """Record the run being consumed, if it is not recorded yet.
+        """Record the run being consumed, refusing a changed identity.
 
-        A repeated call is a no-op: the row for a run id is written once, and
-        re-consuming the same run must not fail on the primary key.
+        A repeated call with the *same* metadata is a no-op: re-consuming a run
+        must not fail on the primary key. A repeated call with *different*
+        metadata is a contract conflict, because the stored windows were
+        produced by another analysis than the one being requested.
+
+        Args:
+            run_id: The run identifier.
+            scenario_id: The scenario the run came from.
+            schema_version: The manifest schema version.
+            scoring_version: The scoring version of the rules in use.
+            status: The manifest status snapshot.
+            started_at: The run's start instant.
+
+        Raises:
+            RunConflictError: if the run is already recorded with different
+                scenario, schema, scoring version, status or start instant.
         """
-        with transaction(self._connection) as connection:
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO runs
-                  (run_id, scenario_id, schema_version, scoring_version,
-                   status, started_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    scenario_id,
-                    schema_version,
-                    scoring_version,
-                    status,
-                    started_at,
-                ),
-            )
+        expected = {
+            "scenario_id": scenario_id,
+            "schema_version": schema_version,
+            "scoring_version": scoring_version,
+            "status": status,
+            "started_at": started_at,
+        }
+        stored = self._read_run_row(run_id)
+        if stored is not None:
+            _refuse_changed_run(run_id, stored, expected)
+            return
+
+        try:
+            with transaction(self._connection) as connection:
+                connection.execute(
+                    """
+                    INSERT INTO runs
+                      (run_id, scenario_id, schema_version, scoring_version,
+                       status, started_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        scenario_id,
+                        schema_version,
+                        scoring_version,
+                        status,
+                        started_at,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            # Another writer inserted the row between the check and the
+            # insert. Re-read it and apply the same identity rule rather than
+            # reporting a bare primary-key error.
+            stored = self._read_run_row(run_id)
+            if stored is None:
+                raise
+            _refuse_changed_run(run_id, stored, expected)
+
+    def _read_run_row(self, run_id: str) -> dict[str, str] | None:
+        """Return the stored run-level metadata, or ``None`` when absent."""
+        row = self._connection.execute(
+            """
+            SELECT scenario_id, schema_version, scoring_version, status,
+                   started_at
+            FROM runs WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(zip(_RUN_IDENTITY_FIELDS, (str(value) for value in row)))
 
     # -- processed chunks -------------------------------------------------
 
@@ -508,6 +711,30 @@ class ConsumptionRepository:
                 "SELECT COUNT(*) FROM feature_windows WHERE run_id = ?", (run_id,)
             ).fetchone()
         return 0 if row is None else int(row[0])
+
+    def get_stored_window_points(self, run_id: str) -> int | None:
+        """Return the window width the stored windows were cut at.
+
+        The width is read back from the geometry of the first stored window
+        (``end_seq_exclusive - start_seq``). It is the only trace of
+        ``window_points`` section 9 leaves in the schema -- there is no column
+        for it -- and it is enough to refuse a replay that would append windows
+        cut on a different grid.
+
+        Args:
+            run_id: The run identifier.
+
+        Returns:
+            The stored window width, or ``None`` when nothing was written yet.
+        """
+        row = self._connection.execute(
+            """
+            SELECT end_seq_exclusive - start_seq FROM feature_windows
+            WHERE run_id = ? ORDER BY start_seq LIMIT 1
+            """,
+            (run_id,),
+        ).fetchone()
+        return None if row is None else int(row[0])
 
     # -- alarms -----------------------------------------------------------
 
@@ -596,8 +823,26 @@ class ConsumptionRepository:
         rule_id: str,
         last_end_seq_exclusive: int,
         state_json: str,
+        *,
+        preserve_reset_event: bool = True,
     ) -> None:
-        """Write the alarm state for a rule. Must be inside the shard transaction."""
+        """Write the alarm state for a rule. Must be inside the shard transaction.
+
+        Args:
+            run_id: The run identifier.
+            device_id: The device identifier.
+            rule_id: The rule identifier.
+            last_end_seq_exclusive: Position of the last committed window.
+            state_json: The freshly encoded envelope.
+            preserve_reset_event: Keep the audit of an earlier explicit reset.
+                Defaults to ``True``: a routine window write must not erase the
+                record that a reset happened (Issue #57 S1/S3).
+        """
+        payload = state_json
+        if preserve_reset_event:
+            payload = _carry_reset_event(
+                self._read_state_json_text(run_id, device_id, rule_id), state_json
+            )
         self._connection.execute(
             """
             INSERT INTO alarm_states
@@ -607,8 +852,21 @@ class ConsumptionRepository:
               last_end_seq_exclusive = excluded.last_end_seq_exclusive,
               state_json = excluded.state_json
             """,
-            (run_id, device_id, rule_id, last_end_seq_exclusive, state_json),
+            (run_id, device_id, rule_id, last_end_seq_exclusive, payload),
         )
+
+    def _read_state_json_text(
+        self, run_id: str, device_id: str, rule_id: str
+    ) -> str | None:
+        """Return the raw ``state_json`` text for a rule, or ``None``."""
+        row = self._connection.execute(
+            """
+            SELECT state_json FROM alarm_states
+            WHERE run_id = ? AND device_id = ? AND rule_id = ?
+            """,
+            (run_id, device_id, rule_id),
+        ).fetchone()
+        return None if row is None else str(row[0])
 
     # -- explicit reset (Issue #57 S3) ------------------------------------
 
@@ -620,13 +878,29 @@ class ConsumptionRepository:
         *,
         reason: str,
         reset_at: str | None = None,
+        scoring_version: str | None = None,
+        allow_legacy: bool = True,
     ) -> AlarmState:
         """Archive the stored state and start a new streak.
 
         This is the explicit half of the Issue #57 S3 decision: consumption
         refuses an incompatible state, and an operator then calls this to clear
-        it on purpose. The old state is kept verbatim in the envelope's
-        ``reset_event`` so the reset is auditable.
+        it on purpose.
+
+        The two paths are deliberately different:
+
+        * **Consumption** decodes strictly. A row it cannot attribute to the
+          current rules stops the run.
+        * **This reset** is the operator's explicit act. It therefore does not
+          need to *understand* the old row: it archives it verbatim and starts
+          a new streak. Refusing to reset a legacy or future-version row would
+          make the documented escape hatch unusable exactly when it is needed
+          (Codex review of PR #64, R4).
+
+        The audit lives in the envelope's ``reset_event``; earlier resets are
+        kept under ``reset_history`` so repeated resets do not erase each
+        other. ``upsert_alarm_state`` carries both forward, so a later routine
+        window write cannot wipe the record.
 
         Args:
             run_id: The run identifier.
@@ -634,12 +908,19 @@ class ConsumptionRepository:
             rule_id: The rule identifier.
             reason: Why the streak is being reset. Stored in the audit record.
             reset_at: The reset timestamp; defaults to now.
+            scoring_version: Identity to stamp on the new streak when the old
+                row cannot be decoded. Defaults to the value found in the old
+                row, if any.
+            allow_legacy: Accept an old row the strict decoder refuses. Set to
+                ``False`` to require a decodable current-version envelope.
 
         Returns:
             The new, empty state.
 
         Raises:
             StorageError: if there is no stored state to reset.
+            StateCompatibilityError: if the row cannot be decoded and
+                ``allow_legacy`` is ``False``.
         """
         current = self._connection.execute(
             """
@@ -654,16 +935,41 @@ class ConsumptionRepository:
                 f"{device_id!r}, rule {rule_id!r}; there is nothing to reset"
             )
 
-        previous = decode_state_json(str(current[0]))
-        new_state = AlarmState(
-            scoring_version=previous.scoring_version,
-            rule_id=previous.rule_id,
-        )
-        reset_event = {
+        raw_text = str(current[0])
+        archived_body, archived_version = _archived_state_body(raw_text)
+        reset_event: dict[str, Any] = {
             "reason": reason,
             "reset_at_utc": reset_at or utc_now_text(),
-            "previous_state": json.loads(str(current[0]))["state"],
+            "previous_state_schema_version": archived_version,
+            "previous_state_json": raw_text,
         }
+        previous: AlarmState | None
+        try:
+            previous = decode_state_json(raw_text)
+        except StateCompatibilityError:
+            if not allow_legacy:
+                raise
+            previous = None
+
+        if archived_body is not None:
+            reset_event["previous_state"] = archived_body
+
+        if previous is not None:
+            identity_scoring = previous.scoring_version
+            identity_rule = previous.rule_id
+        else:
+            identity_scoring = scoring_version or _text_or_none(
+                (archived_body or {}).get("scoring_version")
+            )
+            identity_rule = (
+                _text_or_none((archived_body or {}).get("rule_id")) or rule_id
+            )
+
+        new_state = AlarmState(
+            scoring_version=identity_scoring,
+            rule_id=identity_rule,
+        )
+        history = _prior_reset_events(raw_text)
         with transaction(self._connection) as connection:
             connection.execute(
                 """
@@ -673,7 +979,11 @@ class ConsumptionRepository:
                 """,
                 (
                     int(current[1]),
-                    encode_state_json(new_state, reset_event=reset_event),
+                    encode_state_json(
+                        new_state,
+                        reset_event=reset_event,
+                        reset_history=history or None,
+                    ),
                     run_id,
                     device_id,
                     rule_id,

@@ -23,6 +23,29 @@
 | `alarms` | `(run_id, device_id, rule_id, start_seq)` | 告警行 |
 | `alarm_states` | `(run_id, device_id, rule_id)` | 跨分片的告警状态 |
 
+### `runs.status` 的语义：manifest 快照，**不是**「已消费完」
+
+`runs.status` 原样镜像 manifest 的 `status`，写入后不再更新。它回答的是
+「这份 manifest 当初发布成什么状态」，**不回答**「这个 run 有没有被消费完」。
+语义上不承载两个意思，是刻意的：
+
+| 想知道 | 看哪里 |
+|---|---|
+| manifest 是否 `complete` | `runs.status` |
+| 是否已消费完 | `COUNT(processed_chunks WHERE run_id=?)` 是否等于 `len(manifest.parts)` |
+| 消费到哪个位置 | `alarm_states.last_end_seq_exclusive` |
+
+所以「`runs.status='complete'` 但只写了 3 片」不是矛盾数据，而是中途失败的正常痕迹：
+判据是 `processed_chunks` 的行数，不是 `status`。§9 没有为「消费完成」单列字段，
+本实现**不新增列**，因此不额外写完成标记。
+
+### `runs` 行是运行身份，不是标签
+
+同一个 `run_id` 再次被消费时，`scenario_id` / `schema_version` / `scoring_version` /
+`status` / `started_at` 必须与已存行**逐字段一致**，任一不同即抛 `RunConflictError`
+（退出码 3）。理由与「同 `part_id` 异 SHA 拒收」同源：库里已有的窗口是按另一套规则
+算出来的，静默沿用旧行等于把两次分析混进同一个 run。想换规则重算，走新数据库或显式重置。
+
 ### 连接级 PRAGMA
 
 | PRAGMA | 值 | 理由 |
@@ -103,12 +126,43 @@
 "reset_event": {
   "reason": "rule_change",
   "reset_at_utc": "2026-10-23T05:00:00Z",
-  "previous_state": { "...重置前的八字段原文..." }
+  "previous_state_schema_version": "1",
+  "previous_state": { "...重置前的八字段原文（能解码时）..." },
+  "previous_state_json": "{...重置前的整段原文，逐字节保留...}"
 }
 ```
 
 `reason` 取三个值：`rule_change`（规则身份不兼容）、`legacy_unattributable`
 （legacy 且来源不可考）、`operator_reset`（人工主动重置）。
+
+**审计必须活过后续写入。** 普通窗口写 `state_json` 时编码器并不知道历史，
+若整段覆盖，重置记录会在下一个窗口就消失——重置确实发生了，但库里查不到。
+因此 `upsert_alarm_state()` 默认把库里已有的 `reset_event` / `reset_history`
+原样带回新信封（`preserve_reset_event=True`）。这条与 §57 S1/S3 的承诺对齐：
+**重置是显式动作，且事后可查。**
+
+**多次重置不互相覆盖。** 第二次重置时，上一次的 `reset_event` 会被推进
+`reset_history`（数组，最旧在前），新的记录留在 `reset_event`：
+
+```json
+"reset_event":   { "...最近一次重置..." },
+"reset_history": [ { "...更早的一次重置..." } ]
+```
+
+`reset_history` 只在至少重置过一次时出现，没重置过的行不带空数组。
+
+#### 显式重置两条路径的分工
+
+| 路径 | 对旧行的态度 | 理由 |
+|---|---|---|
+| 正常消费（`get_alarm_state` → `decode_state_json`） | **严格**：版本未知、缺字段、类型不对一律拒收 | 读不懂的行不能当读懂了用 |
+| 操作者显式重置（`reset_alarm_state`） | **宽容**：不要求读懂，原文归档后重起 | 逃生门若只在「能读懂」时可用，那它永远用不上 |
+
+因此 legacy 六字段行、未知未来版本、甚至损坏的 JSON，`reset_alarm_state()`
+都能执行：旧原文进 `previous_state_json`，`reason` 记 `legacy_unattributable` 或
+`operator_reset`，新 streak 的 `scoring_version` 取参数或旧行里能读到的值。
+`allow_legacy=False` 可关闭这条宽容路径，恢复「必须可解码才能重置」。
+**注意：宽容只针对操作者显式重置，正常消费的严格拒收没有任何放松。**
 
 ### 2.2 `feature_windows.features_json`
 
@@ -195,10 +249,56 @@ streak 会在分片边界断掉，`consecutive_breaches` 归零，告警去抖�
 | 片间 seq 有空洞或重叠 | 拒绝 |
 | 窗间 seq 有空洞或重叠 | 拒绝（`next_start != prev_start + window_points`） |
 | 续跑位置与已提交窗口末端不符 | 拒绝 |
+| 全新消费时首片起点不是 `seq=0` | 拒绝（片内平移会让整条时间轴的窗口位置整体偏移） |
 | `state_json` 版本未知/缺失 | 拒绝（见 §2.1） |
+| 非末尾分片 `rows % window_points != 0` | **入库前拒绝**（见下） |
+| 非末尾分片长度彼此不等 | **入库前拒绝** |
+| 同 `run_id` 但 `scenario_id`/`scoring_version`/`started_at` 等变化 | 拒绝（`RunConflictError`） |
+| 库内已有窗口的宽度与本次 `window_points` 不同 | 拒绝 |
 
 `read_chunk` 不校验分片归属与跨片连续性，这两件事都在 C2 侧；
 `read_chunk` 也不校验窗口级连续性，同样由 C2 负责。
+
+### 窗口栅格预检：先验，再写
+
+§8.1 要求「非末尾分片必须是 `window_points` 的整数倍」。manifest 里没有
+`chunk_points`，只有每片的 `rows`，所以预检这么推断：**非末尾各片的 `rows` 必然相等，
+取该值当 `chunk_points`**，再要求它整除 `window_points`。
+
+为什么必须在**任何写入之前**做：如果按片各自取模，`window_points` 不整除片长时
+**每一片**都会丢掉尾部余数，窗口起点也不再落在全局栅格上，而 `consume_run`
+仍然返回成功。极端情形（`window_points` 大于片长）会把 100% 样本丢掉，
+库里却是「一个消费成功的 run，零特征零告警」。这是静默伪造数据，
+与 §8.1 冲突，因此改为拒收，错误信息点名 `part_id` / `rows` / `window_points`。
+
+预检放在 `ensure_run()` 之前，所以非法输入**连 `runs` 行都不会留下**。
+
+只有末片允许有余数：`drop` 计入 `windows_dropped`（注意该字段计的是**样本数**，
+名字沿用已评审的接口），`error` 则整体拒收。
+
+| 输入 | 结果 |
+|---|---|
+| 5×100 + 12 片，`window_points=64` | 拒绝：100 不是 64 的倍数，一行不写 |
+| 4×128 片，`window_points=64` | 通过，8 窗，0 丢点 |
+| 7×10240 + 4096 片，`window_points=256` | 通过，末片 4096 整除 256，0 丢点 |
+| 末片 100 点，`window_points=64`，`drop` | 通过，1 窗，丢 36 点 |
+| 同上但 `error` | 拒绝 |
+
+### 「分析身份」一致：不只验分片 SHA
+
+只验 `processed_chunks.sha256` 只能证明**输入**没变，不能证明**分析**没变。
+所以消费入口另外核对三件事，任一不符即拒收：
+
+| 身份要素 | 依据 | 检不出来会怎样 |
+|---|---|---|
+| `scoring_version` / `rule_id` | `runs` 行 + `alarm_states.state_json` | 规则换了却当同配置重放，库内新旧规则窗口混排 |
+| `window_points` | 库里已有窗口的 `end_seq_exclusive - start_seq` | 同一 run 里混入两种宽度的窗口，报告复算全错 |
+| `incomplete_window` 策略 | §9 无列可记（见下） | 只影响末窗有无；换策略须显式重置 |
+
+`window_points` 没有独立列，但窗口几何本身就带着它，读回第一行即可比对——
+**不新增列**也做得到。`incomplete_window` 在库里没有痕迹（尾窗要么存在、要么不存在），
+因此它的变更只能由操作者显式重置来声明；这一点在 #57 的答复里写明了边界，
+没有把它说成「已自动检测」。
 
 ### 连续性的两个层次
 
@@ -243,7 +343,8 @@ streak 会在分片边界断掉，`consecutive_breaches` 归零，告警去抖�
 |---|---|
 | 新增 `state` 字段 | 升 `state_schema_version`，旧 consumer 读到新版本 → 拒绝（不静默丢字段） |
 | 旧 v0 行（无版本号） | 带历史 → 拒绝并要求显式重起；无历史 → 接受并改标 + 记 `migrated_at` |
-| 规则身份不兼容 | 消费停机（退出码 3），由操作者显式重起；重起前的原文留在 `reset_event.previous_state` |
+| 规则身份不兼容 | 消费停机（退出码 3），由操作者显式重起；重起前的原文留在 `reset_event.previous_state` / `previous_state_json` |
+| legacy 行需要重起 | `reset_alarm_state()` 不要求可解码：原文归档、新 streak 起于空态（见 §2.1） |
 
 **不回填身份。** 要回填 `scoring_version` / `rule_id`，前提是能证明该行由哪套规则产生；
 而旧行缺失身份字段恰恰说明写它时没有身份可记。回填等于用无从考证的值去补一个

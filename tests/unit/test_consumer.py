@@ -28,6 +28,7 @@ from g15.pipeline.producer import produce_run
 from g15.storage.database import connect, initialize_database
 from g15.storage.repository import (
     ConsumptionRepository,
+    RunConflictError,
     StateCompatibilityError,
     decode_state_json,
     encode_state_json,
@@ -637,3 +638,361 @@ def test_the_storage_package_is_importable() -> None:
 
     assert hasattr(database, "connect")
     assert hasattr(repository, "ConsumptionRepository")
+
+
+# --------------------------------------------------------------------------
+# the window grid: section 8.1 checked at the consumer entry point
+# --------------------------------------------------------------------------
+
+
+def _count_runs(database_path: Path) -> int:
+    """Return the number of ``runs`` rows, or 0 when the table is absent."""
+    if not database_path.exists():
+        return 0
+    connection = sqlite3.connect(str(database_path))
+    try:
+        return int(connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0])
+    finally:
+        connection.close()
+
+
+def _rules_with_version(tmp_path: Path, scoring_version: str) -> Path:
+    """Copy the project's rules file with a different ``scoring_version``."""
+    text = (REPO_ROOT / "configs" / "health_rules.yaml").read_text(encoding="utf-8")
+    text = text.replace(
+        "scoring_version: 'heuristic-v1'",
+        f"scoring_version: '{scoring_version}'",
+    )
+    path = tmp_path / f"health_rules_{scoring_version}.yaml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _shift_run_sequence(run_dir: Path, offset: int) -> None:
+    """Add ``offset`` to every sample's ``seq`` and re-sign the manifest."""
+    from g15.pipeline.serialization import sha256_of_file
+
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for entry in manifest["parts"]:
+        shard = run_dir / entry["path"]
+        with np.load(shard, allow_pickle=False) as arrays:
+            payload = {name: arrays[name].copy() for name in arrays.files}
+        payload["seq"] = payload["seq"] + offset
+        np.savez(shard, **payload)
+        entry["sha256"] = sha256_of_file(shard)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_a_shard_that_is_not_a_whole_number_of_windows_is_refused(
+    tmp_path: Path,
+) -> None:
+    """100-sample shards with a 64-sample window are refused, not half-dropped.
+
+    Before the pre-check existed this input succeeded: every shard lost its
+    36-sample tail, the windows no longer sat on the global grid, and the
+    summary still reported success.
+    """
+    run_dir = _make_run(tmp_path, points=512, chunk_points=100)
+    database_path = tmp_path / "g15.db"
+
+    with pytest.raises(ConsumptionError, match="not a multiple"):
+        consume_run(run_dir, database_path, _consumer_config(tmp_path))
+
+    # Nothing was written -- not even the run row.
+    assert _counts(database_path) == (0, 0, 0)
+    assert _count_runs(database_path) == 0
+
+
+def test_the_refusal_names_the_part_and_the_grid(tmp_path: Path) -> None:
+    """The error message carries part_id, rows and window_points."""
+    run_dir = _make_run(tmp_path, points=512, chunk_points=100)
+
+    with pytest.raises(ConsumptionError) as caught:
+        consume_run(run_dir, tmp_path / "g15.db", _consumer_config(tmp_path))
+
+    message = str(caught.value)
+    assert "part 0" in message
+    assert "100 rows" in message
+    assert "window_points=64" in message
+
+
+def test_a_short_tail_is_dropped_and_counted(tmp_path: Path) -> None:
+    """Only the final shard may leave a remainder, and it is counted."""
+    run_dir = _make_run(tmp_path, points=500, chunk_points=128)
+    summary = consume_run(run_dir, tmp_path / "g15.db", _consumer_config(tmp_path))
+
+    # 500 = 3 x 128 + 116; the 116-sample tail keeps one 64-sample window.
+    assert summary.shards_processed == 4
+    assert summary.windows_written == 7
+    assert summary.windows_dropped == 52
+
+
+def test_a_short_tail_is_refused_under_the_error_policy(tmp_path: Path) -> None:
+    """``incomplete_window: error`` refuses the tail instead of dropping it."""
+    run_dir = _make_run(tmp_path, points=500, chunk_points=128)
+    database_path = tmp_path / "g15.db"
+
+    with pytest.raises(ConsumptionError, match="incomplete_window"):
+        consume_run(
+            run_dir,
+            database_path,
+            _consumer_config(tmp_path, incomplete_window="error"),
+        )
+
+    # The shards before the tail were committed; the tail shard was not.
+    windows, _, chunks = _counts(database_path)
+    assert chunks == 3
+    assert windows == 6
+
+
+def test_a_changed_window_grid_is_refused_on_replay(tmp_path: Path) -> None:
+    """Replaying a run with a different ``window_points`` is refused."""
+    run_dir = _make_run(tmp_path)
+    database_path = tmp_path / "g15.db"
+    consume_run(run_dir, database_path, _consumer_config(tmp_path))
+    before = _counts(database_path)
+
+    with pytest.raises(ConsumptionError, match="different grid"):
+        consume_run(
+            run_dir,
+            database_path,
+            _consumer_config(tmp_path, window_points=128),
+        )
+
+    assert _counts(database_path) == before
+
+
+def test_a_changed_scoring_version_on_replay_is_refused(tmp_path: Path) -> None:
+    """Replaying a consumed run under other rules is refused, not skipped."""
+    run_dir = _make_run(tmp_path)
+    database_path = tmp_path / "g15.db"
+    consume_run(run_dir, database_path, _consumer_config(tmp_path))
+
+    other_rules = _rules_with_version(tmp_path, "heuristic-v9")
+    with pytest.raises(RunConflictError, match="already recorded"):
+        consume_run(
+            run_dir,
+            database_path,
+            _consumer_config(tmp_path, health_rules_file=str(other_rules)),
+        )
+
+
+def test_a_first_shard_that_starts_late_is_refused(tmp_path: Path) -> None:
+    """A run whose first shard does not start at ``seq=0`` is refused."""
+    run_dir = _make_run(tmp_path)
+    _shift_run_sequence(run_dir, 5000)
+
+    with pytest.raises(ConsumptionError, match="starts at seq 5000"):
+        consume_run(run_dir, tmp_path / "g15.db", _consumer_config(tmp_path))
+
+
+# --------------------------------------------------------------------------
+# run identity and the reset audit
+# --------------------------------------------------------------------------
+
+
+def test_a_changed_run_metadata_is_refused(tmp_path: Path) -> None:
+    """A run id recorded once keeps its metadata."""
+    connection = connect(tmp_path / "g15.db")
+    try:
+        initialize_database(connection)
+        repository = ConsumptionRepository(connection)
+        repository.ensure_run(
+            "r", "s", "1.0", "heuristic-v1", "complete", "2026-10-14T00:00:00Z"
+        )
+        # Repeating the same metadata is a no-op, not a conflict.
+        repository.ensure_run(
+            "r", "s", "1.0", "heuristic-v1", "complete", "2026-10-14T00:00:00Z"
+        )
+        with pytest.raises(RunConflictError, match="scoring_version"):
+            repository.ensure_run(
+                "r", "s", "1.0", "heuristic-v9", "complete", "2026-10-14T00:00:00Z"
+            )
+    finally:
+        connection.close()
+
+
+def test_a_normal_window_write_keeps_the_reset_audit(tmp_path: Path) -> None:
+    """A routine state write must not erase the record of an explicit reset."""
+    database_path = tmp_path / "g15.db"
+    connection = connect(database_path)
+    try:
+        initialize_database(connection)
+        repository = ConsumptionRepository(connection)
+        repository.ensure_run(
+            "r", "s", "1.0", "heuristic-v1", "complete", "2026-10-14T00:00:00Z"
+        )
+        state = AlarmState(
+            active_level="yellow",
+            consecutive_breaches=2,
+            alarm_windows=1,
+            last_window_start_seq=2048,
+            scoring_version="heuristic-v1",
+            rule_id="g15-b2-health-v1",
+        )
+        repository.upsert_alarm_state(
+            "r", "d", "g15-b2-health-v1", 2112, encode_state_json(state)
+        )
+        repository.reset_alarm_state(
+            "r",
+            "d",
+            "g15-b2-health-v1",
+            reason="rule_change",
+            reset_at="2026-10-23T00:00:00Z",
+        )
+
+        # A normal window write, encoded without any reset information.
+        fresh = AlarmState(scoring_version="heuristic-v1", rule_id="g15-b2-health-v1")
+        repository.upsert_alarm_state(
+            "r", "d", "g15-b2-health-v1", 2176, encode_state_json(fresh)
+        )
+    finally:
+        connection.close()
+
+    # Re-open: the audit has to survive both the update and the reopen.
+    connection = connect(database_path)
+    try:
+        row = connection.execute(
+            "SELECT state_json FROM alarm_states WHERE run_id = 'r'"
+        ).fetchone()
+    finally:
+        connection.close()
+
+    payload = json.loads(str(row[0]))
+    assert payload["reset_event"]["reason"] == "rule_change"
+    assert payload["reset_event"]["previous_state"]["consecutive_breaches"] == 2
+    assert decode_state_json(str(row[0])).consecutive_breaches == 0
+
+
+def test_a_second_reset_keeps_the_first_in_history(tmp_path: Path) -> None:
+    """Repeated resets do not overwrite each other's audit records."""
+    connection = connect(tmp_path / "g15.db")
+    try:
+        initialize_database(connection)
+        repository = ConsumptionRepository(connection)
+        repository.ensure_run(
+            "r", "s", "1.0", "heuristic-v1", "complete", "2026-10-14T00:00:00Z"
+        )
+        state = AlarmState(
+            consecutive_breaches=3,
+            scoring_version="heuristic-v1",
+            rule_id="g15-b2-health-v1",
+        )
+        repository.upsert_alarm_state(
+            "r", "d", "g15-b2-health-v1", 2048, encode_state_json(state)
+        )
+        repository.reset_alarm_state(
+            "r",
+            "d",
+            "g15-b2-health-v1",
+            reason="rule_change",
+            reset_at="2026-10-23T00:00:00Z",
+        )
+        repository.reset_alarm_state(
+            "r",
+            "d",
+            "g15-b2-health-v1",
+            reason="operator_reset",
+            reset_at="2026-10-23T01:00:00Z",
+        )
+
+        row = connection.execute(
+            "SELECT state_json FROM alarm_states WHERE run_id = 'r'"
+        ).fetchone()
+    finally:
+        connection.close()
+
+    payload = json.loads(str(row[0]))
+    assert payload["reset_event"]["reason"] == "operator_reset"
+    history = payload["reset_history"]
+    assert len(history) == 1
+    assert history[0]["reason"] == "rule_change"
+
+
+def test_a_legacy_row_can_still_be_reset_explicitly(tmp_path: Path) -> None:
+    """The operator's escape hatch works on a row the decoder refuses."""
+    legacy = {
+        "state": {
+            "active_level": "yellow",
+            "consecutive_breaches": 2,
+            "normal_windows": 0,
+            "alarm_windows": 1,
+            "last_window_start_seq": 2048,
+            "recovered_at_seq": None,
+            "scoring_version": "heuristic-v0",
+            "rule_id": "g15-b2-health-v1",
+        }
+    }
+    legacy_text = json.dumps(legacy)
+
+    connection = connect(tmp_path / "g15.db")
+    try:
+        initialize_database(connection)
+        repository = ConsumptionRepository(connection)
+        repository.ensure_run(
+            "r", "s", "1.0", "heuristic-v1", "complete", "2026-10-14T00:00:00Z"
+        )
+        connection.execute(
+            """
+            INSERT INTO alarm_states
+              (run_id, device_id, rule_id, last_end_seq_exclusive, state_json)
+            VALUES ('r', 'd', 'g15-b2-health-v1', 2112, ?)
+            """,
+            (legacy_text,),
+        )
+
+        new_state = repository.reset_alarm_state(
+            "r",
+            "d",
+            "g15-b2-health-v1",
+            reason="legacy_unattributable",
+            reset_at="2026-10-23T00:00:00Z",
+        )
+
+        row = connection.execute(
+            "SELECT state_json FROM alarm_states WHERE run_id = 'r'"
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert new_state.consecutive_breaches == 0
+    assert new_state.active_level is None
+    assert new_state.scoring_version == "heuristic-v0"
+
+    payload = json.loads(str(row[0]))
+    assert payload["state_schema_version"] == "1"
+    assert payload["reset_event"]["previous_state_json"] == legacy_text
+    assert payload["reset_event"]["previous_state_schema_version"] is None
+    assert payload["reset_event"]["previous_state"]["consecutive_breaches"] == 2
+    # The rewritten row is a normal v1 envelope again.
+    assert decode_state_json(str(row[0])).consecutive_breaches == 0
+
+
+def test_a_legacy_row_is_refused_when_legacy_is_not_allowed(tmp_path: Path) -> None:
+    """``allow_legacy=False`` restores the strict reading for the reset path."""
+    connection = connect(tmp_path / "g15.db")
+    try:
+        initialize_database(connection)
+        repository = ConsumptionRepository(connection)
+        repository.ensure_run(
+            "r", "s", "1.0", "heuristic-v1", "complete", "2026-10-14T00:00:00Z"
+        )
+        connection.execute(
+            """
+            INSERT INTO alarm_states
+              (run_id, device_id, rule_id, last_end_seq_exclusive, state_json)
+            VALUES ('r', 'd', 'g15-b2-health-v1', 2112, ?)
+            """,
+            (json.dumps({"state": {"consecutive_breaches": 1}}),),
+        )
+        with pytest.raises(StateCompatibilityError):
+            repository.reset_alarm_state(
+                "r",
+                "d",
+                "g15-b2-health-v1",
+                reason="legacy_unattributable",
+                allow_legacy=False,
+            )
+    finally:
+        connection.close()
