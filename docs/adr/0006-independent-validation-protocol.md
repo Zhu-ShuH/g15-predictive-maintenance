@@ -15,7 +15,7 @@ B2已披露开发期间查看seed42与20261016的特征分布，相关结果应�
 | 审阅对象 | 固定引用 / 原始字节SHA-256 |
 |---|---|
 | main标准/配置 | `c60f3904567aa5f0b637494abb231de597f5ab37` |
-| #54候选分析实现/规则 | `da3a52b9105edfd0c418c7c29369fd6c68aab01d`（尚未合入main） |
+| #54候选分析实现/规则 | `da3a52b9105edfd0c418c7c29369fd6c68aab01d`（T66快照；#54后已合入81c13d17） |
 | 候选health_rules.yaml | Git blob `5ec8114b9c765de53942f5b091253505391bddcd`；SHA-256 `2b3a2763c72e32abd276b2d2617224b8bb941ca5d82807d2258db8d4c3f92d8b` |
 | main验收规范 | Git blob `fb03105740c4fc70d355b7579154f036c906c930`；SHA-256 `9afaa205013a0d4cb7bd5bfab1d73104af3832bbd5e065c06550d67becedd8b7` |
 | 附件清单 | 19个固定文件；清单自身原始字节SHA-256 `3a6289a9893f622c79988ef1669ed6ff0577eff7d73b8359f577eb6c8fae9f04` |
@@ -76,12 +76,12 @@ C5在已批准方案和固定集成提交上首次生成并执行保留验证，
 本草稿交付不关闭#56，不批准候选规则，不改变seed或标准，不等于C5已提交测试。待本人方案与文档/测试Review齐备后，再推进实际冻结与验证。
 
 <!-- Codex-T69-validation-baseline-update -->
-## 2026-10-23 T69：A复核当前主线与审阅附件
+## 2026-10-24 T73：A复核当前候选与T69审阅附件
 
-A/Codex按组长“按A执行待办”更新本协议。#54已经合入main `81c13d17faf8189a240989b4ee43b937820bb911`，原#54最终候选的算法/规则文件已成为主线内容。下面保留的T66审阅附件仍记录当时main/candidate原ref；**19项原始blob、字节数与SHA-256本轮全部核对，均与当前main的对应文件一致**。附件不是完整集成验证基线，不因算法合入而自动冻结；其integrated_validation_commit与new_holdout_seed仍null，rules_frozen=false，原摘要清单逐字节保留。
+A/Codex按组长“执行A侧所有待办”回应B1 review5637840805。#54已经合入main `81c13d17faf8189a240989b4ee43b937820bb911`，原#54最终候选的算法/规则文件已成为主线内容。下面保留的T66审阅附件仍记录当时main/candidate原ref；**19项原始blob、字节数与SHA-256已在T69全部核对，与当时main81c13d17对应文件一致**；该结论属于T69，不冒称T73重新计算。附件不是完整集成验证基线，不因算法合入而自动冻结；其integrated_validation_commit与new_holdout_seed仍null，rules_frozen=false，原摘要清单逐字节保留。
 
-当前consumer/storage候选在#64 `e1593ff707925cf4ebee2758a332be6996783d25`，尚未合入；reporting与独立验证器仍待C5。A已发布[消费候选实证审查](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64#pullrequestreview-5625590637)，非末片丢点与审计覆盖需修；C2实际实现与#57状态/运行身份仍有待收口项。不能用算法文件相同跳过消费/存储/匹配器/环境的集成审核。
+当前consumer/storage证据固定#64 `8b47fe307ffeacffd7381e917afa1daed53b6e2b`，集成状态以合并回执为准；reporting与独立验证器仍待C5。**非末片整除预检与重置审计保留已在候选实现**，A于T73独立复验并发布[当前head复审5637899740](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64#pullrequestreview-5637899740)。T69旧head/23项结果仅作历史证据，不再列为当前待修。规则内容/尾窗策略身份、正常legacy自动兼容与#57公共契约仍待收口。不能用算法文件相同跳过完整集成审核。附件固定ref为历史审阅快照，非当前main，原JSON不改写。
 
 **下一可交付物属于C5本人**：请给数据接触范围声明，固定验证器源码与版本、匹配/误报/冗余/未匹配的可执行测试、保留数据生成/保管/首次披露方案，以及失败结果留存与重新开发后的轮次处理。B2核规则/开发依据与已接触数据范围，C4核公开输入与一对一匹配口径。A审核实际标准/测试差异并收齐Review后才记录冻结；没有C5回复时不能代填独立性确认或先跑新seed。
 
-本轮只做19项既有文件摘要/JSON/原ref与当前main比对、协议与相对链接检查；**未生成或运行任何新保留数据，未改验收标准、规则、测试期望或seed**。Windows消费23项实跑是#64审查证据，不是本协议的独立检出或双Linux成绩。本草稿保持未冻结，不关闭#56。
+T69完成19项既有摘要/JSON/原ref与当时main比对；T73本次只改协议的过期状态与相对链接检查，未重算19项；**未生成或运行任何新保留数据，未改验收标准、规则、测试期望或seed**。T73 Windows消费35项通过、全量519 passed/8 skipped（Python3.14.6/NumPy2.4.6）是#64复审证据，不是本协议的独立检出或双Linux成绩。本草稿保持未冻结，不关闭#56。
