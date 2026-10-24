@@ -112,7 +112,7 @@
 | S2 | 外层state_schema_version字符串"1"，state为8键；未知/未来/缺失版本分别处理；拒绝bool计数/未知键 | B2核对键名/类型；C2给JSON/SQLite往返与部分身份、未来版本拒收证据；不得直接int()静默截断非法值 |
 | S3 | 默认停机+显式重起，审计放reset_event，不加表/列；C2提供函数，C3接CLI | 8b47fe3已保留reset_event/reset_history，显式重置可归档legacy原文，见R2/R4；正常无历史legacy自动兼容仍未实现，保留策略待评审；新CLI参数须另审 |
 | S4 | last_end_seq_exclusive由已提交窗口推导；消费端校验片级/窗级连续性，拒绝重叠/空洞 | C4核对公开输入；非末片整除预检R1已实现；单片限制按下文方案C提案处理；最后一片独立应用drop/error |
-| S5 | features_json信封含8特征、features_version、sample_count/rate/start、规则身份和health_explain；contributions不存；created_at为落库UTC | C5确认报告可追溯性；特征版本必须与实际FEATURES_VERSION对齐，不能仅凭示例"1"自行冻结；保留规则摘要/运行身份决策 |
+| S5 | features_json信封含8特征、features_version、sample_count/rate/start、规则身份和health_explain；contributions不存；created_at为落库UTC | C5确认报告可追溯性；当前features_version="1"是storage FEATURES_SCHEMA_VERSION，analysis FEATURES_VERSION="1.0"是算法元数据，不能视为已对齐或每行算法追溯；C2/B2/C5确认两者各自含义和来源记录，规则摘要/运行身份仍待决 |
 | S6 | 窗口/分数/告警/state/processed_chunks同片同事务；commit后采纳内存态；跳已提交数据但保留已提交state；异SHA拒收 | T73消费35项、全量519项通过、8项跳过；版本/窗宽冲突已拒收，规则内容摘要/尾窗策略身份与真实kill -9仍待收口 |
 | S7 | C5尚无本人回复；B2状态计数不能代替redundant/unmatched统计 | C5给独立匹配示例，B2核对状态量含义；黄/红均可命中，不增一律红级门槛 |
 
@@ -160,7 +160,7 @@ B2核对源码观察及S2，C2处理剩余R3配置身份、S1兼容承诺与恢�
 
 ## 待审的interface同步文本（A准备，未生效）
 
-以下是具体可审阅文本，不是已修改的interface。对应§13的相关人审查与兼容证据尚未齐备，不能据此冻结公共契约或要求成员把未定格式当基线。
+以下是具体可审阅文本，对应的interface.md变更已独立提交[PR #67](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/67)，基于集成main c4f1cfa3；main上的interface尚未修改。对应§13的相关人审查与兼容证据尚未齐备，不能据此冻结公共契约或要求成员把未定格式当基线。
 
 ### §6 消费与存储责任补充草案
 
@@ -184,4 +184,4 @@ CLI路径采用现有§11的run_dir/artifacts/results.sqlite；退出码保持0/
 
 ### 角色与完成条件
 
-A+B1+B2+C4审查上述公共文本，受影响C2/C3/C5参加；C2提交修复和JSON/SQLite兼容/重放证据，C3提交CLI参数提案及接线，C5提交S5/S7与#56独立方案。A据真实意见更新interface与迁移说明，再按§13完成相关验证和独立人工Review；Linux兼容/真实kill -9未测照实标注。本文保持draft、不关闭#57；#54已经合入不是本草稿的待合前置。
+A+B1+B2+C4审查上述公共文本，受影响C2/C3/C5参加；C2提交修复和JSON/SQLite兼容/重放证据，C3提交CLI参数提案及接线，C5提交S5/S7与#56独立方案。A据真实意见更新interface与迁移说明，再按§13完成相关验证和独立人工Review；Linux兼容/真实kill -9未测照实标注。本文保持提案未冻结、不关闭#57；#54已经合入不是本草稿的待合前置。
