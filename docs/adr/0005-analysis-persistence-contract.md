@@ -1,12 +1,12 @@
 # ADR-0005：分析结果与告警恢复的候选持久化契约
 
-- 状态：**提案，未冻结**；2026-10-24 T73更新（原提案2026-10-22；T69证据按原时点保留）；关联 [Issue #57](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/57)、#54、#8、#2。
+- 状态：**提案，未冻结**；2026-10-24 T74更新（T69/T73证据按原时点保留）；关联 [Issue #57](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/57)、#54、#8、#2。
 - 准备：A/Codex，按组长“按A执行待办”更新；C2本人S1–S6答复已收到，相关角色确认与实现复核仍未完成。
 - 权威基线仍为 [interface](../interface.md)、[acceptance](../acceptance.md) 与 [ADR-0004](0004-recovery-and-independent-evaluation.md)。本文供逐项评审，不覆盖基线、不授权提前按候选字段建表。
 
 ## 审阅对象与当前事实
 
-本轮main固定为 `81c13d17faf8189a240989b4ee43b937820bb911`；#54已经squash合入，下面三算法blob与原最终head `da3a52b9105edfd0c418c7c29369fd6c68aab01d`一致。main的consumer/storage仍占位。消费候选是 [PR #64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) 的 `8b47fe307ffeacffd7381e917afa1daed53b6e2b`；本表证据截至该head，集成状态以合并回执为准，不代表完整主链验收。
+T74当前main为 `c4f1cfa3ef6fb9f670fce82ceeb6abafeafdc770`：#54分析和#64消费/存储均已合入。下列三算法blob仍与#54原最终head `da3a52b9105edfd0c418c7c29369fd6c68aab01d`一致；#64于2026-10-24 18:24:21锁定 `8b47fe307ffeacffd7381e917afa1daed53b6e2b` squash合入，#8已closed。T73实跑证据仍固定8b47fe3，合后126文件blob/模式逐一一致；不把合入函数当作CLI、报告或独立验收已交付。
 
 2026-10-23 14:01北京时间，C2已在 [#57本人回复](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/57#issuecomment-6358549345) 和 [#8输入/接线回复](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/8#issuecomment-6358549702)给出选择。回复中的“#54尚未合入”仅适用于回复时刻；A现在从真实答复推进评审，不再等C2首次回复。C2称当时没有存量库，本提案仅据main空模块与其本人说明把legacy视为防御场景，不声称完成所有环境数据审计。
 
