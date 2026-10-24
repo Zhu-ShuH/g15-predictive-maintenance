@@ -173,6 +173,43 @@ def test_non_divisible_length_ends_with_one_short_tail(tmp_path: Path) -> None:
     assert int(chunk.seq[-1]) == 999
 
 
+def test_the_last_shard_bound_is_inclusive_of_chunk_points(tmp_path: Path) -> None:
+    """The last shard's row count is ``<= chunk_points``, not ``<``.
+
+    ``docs/interface.md`` section 8.1 states the closed form
+    ``rows = total_points - (n - 1) * chunk_points`` and derives a bound on
+    it.  When ``total_points`` is an exact multiple of ``chunk_points`` the
+    ``ceil`` does not advance, so the last shard holds exactly
+    ``chunk_points`` rows -- the bound is inclusive.  A consumer that checks
+    the last shard with ``<`` would reject a legitimate run, so the bound is
+    pinned here.
+
+    Both the multi-shard and the single-shard exact-division cases are
+    covered: ``512 / 256`` ends on a two-row tail equal to the nominal size,
+    and ``256 / 256`` is a single shard of exactly one chunk.
+    """
+    run_dir = produce_run(scenario_config(total_points=512, chunk_points=256), tmp_path)
+
+    _, manifest = load_manifest(run_dir)
+
+    assert [entry.rows for entry in manifest.parts] == [256, 256]
+    assert manifest.parts[-1].rows == 256
+    # The bound holds: the last shard is never larger than the nominal size.
+    assert manifest.parts[-1].rows <= 256
+    # ...and it is exactly equal here, which is the case a ``<`` check breaks.
+    assert manifest.parts[-1].rows == manifest.parts[0].rows
+
+    single_dir = produce_run(
+        scenario_config(total_points=256, chunk_points=256), tmp_path
+    )
+
+    _, single_manifest = load_manifest(single_dir)
+
+    assert len(single_manifest.parts) == 1
+    assert single_manifest.parts[0].rows == 256
+    assert single_manifest.parts[0].rows <= 256
+
+
 def test_shards_are_readable_and_contiguous(tmp_path: Path) -> None:
     """Each shard must verify against its entry and continue the previous one."""
     run_dir = produce_run(

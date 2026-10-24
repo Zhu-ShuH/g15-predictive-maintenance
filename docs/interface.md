@@ -5,7 +5,7 @@
 > 状态：**设计基线（待小组审核/实现）**。本文是项目册 G15 和课程 P4.1/P2.2 的小组技术落地方案；NPZ、SQLite、CLI、字段名、阈值等均为小组选定的工程约定，不是教师原文强制技术栈。组长审核通过后冻结 `schema_version=1.0`。若此前草案写的是 CSV 分片，**以本版 NPZ 分片为准**，CSV 仅可选导出。
 > 2026-10-15 更新：先读资料包根目录 `00_先读_统一决策与待确认事项.md`；当前没有完成组内冻结或任何代码实测。下述 14 天为相对计划模板，实际截止日待确认。
 
-> **接口修订待审（T74，2026-10-24）**：本分支将 #57/#61 的持久化与单片责任提案落实为可审阅的正文差异，关联 #2/#65。本 PR 与前置 #68 上界勘误均须经过独立评审；该修订未合并前不改变 main 的接口基线，不代表相关成员已确认或 Linux 兼容已通过。规则/阈值、Manifest 字段与 SQLite 表列保持；新增显式重置命令及公开签名继续单独评审。
+> **接口修订待审（T74，2026-10-24）**：本分支将 #57/#61 的持久化与单片责任提案落实为可审阅的正文差异，关联 #2/#65。前置 #68 上界勘误已经独立审阅合入 main 12e35e9c；本 PR 的其他接口修订仍须相关角色审阅；该修订未合并前不改变 main 的接口基线，不代表相关成员已确认或 Linux 兼容已通过。规则/阈值、Manifest 字段与 SQLite 表列保持；新增显式重置命令及公开签名继续单独评审。
 
 ## 0. 依据、目标和约束
 
@@ -183,7 +183,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 消费者只读取公开 Manifest、NPZ 和该消费配置；`sample_rate_hz` 从 Manifest 取得。C3 与 B2/C2/C4 在接口评审时确认上述键名、路径解析与默认行为，增加测试证明消费配置没有故障位置。
 
-**参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。配置配对必须保证 `chunk_points % window_points == 0`；消费端在业务结果写入前核对公开 Manifest 中所有非末片 `rows` 一致且可被 `window_points` 整除。**单片责任采用方案 C 提案**：单片只有末片，现有 Manifest 没有名义 `chunk_points`，消费者不能据公开输入验证该名义值的整除关系；配置配对检查由调用方保证，消费者不得将不可执行的检查报告为“已通过”。消费者仍只读公开 Manifest、NPZ 与独立消费配置，不加载生产场景 YAML 或 `fault_generation`。真实末片余数按 `drop/error` 处理，少于一窗且 `drop` 时可成功而没有特征/告警。 **多片末片上界另作显式披露（B1 R-2 方案 B）**：虽然可由非末片推断名义分片长度，当前 consumer 仍未检查末片是否超过该值；末片行数上界由生产者保证，不能把 §5.1 的生产契约写成消费端已经执行的校验。§5.1 上界的含等号勘误在前置 PR #68 单独审阅；本 PR 不修改 consumer.py 或抢先声明该防护已实现。后续由 C2 在独立任务中增加 `last.rows > inferred_chunk_points` 拒收，整除末片等于名义分片必须允许；单片仍遵循本段方案 C。正式运行的配置配对证明由调用方留证；此责任澄清须按 §13 审阅，不能用它放宽正式验收门槛。
+**参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。配置配对必须保证 `chunk_points % window_points == 0`；消费端在业务结果写入前核对公开 Manifest 中所有非末片 `rows` 一致且可被 `window_points` 整除。**单片责任采用方案 C 提案**：单片只有末片，现有 Manifest 没有名义 `chunk_points`，消费者不能据公开输入验证该名义值的整除关系；配置配对检查由调用方保证，消费者不得将不可执行的检查报告为“已通过”。消费者仍只读公开 Manifest、NPZ 与独立消费配置，不加载生产场景 YAML 或 `fault_generation`。真实末片余数按 `drop/error` 处理，少于一窗且 `drop` 时可成功而没有特征/告警。 **多片末片上界另作显式披露（B1 R-2 方案 B）**：虽然可由非末片推断名义分片长度，当前 consumer 仍未检查末片是否超过该值；末片行数上界由生产者保证，不能把 §5.1 的生产契约写成消费端已经执行的校验。§5.1 上界的含等号勘误已随前置 PR #68 合入；本 PR 不修改 consumer.py 或抢先声明该防护已实现。后续由 C2 在独立任务中增加 `last.rows > inferred_chunk_points` 拒收，整除末片等于名义分片必须允许；单片仍遵循本段方案 C。正式运行的配置配对证明由调用方留证；此责任澄清须按 §13 审阅，不能用它放宽正式验收门槛。
 
 **随机性**：采用 `numpy.random.default_rng(seed)`；为不同设备和噪声/故障机制建立稳定的子随机流，避免算法修改导致无关随机数漂移。同配置、同 seed、同版本生成数值应逐点一致；`run_id` 和 wall-clock 运行时间允许不同。时钟基于起始 UTC + 采样序号计算，不以每循环累加浮点时间。
 
@@ -208,7 +208,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 `device_id` 和 `run_id` 在分片对应的 manifest 元数据中给出；一个运行只对应一个设备（多设备通过多个 run 支持，避免本期接口歧义）。消费者读取时必须 `np.load(path, allow_pickle=False)`；不得读取对象 pickle。类型或数值错误按消费者错误策略拒收并记日志。
 
-**短尾片（`total_points` 不是 `chunk_points` 整数倍）**：`chunk_points` 是名义分片大小，不是整除要求，生产者不得因为不整除而拒绝配置，也不得为凑整而补点。分片数 `n = ceil(total_points / chunk_points)`；前 `n-1` 片每片 `chunk_points` 行，**最后一片为 `total_points - (n-1) * chunk_points` 行**（因此必然满足 `1 ≤ rows < chunk_points`）。短尾片在其余方面与普通分片完全相同：`part_id` 仍从 0 连续、`rows` 与文件内实际行数一致、SHA-256 覆盖实际字节、Manifest 的 `rows` 之和仍等于 `total_points`。短尾片不得与前一合并、不得丢弃、不得用重复或填充采样补齐。`docs/acceptance.md` 第 2 节规定的基准形状正是这种情形：1000000 点、`chunk_points=102400` 得到 10 片，即 9×102400 + 78400。
+**短尾片（`total_points` 不是 `chunk_points` 整数倍）**：`chunk_points` 是名义分片大小，不是整除要求，生产者不得因为不整除而拒绝配置，也不得为凑整而补点。分片数 `n = ceil(total_points / chunk_points)`；前 `n-1` 片每片 `chunk_points` 行，**最后一片为 `total_points - (n-1) * chunk_points` 行**（因此必然满足 `1 ≤ rows ≤ chunk_points`）。注意上界是**含等号**的：当 `total_points` 恰为 `chunk_points` 的整数倍时 `ceil` 不进位，末片行数**等于** `chunk_points` 而非小于它；只有 `total_points` 不是整数倍时末片才是真正的短尾片（`rows < chunk_points`）。消费端若据非末片推导名义分片大小并据此校验末片上界，必须用 `<=` 判定，用 `<` 会误拒合法的整除 run。短尾片在其余方面与普通分片完全相同：`part_id` 仍从 0 连续、`rows` 与文件内实际行数一致、SHA-256 覆盖实际字节、Manifest 的 `rows` 之和仍等于 `total_points`。短尾片不得与前一合并、不得丢弃、不得用重复或填充采样补齐。`docs/acceptance.md` 第 2 节规定的基准形状正是这种情形：1000000 点、`chunk_points=102400` 得到 10 片，即 9×102400 + 78400。
 
 **时间戳可表示范围**：`timestamp_ns` 为 `int64` UTC Unix 纳秒，上限 `2**63-1`（约 292 年跨度）。生产入口在创建运行目录之前用整数运算核算 `start_time_utc + total_points / sample_rate_hz` 是否会越界，越界则以 `ValueError` 拒绝，不写出任何分片或清单；生成端不得依赖 `int64` 回绕后的结果。
 
