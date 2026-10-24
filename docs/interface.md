@@ -206,7 +206,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 `device_id` 和 `run_id` 在分片对应的 manifest 元数据中给出；一个运行只对应一个设备（多设备通过多个 run 支持，避免本期接口歧义）。消费者读取时必须 `np.load(path, allow_pickle=False)`；不得读取对象 pickle。类型或数值错误按消费者错误策略拒收并记日志。
 
-**短尾片（`total_points` 不是 `chunk_points` 整数倍）**：`chunk_points` 是名义分片大小，不是整除要求，生产者不得因为不整除而拒绝配置，也不得为凑整而补点。分片数 `n = ceil(total_points / chunk_points)`；前 `n-1` 片每片 `chunk_points` 行，**最后一片为 `total_points - (n-1) * chunk_points` 行**（因此必然满足 `1 ≤ rows < chunk_points`）。短尾片在其余方面与普通分片完全相同：`part_id` 仍从 0 连续、`rows` 与文件内实际行数一致、SHA-256 覆盖实际字节、Manifest 的 `rows` 之和仍等于 `total_points`。短尾片不得与前一合并、不得丢弃、不得用重复或填充采样补齐。`docs/acceptance.md` 第 2 节规定的基准形状正是这种情形：1000000 点、`chunk_points=102400` 得到 10 片，即 9×102400 + 78400。
+**短尾片（`total_points` 不是 `chunk_points` 整数倍）**：`chunk_points` 是名义分片大小，不是整除要求，生产者不得因为不整除而拒绝配置，也不得为凑整而补点。分片数 `n = ceil(total_points / chunk_points)`；前 `n-1` 片每片 `chunk_points` 行，**最后一片为 `total_points - (n-1) * chunk_points` 行**（因此必然满足 `1 ≤ rows ≤ chunk_points`）。注意上界是**含等号**的：当 `total_points` 恰为 `chunk_points` 的整数倍时 `ceil` 不进位，末片行数**等于** `chunk_points` 而非小于它；只有 `total_points` 不是整数倍时末片才是真正的短尾片（`rows < chunk_points`）。消费端若据非末片推导名义分片大小并据此校验末片上界，必须用 `<=` 判定，用 `<` 会误拒合法的整除 run。短尾片在其余方面与普通分片完全相同：`part_id` 仍从 0 连续、`rows` 与文件内实际行数一致、SHA-256 覆盖实际字节、Manifest 的 `rows` 之和仍等于 `total_points`。短尾片不得与前一合并、不得丢弃、不得用重复或填充采样补齐。`docs/acceptance.md` 第 2 节规定的基准形状正是这种情形：1000000 点、`chunk_points=102400` 得到 10 片，即 9×102400 + 78400。
 
 **时间戳可表示范围**：`timestamp_ns` 为 `int64` UTC Unix 纳秒，上限 `2**63-1`（约 292 年跨度）。生产入口在创建运行目录之前用整数运算核算 `start_time_utc + total_points / sample_rate_hz` 是否会越界，越界则以 `ValueError` 拒绝，不写出任何分片或清单；生成端不得依赖 `int64` 回绕后的结果。
 
