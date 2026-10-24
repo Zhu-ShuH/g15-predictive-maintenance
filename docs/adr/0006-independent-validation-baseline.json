@@ -1,0 +1,148 @@
+{
+  "format": "review-baseline-v1",
+  "status": "proposed_unfrozen",
+  "prepared_by": "Codex under group leader next-round authorization",
+  "main_ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+  "candidate_pr": 54,
+  "candidate_ref": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+  "integrated_validation_commit": null,
+  "new_holdout_seed": null,
+  "new_holdout_generated": false,
+  "rules_frozen": false,
+  "digest_bytes": "raw Git blob bytes; no newline conversion",
+  "files": [
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_burst_seed20261016.yaml",
+      "git_blob_sha": "2720b23856b5421c592c04be0dc81e001e989334",
+      "sha256_raw": "e2a847f905f000cc547ba94229b4797a1d9519d19059637e40e04ae4d48f7a2b",
+      "bytes": 923
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_burst_seed42.yaml",
+      "git_blob_sha": "7d64cf3c2e194e4b4fa1f729cc5c5ad7b0421f58",
+      "sha256_raw": "ef39be424fc5cd3112b15d9b6657058ebf9662f7297cf1ae97392e4be30d3d0e",
+      "bytes": 905
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_degradation_seed20261016.yaml",
+      "git_blob_sha": "5256b67d57198b714f4a95481bfdddfe3f49230d",
+      "sha256_raw": "bd6f176b649982d6737be65400c5b2c2b5b05640c9d2bce027a7b456e362de91",
+      "bytes": 826
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_degradation_seed42.yaml",
+      "git_blob_sha": "c14f2e68d59a0bff10b7b549a2d388fb255574f3",
+      "sha256_raw": "337ddb1670868ae3d58a9ab47e0890898f5a4b728ddaf425a40c21e9afd80896",
+      "bytes": 808
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_healthy_seed20261016.yaml",
+      "git_blob_sha": "06b5e57960feba05f5dcf9e61ed843edeceb99be",
+      "sha256_raw": "2d36bcfe22ddc47f844815f9fe2157fcf1ee1efb0185aed1f4c7939dd6f8bee1",
+      "bytes": 798
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_healthy_seed42.yaml",
+      "git_blob_sha": "f7db7f0dc7dfa17a439eafb8309b265e0d09ddc8",
+      "sha256_raw": "8c3f6351e3caa971387d8a8fa264db2860130ba820031b24bc571440b5f6e3eb",
+      "bytes": 780
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_spike_seed20261016.yaml",
+      "git_blob_sha": "873e4d39de8587cf335e4672b6a0d0af86d16ce2",
+      "sha256_raw": "ea5e8b14758f7692ea14e7314fb722219fa8ba8ac17dc519560ae21f80404705",
+      "bytes": 921
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_spike_seed42.yaml",
+      "git_blob_sha": "f1285e67e009eab01800790ae7793644f27ee2e7",
+      "sha256_raw": "afcc051d8c23a7f32fa6fd3b6b04eb345d1ab367603e0c62cdfc58ce2f6ff18c",
+      "bytes": 903
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_step_seed20261016.yaml",
+      "git_blob_sha": "21308b5734bd129cf4110325abb69fd799f4d6b7",
+      "sha256_raw": "40ca4fa3aad114d7dface6f4b5f038893175bc7f52a9fbd9bdac14f9c69eac7f",
+      "bytes": 919
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/acceptance_step_seed42.yaml",
+      "git_blob_sha": "a3d1af8ad3f9c478ae4a4b9cf6f025612fcdf146",
+      "sha256_raw": "3713e6bcf6e6a4e1da96da8ad535863e629aedd2f55a00a2babf4d34a881f240",
+      "bytes": 901
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "configs/consumer.yaml",
+      "git_blob_sha": "036d8910cae39adb7fbac86ee298ad7081ebb975",
+      "sha256_raw": "8006460052a9b741c1595ec94e5c487e99e54931315bc87482c9b197a5adde8c",
+      "bytes": 211
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "docs/acceptance.md",
+      "git_blob_sha": "fb03105740c4fc70d355b7579154f036c906c930",
+      "sha256_raw": "9afaa205013a0d4cb7bd5bfab1d73104af3832bbd5e065c06550d67becedd8b7",
+      "bytes": 7345
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "docs/adr/0004-recovery-and-independent-evaluation.md",
+      "git_blob_sha": "433adbded66a16c92cbbd120b3547bc93a2d16c8",
+      "sha256_raw": "9178039186187d2ec25a74171e9a2862794b7ba2365d6ce5db6685f03756b00d",
+      "bytes": 1786
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "docs/interface.md",
+      "git_blob_sha": "211abe3b72c82a9f62b24c17fc310a00976733ec",
+      "sha256_raw": "5ff85a3395aca16faf7f7ca9fe2b75fb2af9e63d3d4d487021a9387d6cb9e5f0",
+      "bytes": 36849
+    },
+    {
+      "ref": "c60f3904567aa5f0b637494abb231de597f5ab37",
+      "path": "docs/test_plan.md",
+      "git_blob_sha": "46d4d5ed440e2fa4892a7d9957c948623a58abf5",
+      "sha256_raw": "c728fced1a33952fd735c059c48746692aaba633819c3bffb931eac9acfb744b",
+      "bytes": 81
+    },
+    {
+      "ref": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+      "path": "configs/health_rules.yaml",
+      "git_blob_sha": "5ec8114b9c765de53942f5b091253505391bddcd",
+      "sha256_raw": "2b3a2763c72e32abd276b2d2617224b8bb941ca5d82807d2258db8d4c3f92d8b",
+      "bytes": 4111
+    },
+    {
+      "ref": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+      "path": "src/g15/analysis/alarms.py",
+      "git_blob_sha": "4bfee9dcbad9e8af7fd26a4d55083daf7c0d1378",
+      "sha256_raw": "02c89e9028ea101c7d7062dfd95b0bf9d5c609d741263fe924614213bf70f7e9",
+      "bytes": 19358
+    },
+    {
+      "ref": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+      "path": "src/g15/analysis/features.py",
+      "git_blob_sha": "601d4c5aaa741682a343a98cd128077197dec4e1",
+      "sha256_raw": "9a61200bc91c954f70be066182436e5a57ebcd0e0535d235010fc60f34e1ea76",
+      "bytes": 12220
+    },
+    {
+      "ref": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+      "path": "src/g15/analysis/health.py",
+      "git_blob_sha": "cab284f9f2ba227fffacca75d43c3eb7d3cae982",
+      "sha256_raw": "f356bc0e8f65b263652347206f20516cb88285d8f18ef3858246a11a871da98f",
+      "bytes": 19774
+    }
+  ]
+}
