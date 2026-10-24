@@ -183,7 +183,11 @@ health_rules_file: 'configs/health_rules.yaml'
 
 消费者只读取公开 Manifest、NPZ 和该消费配置；`sample_rate_hz` 从 Manifest 取得。C3 与 B2/C2/C4 在接口评审时确认上述键名、路径解析与默认行为，增加测试证明消费配置没有故障位置。
 
-**参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。配置配对必须保证 `chunk_points % window_points == 0`；消费端在业务结果写入前核对公开 Manifest 中所有非末片 `rows` 一致且可被 `window_points` 整除。**单片责任采用方案 C 提案**：单片只有末片，现有 Manifest 没有名义 `chunk_points`，消费者不能据公开输入验证该名义值的整除关系；配置配对检查由调用方保证，消费者不得将不可执行的检查报告为“已通过”。消费者仍只读公开 Manifest、NPZ 与独立消费配置，不加载生产场景 YAML 或 `fault_generation`。真实末片余数按 `drop/error` 处理，少于一窗且 `drop` 时可成功而没有特征/告警。 **多片末片上界另作显式披露（B1 R-2 方案 B）**：虽然可由非末片推断名义分片长度，当前 consumer 仍未检查末片是否超过该值；末片行数上界由生产者保证，不能把 §5.1 的生产契约写成消费端已经执行的校验。§5.1 上界的含等号勘误已随前置 PR #68 合入；本 PR 不修改 consumer.py 或抢先声明该防护已实现。后续由 C2 在独立任务中增加 `last.rows > inferred_chunk_points` 拒收，整除末片等于名义分片必须允许；单片仍遵循本段方案 C。正式运行的配置配对证明由调用方留证；此责任澄清须按 §13 审阅，不能用它放宽正式验收门槛。
+**参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。配置配对必须保证**名义分片尺寸** `chunk_points % window_points == 0`；消费端在业务结果写入前核对公开 Manifest 中所有非末片 `rows` 一致且可被 `window_points` 整除。**单片责任采用方案 C 提案**：单片只有末片，现有 Manifest 没有名义 `chunk_points`，消费者不能据公开输入验证该名义值的整除关系；配置配对检查由调用方保证，消费者不得将不可执行的检查报告为“已通过”。消费者仍只读公开 Manifest、NPZ 与独立消费配置，不加载生产场景 YAML 或 `fault_generation`。末片实际长度不要求被 `window_points` 整除；真实末片余数按 `drop/error` 处理，少于一窗且 `drop` 时可成功而没有特征/告警。
+
+**多片末片上界另作显式披露（B1 R-2 方案 B）**：虽然可由非末片推断名义分片长度，当前 consumer 仍未检查末片是否超过该值；末片行数上界由生产者保证，不能把 §5.1 的生产契约写成消费端已经执行的校验。§5.1 上界的含等号勘误已随前置 PR #68 合入；本 PR 不修改 consumer.py 或抢先声明该防护已实现。后续由 C2 在独立任务中增加 `last.rows > inferred_chunk_points` 拒收，整除末片等于名义分片必须允许；单片仍遵循本段方案 C。
+
+**真实末片丢点示例**：`configs/benchmark_1m.yaml` 的 `total_points=1000000`、`chunk_points=102400`，独立消费窗为 256 时，末片 78400 行满足 `78400 = 306 × 256 + 64`；公开入口实跑得到 `windows_written=3906`、`windows_dropped=64`、10 片。该结果在受测树 `82bafa4`（与 main `12e35e9c` 的 src/configs 相同）复验，没有修改 seed 或规则。这 64 点是**合法末片不足窗的 drop 策略结果**，不是“末片超过名义分片”的证据。另行公开 API 探针将形状改为 `[128,256]`、窗64，目前仍被接受并产生6窗，才直接证明末片超长的拒收防护缺失。#69 将拒收后者，合法基准的64点仍按既定 drop 策略统计并打印，不把它修饰成0。正式运行的配置配对证明由调用方留证；此责任澄清须按 §13 审阅，不能用它放宽正式验收门槛。
 
 **随机性**：采用 `numpy.random.default_rng(seed)`；为不同设备和噪声/故障机制建立稳定的子随机流，避免算法修改导致无关随机数漂移。同配置、同 seed、同版本生成数值应逐点一致；`run_id` 和 wall-clock 运行时间允许不同。时钟基于起始 UTC + 采样序号计算，不以每循环累加浮点时间。
 
@@ -332,7 +336,7 @@ build_report(run_dir: Path, database_path: Path) -> Path
 
 消费入口从公开样本的绝对 `seq` 传入 `window_start_seq`；离线单窗特征/评分可省略它，进入告警链时必须有窗口位置。`end_seq_exclusive = start_seq + window_points`，但该算式不能代替真实 seq 连续性检查。consumer 检查首片从 0 开始、跨片首尾连续、跨窗无空洞/重叠，恢复时从已提交位置继续；每次 `read_chunk` 传入 `run_dir=`。非末片整除与单片不可推断边界见 §4，只有真实末片可应用不足窗策略。
 
-`consume_run(run_dir, database_path, config)` 返回的 `ConsumptionSummary` 包含 `run_id/device_id/windows_written/alarms_written/shards_processed/shards_skipped/windows_dropped`。`windows_dropped` 沿用既有名称，单位是被丢弃的**样本点数**，不是窗口数；改名会破坏既有调用接口，本次不改名。重复消费已提交同 SHA 的片只跳过分析，不丢失已提交状态。
+`consume_run(run_dir, database_path, config)` 返回的 `ConsumptionSummary` 包含 `run_id/device_id/windows_written/alarms_written/shards_processed/shards_skipped/windows_dropped`。`windows_dropped` 沿用既有名称，单位是被丢弃的**样本点数**，不是窗口数；改名会破坏既有调用接口，本次不改名；如需改名，按 §13 接口变更流程办理。重复消费已提交同 SHA 的片只跳过分析，不丢失已提交状态。
 
 SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。现有公开重置能力仍在 `ConsumptionRepository.reset_alarm_state`；consumer 级包装签名、审计返回与新增 CLI 子命令由 #65 另行提出，不在此臆造函数或扩大修改范围。
 
