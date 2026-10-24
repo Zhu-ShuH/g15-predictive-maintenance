@@ -80,8 +80,13 @@ C5在已批准方案和固定集成提交上首次生成并执行保留验证，
 
 A/Codex按组长“执行A侧所有待办”回应B1 review5637840805。#54已经合入main `81c13d17faf8189a240989b4ee43b937820bb911`，原#54最终候选的算法/规则文件已成为主线内容。下面保留的T66审阅附件仍记录当时main/candidate原ref；**19项原始blob、字节数与SHA-256已在T69全部核对，与当时main81c13d17对应文件一致**；该结论属于T69，不冒称T73重新计算。附件不是完整集成验证基线，不因算法合入而自动冻结；其integrated_validation_commit与new_holdout_seed仍null，rules_frozen=false，原摘要清单逐字节保留。
 
-当前consumer/storage证据固定#64 `8b47fe307ffeacffd7381e917afa1daed53b6e2b`，集成状态以合并回执为准；reporting与独立验证器仍待C5。**非末片整除预检与重置审计保留已在候选实现**，A于T73独立复验并发布[当前head复审5637899740](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64#pullrequestreview-5637899740)。T69旧head/23项结果仅作历史证据，不再列为当前待修。规则内容/尾窗策略身份、正常legacy自动兼容与#57公共契约仍待收口。不能用算法文件相同跳过完整集成审核。附件固定ref为历史审阅快照，非当前main，原JSON不改写。
+T74当前main为 `c4f1cfa3ef6fb9f670fce82ceeb6abafeafdc770`，#64于2026-10-24 18:24:21以固定8b47fe3 squash合入，#8已closed；consumer/storage已经落地，实跑证据仍固定 `8b47fe307ffeacffd7381e917afa1daed53b6e2b`，合后126文件blob/模式与之相同。reporting与独立验证器仍待C5。**非末片整除预检与重置审计保留已在候选实现**，A于T73独立复验并发布[当前head复审5637899740](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64#pullrequestreview-5637899740)。T69旧head/23项结果仅作历史证据，不再列为当前待修。规则内容/尾窗策略身份、正常legacy自动兼容与#57公共契约仍待收口。不能用算法文件相同跳过完整集成审核。附件固定ref为历史审阅快照，非当前main，原JSON不改写。
 
 **下一可交付物属于C5本人**：请给数据接触范围声明，固定验证器源码与版本、匹配/误报/冗余/未匹配的可执行测试、保留数据生成/保管/首次披露方案，以及失败结果留存与重新开发后的轮次处理。B2核规则/开发依据与已接触数据范围，C4核公开输入与一对一匹配口径。A审核实际标准/测试差异并收齐Review后才记录冻结；没有C5回复时不能代填独立性确认或先跑新seed。
 
 T69完成19项既有摘要/JSON/原ref与当时main比对；T73本次只改协议的过期状态与相对链接检查，未重算19项；**未生成或运行任何新保留数据，未改验收标准、规则、测试期望或seed**。T73 Windows消费35项通过、全量519 passed/8 skipped（Python3.14.6/NumPy2.4.6）是#64复审证据，不是本协议的独立检出或双Linux成绩。本草稿保持未冻结，不关闭#56。
+
+
+## 2026-10-24 T74：正文送审与集成状态补记
+
+#62已由A转为ready for review并正式请求B1/C5/B2/C4审阅，提案未冻结；原B1 CR仍需本人正式复审解除。T73发布后另核原附件19项blob/字节数/SHA-256均与main c4f1cfa3一致，回执见[#56评论6383082993](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6383082993)。原附件不改，完整独立验证集成提交与新seed仍null，不把“已有消费/存储集成”当成“验证器/报告/双Linux齐备”。
