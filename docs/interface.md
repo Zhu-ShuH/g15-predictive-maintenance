@@ -5,6 +5,8 @@
 > 状态：**设计基线（待小组审核/实现）**。本文是项目册 G15 和课程 P4.1/P2.2 的小组技术落地方案；NPZ、SQLite、CLI、字段名、阈值等均为小组选定的工程约定，不是教师原文强制技术栈。组长审核通过后冻结 `schema_version=1.0`。若此前草案写的是 CSV 分片，**以本版 NPZ 分片为准**，CSV 仅可选导出。
 > 2026-10-15 更新：先读资料包根目录 `00_先读_统一决策与待确认事项.md`；当前没有完成组内冻结或任何代码实测。下述 14 天为相对计划模板，实际截止日待确认。
 
+> **接口修订待审（T74，2026-10-24）**：本分支将 #57/#61 的持久化与单片责任提案落实为可审阅的正文差异，关联 #2/#65。该修订未合并前不改变 main 的接口基线，不代表相关成员已确认或 Linux 兼容已通过。规则/阈值、Manifest 字段与 SQLite 表列保持；新增显式重置命令及公开签名继续单独评审。
+
 ## 0. 依据、目标和约束
 
 项目册 G15 五项必验：①趋势+噪声+突发故障的退化仿真；②退化速率/故障率配置化；③下游特征→健康评分→告警；④闭环联调报告；⑤仿真消费解耦接口。G15 四项硬指标：**100 万点仿真 <60 s**、**受控注入故障 100% 被捕获**、接口文档完整、改参数不用改代码。关键技术：随机过程和 seed、管线集成、上下游时钟对齐。
@@ -181,7 +183,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 消费者只读取公开 Manifest、NPZ 和该消费配置；`sample_rate_hz` 从 Manifest 取得。C3 与 B2/C2/C4 在接口评审时确认上述键名、路径解析与默认行为，增加测试证明消费配置没有故障位置。
 
-**参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。两份配置的窗口整除关系在消费入口校验。
+**参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。配置配对必须保证 `chunk_points % window_points == 0`；消费端在业务结果写入前核对公开 Manifest 中所有非末片 `rows` 一致且可被 `window_points` 整除。**单片责任采用方案 C 提案**：单片只有末片，现有 Manifest 没有名义 `chunk_points`，消费者不能据公开输入验证该名义值的整除关系；配置配对检查由调用方保证，消费者不得将不可执行的检查报告为“已通过”。消费者仍只读公开 Manifest、NPZ 与独立消费配置，不加载生产场景 YAML 或 `fault_generation`。真实末片余数按 `drop/error` 处理，少于一窗且 `drop` 时可成功而没有特征/告警。正式运行的配置配对证明由调用方留证；此责任澄清须按 §13 审阅，不能用它放宽正式验收门槛。
 
 **随机性**：采用 `numpy.random.default_rng(seed)`；为不同设备和噪声/故障机制建立稳定的子随机流，避免算法修改导致无关随机数漂移。同配置、同 seed、同版本生成数值应逐点一致；`run_id` 和 wall-clock 运行时间允许不同。时钟基于起始 UTC + 采样序号计算，不以每循环累加浮点时间。
 
@@ -297,7 +299,7 @@ read_chunk(path: Path, manifest_entry: ChunkManifestEntry, *, run_dir: Path | No
 produce_run(config: ScenarioConfig, output_root: Path) -> Path  # 返回 run_dir
 
 # analysis/features.py
-extract_features(vibration: NDArray, sample_rate_hz: int) -> FeatureRecord
+extract_features(vibration: NDArray, sample_rate_hz: int, *, window_start_seq: int | None = None) -> FeatureRecord
 
 # analysis/health.py
 score_health(features: FeatureRecord, rules: HealthRules) -> HealthResult
@@ -325,6 +327,14 @@ build_report(run_dir: Path, database_path: Path) -> Path
 把空块作为 NPZ 分片发布；生产配置和分片非空约束继续按 §4、§5 执行。
 
 **设计约束**：特征、评分、告警规则尽量使用无副作用的纯函数；文件 I/O 仅位于 pipeline/storage/reporting；不跨模块 import 私有 `_name`；不在 import 时执行仿真或访问文件。不要把 `assert` 用于生产输入校验，应使用 `ValueError`/专门异常并映射到明确的 CLI 退出码。
+
+### 6.1 消费窗口、存储与 CLI 的责任
+
+消费入口从公开样本的绝对 `seq` 传入 `window_start_seq`；离线单窗特征/评分可省略它，进入告警链时必须有窗口位置。`end_seq_exclusive = start_seq + window_points`，但该算式不能代替真实 seq 连续性检查。consumer 检查首片从 0 开始、跨片首尾连续、跨窗无空洞/重叠，恢复时从已提交位置继续；每次 `read_chunk` 传入 `run_dir=`。非末片整除与单片不可推断边界见 §4，只有真实末片可应用不足窗策略。
+
+`consume_run(run_dir, database_path, config)` 返回的 `ConsumptionSummary` 包含 `run_id/device_id/windows_written/alarms_written/shards_processed/shards_skipped/windows_dropped`。`windows_dropped` 沿用既有名称，单位是被丢弃的**样本点数**，不是窗口数。重复消费已提交同 SHA 的片只跳过分析，不丢失已提交状态。
+
+SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。现有公开重置能力仍在 `ConsumptionRepository.reset_alarm_state`；consumer 级包装签名、审计返回与新增 CLI 子命令由 #65 另行提出，不在此臆造函数或扩大修改范围。
 
 ## 7. 仿真模型规范
 
@@ -386,7 +396,15 @@ crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
 
 建议黄级阈值、红级阈值及“连续 N 窗口触发”均配置化；规则应包括异常原因、触发指标和窗口位置。同一运行/设备/规则/窗口有唯一告警键；支持恢复状态和防抖。健康分变低时告警级别不能倒挂。
 
-**冻结前必须补齐的状态契约**：B2 与 C2 共同定义告警连续计数、升级/恢复和跨分片状态如何持久化或从已提交窗口可靠重建；C2 保证状态与窗口、告警、`processed_chunks` 在同一事务提交。A 审核后再实现 `kill -9` 恢复，不能只依赖进程内存状态。
+**持久状态与兼容边界（#57 提案）**：`AlarmState` 八键为 `active_level`、`consecutive_breaches`、`normal_windows`、`alarm_windows`、`last_window_start_seq`、`recovered_at_seq`、`scoring_version`、`rule_id`。计数是非负 JSON 整数，不能接受布尔值；位置按可空整数字段与单调性校验。带可继承历史时，规则身份与最后窗口位置必须可核且相容，不把缺身份历史当作新空状态，不回填无从证明的来源。
+
+当前存储信封为 `state_schema_version="1"`、`state`、`reset_event`，有历史重置时可附 `reset_history`。正常恢复缺版本、未知版本、缺/多状态键或非法类型均明确拒收；包括无历史 legacy 的自动迁移目前未实现，不能承诺“空旧行自动续跑”。B2/C2 仍须逐项确认类型与迁移口径，不能只凭算法层拒收就声称数据库恢复安全。
+
+显式重置与正常恢复分开：操作者重置留旧原文、原因和 UTC 时刻，后续状态写入及重开库不得抹掉审计，多次重置按最旧到最新保留历史。现有实现允许显式归档不可解码原文，是否将未来版本/损坏 JSON 纳入公共运维策略须受影响角色明确评议；`allow_legacy=False` 的严格路径保留。CLI 对应入口及确认参数仍按 #65 单独审阅。
+
+**重置 streak 不等于重新分析 run**：该动作不清除旧结果/`processed_chunks`，不更新 `runs.scoring_version`，不能作为变更规则/窗宽后“整 run 重算”的承诺。当前更换分析配置应保留原库、向新数据库消费；任何覆盖旧库或新增选择参数必须另行明确操作和审计。不得在消费失败时自动重置。
+
+C2 保证状态与窗口、告警和 `processed_chunks` 按片同事务提交，重启只采用已提交态；真实 `kill -9` 与双 Linux 恢复证据仍须另外交付，不能仅依赖进程内存或异常注入测试。
 
 ### 8.5 故障捕获率的严格口径
 
@@ -448,7 +466,18 @@ CREATE TABLE alarm_states (
 ```
 
 `PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;`（在数据库连接/初始化环节执行并验证）。主键和外键语义需测试。所有写入使用 `with connection:` 事务；**特征/健康分/告警/分片完成标记在同一事务内提交**。遭遇 kill -9，未提交事务自动回滚；重启时从 `processed_chunks` 判断需重放的输入，依唯一键避免重复结果。若同名 `part_id` 的 SHA-256 被改变，必须拒绝重放并报契约冲突，不得静默覆盖。
-`alarm_states` 是跨分片告警状态的**待评审候选表**，用于将连续计数、当前等级和恢复进度随分片一起提交。B2/C2 须明确 `state_json` 的版本和字段、`last_end_seq_exclusive` 的连续性检查，A 审核后才实现；不得仅保存进程内状态。
+`alarm_states` 已在 #64 消费/存储实现落地，承载跨分片状态；公共 JSON 与兼容口径按 §8.4/§9.1 本次提案审阅，不把实现合入等同于全组契约冻结。`last_end_seq_exclusive` 是提交进度锚点，正常连续窗口与最后起点/窗宽一致；显式重置可清空 streak 但保留消费进度，须区分这两类状态。
+
+### 9.1 JSON 信封、追溯与重放
+
+上述五表、字段、主键和外键不因 JSON 信封新增或改变：
+
+- `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
+- 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION="1.0"` 是另一个常量。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
+- `alarms.created_at` 是消费落库 UTC RFC3339 `Z` 时间，不是数据采样时刻或真值事件时间；run/device 来源于公开 Manifest。
+- `runs.status` 镜像 Manifest 状态，不代表消费已完成；完成进度由已提交 `processed_chunks` 与 Manifest 对照。相同 run 的已记录元数据/评分版本与已有窗口宽度冲突时拒收。
+- 同片同 SHA 重放跳过分析、保留已提交状态；同 ID 异 SHA 拒收。片事务成功后才推进内存状态，失败/重启从提交态恢复，不继承未提交的计算结果。
+- 当前对同版本号规则内容、`incomplete_window` 变化没有完整持久化指纹/自动检测，不能声称已验证全部分析身份。变更配置须保留旧结果并在新数据库重算；C2 提出指纹/兼容方案后按 §13 更新，不能静默扩 schema。本条披露限制，不把未实现的检测写成验收通过。
 
 ## 10. CLI 契约和退出码
 
@@ -465,6 +494,12 @@ python -m g15 doctor
 ```
 
 输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上述 CLI 是待实现的接口规格，不是已经运行的命令。**
+
+### 10.1 consume 的编排与可见性
+
+数据库路径沿用 §11 的 `run_dir/artifacts/results.sqlite`，不新增 `--database` 或生产场景输入参数。参数/消费配置错误映射 2，Manifest/分片/数据库 I/O 或兼容错误映射 3，未预期错误映射 5，正常完成与同配置幂等重放返回 0；具体异常集合由 C2/C3 对接，不能宽泛捕获后返回成功。
+
+若本次 `shards_processed > 0`、`windows_written == 0` 且 `windows_dropped > 0`，stderr 必须给出丢弃样本数；同片全 skip 且无本次丢点不误报警。0 窗口成功不是“已完成故障检出验收”。`reset-alarms` 的公开函数/参数/审计输出未在此冻结，consume 失败绝不自动触发重置。
 
 ## 11. 报告与运行目录
 
