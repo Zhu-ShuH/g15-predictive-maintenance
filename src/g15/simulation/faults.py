@@ -33,7 +33,11 @@ type         expression                                  notes
 ``D`` is ``duration_points``, ``sr`` is ``scenario.sample_rate_hz``, ``A`` is
 ``amplitude``. Only ``vibration`` is modified: section 7.2 does not authorize
 temperature injection, so temperature, ``seq`` and ``timestamp_ns`` are passed
-through untouched.
+through untouched. A ``burst`` additionally requires ``D >= 3``; shorter
+events are rejected because their Hann window would be identically zero, which
+would make them undetectable while still counting towards the detection
+denominator (A ruling on PR #27). Legal single-point ``spike``/``step``
+events are unaffected.
 
 Overlap policy
 --------------
@@ -60,10 +64,11 @@ instead of inventing parameters.
 
 Chunk ownership
 ---------------
-``SimulationChunk`` currently lives in :mod:`g15.simulation.engine` (PR #15,
-pending A review); Issue #17 may move it to :mod:`g15.common.types`. This module
-only needs the four array attributes plus a dataclass ``replace``, so it does
-not import the type at runtime and only references it for annotations.
+``SimulationChunk`` has a unique home in :mod:`g15.common.types` since
+Issue #17 (PR #31); :mod:`g15.simulation.engine` re-exports the same object.
+This module only needs the four array attributes plus a dataclass ``replace``,
+so it does not import the type at runtime and only references it for
+annotations.
 """
 
 from __future__ import annotations
@@ -77,7 +82,7 @@ from typing import TYPE_CHECKING, Any, Final
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checkers only
-    from g15.simulation.engine import SimulationChunk
+    from g15.common.types import SimulationChunk
 
 __all__ = ["FAULT_TYPES", "FaultEvent", "inject_faults"]
 
@@ -92,6 +97,13 @@ _SPIKE_DECAY_FRACTION: Final[float] = 4.0
 
 #: ``burst`` oscillation frequency expressed as samples per cycle.
 _BURST_SAMPLES_PER_CYCLE: Final[float] = 8.0
+
+#: Shortest ``burst`` the injector accepts.  The Hann window is identically
+#: zero for ``D <= 2`` (and ``D == 1`` additionally sits on a carrier zero
+#: crossing), so shorter events would be injected as silence while still
+#: counting towards the detection denominator.  A ruling on PR #27: reject
+#: them instead of guessing a waveform.
+_BURST_MIN_DURATION: Final[int] = 3
 
 _ABSENT: Final[object] = object()
 
@@ -257,14 +269,25 @@ def _step_waveform(offset: np.ndarray, amplitude: float) -> np.ndarray:
 def _burst_waveform(offset: np.ndarray, amplitude: float, duration: int) -> np.ndarray:
     """Return a windowed oscillation ``A * sin(2*pi*k/8) * hann(k)``.
 
-    The window is the periodic-free Hann shape normalised by ``D - 1``, so the
-    first and the last sample of the event are exactly ``0``. That keeps a
-    chunk boundary inside the event free of any artificial jump, and makes the
-    waveform identical whether it is generated in one pass or per chunk.
+    The carrier completes ``_BURST_SAMPLES_PER_CYCLE = 8`` samples per period,
+    i.e. a physical frequency of ``sample_rate_hz / 8`` Hz (25 Hz at the
+    default 100 Hz rate).  The phase is driven by the absolute offset ``k`` in
+    samples, so the waveform shape is identical at every sampling rate when
+    indexed by ``seq``; only the physical frequency it represents scales with
+    ``sample_rate_hz``.  That is the frozen behaviour, not an aliasing defect.
+
+    The window is the Hann shape normalised by ``D - 1``, so the first and the
+    last sample of the event are exactly ``0``.  That keeps a chunk boundary
+    inside the event free of any artificial jump, and makes the waveform
+    identical whether it is generated in one pass or per chunk.
+
+    Callers must guarantee ``duration >= _BURST_MIN_DURATION``: for shorter
+    events the window would be identically zero and the carrier's first sample
+    sits on a zero crossing, so the "injected" signal would be indistinguishable
+    from an untouched one while the truth record still counts towards the
+    detection denominator.  :func:`_parse_events` rejects such events outright.
     """
     phase = 2.0 * np.pi * offset / _BURST_SAMPLES_PER_CYCLE
-    if duration <= 1:
-        return amplitude * np.sin(phase)
     window = 0.5 - 0.5 * np.cos(2.0 * np.pi * offset / (duration - 1))
     return amplitude * np.sin(phase) * window
 
@@ -316,8 +339,9 @@ def _parse_events(
         The events in configuration order.
 
     Raises:
-        ValueError: for a malformed event, a duplicated ``event_id``, or an
-            interval that leaves ``[0, total_points)``.
+        ValueError: for a malformed event, a duplicated ``event_id``, a
+            ``burst`` shorter than ``_BURST_MIN_DURATION``, or an interval
+            that leaves ``[0, total_points)``.
     """
     if raw is None:
         return []
@@ -354,6 +378,14 @@ def _parse_events(
             raise ValueError(f"{path}.start_seq must be non-negative, got {start}")
         if duration <= 0:
             raise ValueError(f"{path}.duration_points must be positive, got {duration}")
+        if kind == "burst" and duration < _BURST_MIN_DURATION:
+            raise ValueError(
+                f"{path}: burst requires duration_points >= {_BURST_MIN_DURATION}, "
+                f"got {duration}. The Hann window is identically zero for shorter "
+                "events, so the injected signal would be indistinguishable from "
+                "an untouched one while the truth record still counts towards "
+                "the detection denominator (A ruling on PR #27)."
+            )
         end = start + duration
         if total_points is not None and end > total_points:
             raise ValueError(

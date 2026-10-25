@@ -12,12 +12,25 @@ asserted untouched wherever it matters.
 
 from __future__ import annotations
 
+import copy
+import datetime as dt
 from collections.abc import Sequence
 
 import numpy as np
 import pytest
 
-from g15.simulation.engine import SimulationChunk, simulate_chunk, timestamp_ns_for
+from g15.common.types import SimulationChunk
+from g15.config import (
+    FaultEvent as ConfigFaultEvent,
+)
+from g15.config import (
+    FaultGenerationConfig,
+    ScenarioBlock,
+    ScenarioConfig,
+    SignalConfig,
+    SignalsBlock,
+)
+from g15.simulation.engine import simulate_chunk, timestamp_ns_for
 from g15.simulation.faults import FaultEvent, inject_faults
 
 _DEVICE = "DEV-001"
@@ -319,3 +332,104 @@ def test_stochastic_probability_is_not_implemented() -> None:
     config = _config([], 6, mode="stochastic", probability=0.1)
     with pytest.raises(NotImplementedError):
         inject_faults(_chunk(0, [0.0] * 6), config)
+
+
+def test_burst_below_three_points_is_rejected() -> None:
+    """A ruling on PR #27: short bursts are refused, not injected as silence.
+
+    For ``D <= 2`` the Hann window ``0.5 - 0.5*cos(2*pi*k/(D-1))`` is
+    identically zero (and ``D == 1`` additionally sits on the carrier zero
+    crossing), so a "successful" injection would leave the signal untouched
+    while the truth record still counts towards the detection denominator.
+    """
+    for duration in (1, 2):
+        config = _config([_event(f"FB0{duration}", "burst", 2, duration, 5.0)], 6)
+        with pytest.raises(ValueError, match="duration_points >= 3"):
+            inject_faults(_chunk(0, [0.0] * 6), config)
+    # One-point spike/step stay legal: only burst carries the restriction.
+    config = _config([_event("FB10", "spike", 2, 1, 5.0)], 6)
+    result, truth = inject_faults(_chunk(0, [0.0] * 6), config)
+    assert truth[0].duration_points == 1
+    assert result.vibration[2] == pytest.approx(5.0)
+
+
+def test_rng_state_is_unchanged_by_injection() -> None:
+    """``rng`` is accepted but never consumed: its state must be bit-identical.
+
+    This is the PR #27 review requirement; it guarantees that a chunk can be
+    regenerated (retry, reordering, different shard size) without the fault
+    injection perturbing the shared random stream.
+    """
+    config = _config(
+        [
+            _event("FR01", "spike", 1, 4, 2.0),
+            _event("FR02", "burst", 4, 8, 3.0),
+        ],
+        12,
+    )
+    rng = np.random.default_rng(7)
+    state_before = copy.deepcopy(rng.bit_generator.state)
+    first, _ = inject_faults(_chunk(0, [1.0] * 12), config, rng=rng)
+    assert rng.bit_generator.state == state_before
+    # A fresh generator with the same seed must reproduce the same waveform.
+    second, _ = inject_faults(
+        _chunk(0, [1.0] * 12), config, rng=np.random.default_rng(7)
+    )
+    assert np.array_equal(first.vibration, second.vibration)
+
+
+def _loader_scenario(events: tuple[ConfigFaultEvent, ...]) -> ScenarioConfig:
+    """Return a real ``ScenarioConfig`` as the C3 loader would build it."""
+    return ScenarioConfig(
+        schema_version="1.0",
+        scenario=ScenarioBlock(
+            scenario_id="loader_compat_001",
+            description="constructed with the frozen dataclasses",
+            seed=42,
+            start_time_utc=dt.datetime(2026, 10, 14, tzinfo=dt.timezone.utc),
+            device_id=_DEVICE,
+            sample_rate_hz=_RATE,
+            total_points=8,
+            chunk_points=8,
+        ),
+        signals=SignalsBlock(
+            vibration=SignalConfig(
+                name="vibration",
+                baseline=1.0,
+                degradation_rate_per_sample=0.0,
+                noise_std=0.0,
+                unit="g",
+            ),
+            temperature=SignalConfig(
+                name="temperature",
+                baseline=35.0,
+                degradation_rate_per_sample=0.0,
+                noise_std=0.0,
+                unit="degC",
+            ),
+        ),
+        fault_generation=FaultGenerationConfig(
+            mode="manual",
+            stochastic_probability_per_window=0.0,
+            events=events,
+        ),
+    )
+
+
+def test_accepts_scenario_config_from_loader() -> None:
+    """The injector reads the C3 ``ScenarioConfig`` attributes directly."""
+    scenario = _loader_scenario(
+        (ConfigFaultEvent("FL01", "step", 5, 3, 2.0),),
+    )
+    chunk = simulate_chunk(scenario, 0, 8)
+    result, truth = inject_faults(chunk, scenario)
+    assert truth[0].event_id == "FL01"
+    assert truth[0].start_seq == 5
+    assert truth[0].end_seq_exclusive == 8
+    assert result.vibration[5:8] == pytest.approx([3.0, 3.0, 3.0])
+    # The same loader type propagates the short-burst rejection.
+    short = _loader_scenario(
+        (ConfigFaultEvent("FL02", "burst", 0, 2, 5.0),),
+    )
+    with pytest.raises(ValueError, match="duration_points >= 3"):
+        inject_faults(_chunk(0, [0.0] * 8), short)
