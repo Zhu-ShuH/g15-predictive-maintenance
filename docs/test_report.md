@@ -21,17 +21,24 @@
 | 项 | 值 |
 |---|---|
 | 基线提交 | `75b119454a1ac075620bdcc74826730fa7b4ac02` |
-| `configs/health_rules.yaml` SHA-256 | `c26bad78809424599a48ccebd7f92b1b290e9d598a0367778127c9e1b9c77f1f` |
-| `configs/consumer.yaml` SHA-256 | `aebb18a9191f154c16e1320a73d7593774879d44573d5c10811fea8e35c08bac` |
-| `configs/benchmark_1m.yaml` SHA-256 | `47ceeee975bae5ef0a47dddcb00b4468fb74430fcd6e5cee5a906640e0b4c1ab` |
+| `configs/health_rules.yaml` SHA-256（工作树 CRLF 字节） | `c26bad78809424599a48ccebd7f92b1b290e9d598a0367778127c9e1b9c77f1f` |
+| `configs/health_rules.yaml` SHA-256（Git LF blob 字节） | `2b3a2763c72e32abd276b2d2617224b8bb941ca5d82807d2258db8d4c3f92d8b` |
+| `configs/consumer.yaml` SHA-256（工作树 CRLF 字节） | `aebb18a9191f154c16e1320a73d7593774879d44573d5c10811fea8e35c08bac` |
+| `configs/consumer.yaml` SHA-256（Git LF blob 字节） | `8006460052a9b741c1595ec94e5c487e99e54931315bc87482c9b197a5adde8c` |
+| `configs/benchmark_1m.yaml` SHA-256（工作树 CRLF 字节） | `47ceeee975bae5ef0a47dddcb00b4468fb74430fcd6e5cee5a906640e0b4c1ab` |
+| `configs/benchmark_1m.yaml` SHA-256（Git LF blob 字节） | `fa7ad03a153446707fd4aa49c6bccb5915a578eff471d6477d577c36c44ebd05` |
 | `scoring_version` / `rule_id` | `heuristic-v1` / `health_heuristic` |
 | 操作系统 | Windows 11 `10.0.26100`（AMD64） |
 | Python | 3.12.15 (CPython)，项目 `.venv` |
 | NumPy | 2.5.4 |
 | 测量时间 | 2026-10-25（本机，非双 Linux） |
 
+> **字节口径**：两列分别是「本机工作树按 CRLF 检出后的字节」与「Git 仓库内 LF blob 的字节」。差异只来自换行符，不是配置内容改动；A 已核收（Issue #56 评论 `<!-- A-T83-config-receipt -->`）。原 CRLF 摘要保留，不把换行差异写成业务改动。
+
 被测链路：`load_config` → `produce_run_detailed` → `consume_run` → SQLite → `build_report`。
 全部用例都跑真实链路，没有手工拼 NPZ、没有 fake 模块。
+
+> **证据性质**：本轮全部结果只作**开发/回归证据**，不是独立保留集验收。seed=42 与 seed=20261016 在开发期已暴露，按 Issue #56 第 1 条保留原性质；本轮未替换 seed、未查看任何新的保留数据、未改任何阈值或门槛（#56 第 3/4 条）。正式独立验收须由 A 组织非作者复核后再定。
 
 ## 3 受控场景结果（10 个 run，逐条实测）
 

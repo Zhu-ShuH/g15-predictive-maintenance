@@ -17,16 +17,23 @@
 | 项 | 值 |
 |---|---|
 | 基线提交 | `75b119454a1ac075620bdcc74826730fa7b4ac02` |
-| `configs/health_rules.yaml` SHA-256 | `c26bad78809424599a48ccebd7f92b1b290e9d598a0367778127c9e1b9c77f1f` |
-| `configs/consumer.yaml` SHA-256 | `aebb18a9191f154c16e1320a73d7593774879d44573d5c10811fea8e35c08bac` |
-| `configs/benchmark_1m.yaml` SHA-256 | `47ceeee975bae5ef0a47dddcb00b4468fb74430fcd6e5cee5a906640e0b4c1ab` |
+| `configs/health_rules.yaml` SHA-256（工作树 CRLF 字节） | `c26bad78809424599a48ccebd7f92b1b290e9d598a0367778127c9e1b9c77f1f` |
+| `configs/health_rules.yaml` SHA-256（Git LF blob 字节） | `2b3a2763c72e32abd276b2d2617224b8bb941ca5d82807d2258db8d4c3f92d8b` |
+| `configs/consumer.yaml` SHA-256（工作树 CRLF 字节） | `aebb18a9191f154c16e1320a73d7593774879d44573d5c10811fea8e35c08bac` |
+| `configs/consumer.yaml` SHA-256（Git LF blob 字节） | `8006460052a9b741c1595ec94e5c487e99e54931315bc87482c9b197a5adde8c` |
+| `configs/benchmark_1m.yaml` SHA-256（工作树 CRLF 字节） | `47ceeee975bae5ef0a47dddcb00b4468fb74430fcd6e5cee5a906640e0b4c1ab` |
+| `configs/benchmark_1m.yaml` SHA-256（Git LF blob 字节） | `fa7ad03a153446707fd4aa49c6bccb5915a578eff471d6477d577c36c44ebd05` |
 | `scoring_version` | `heuristic-v1` |
 | `rule_id` | `health_heuristic` |
-| `window_points` W | 256 |
+| `window_points` W | 256（**不写死**：报告一律从已存窗口几何读出，见 §6.5） |
 | `max_detection_lag_windows` | 2 |
+
+> **字节口径**：上表两列分别是「本机工作树按 CRLF 检出后的字节」与「Git 仓库内 LF blob 的字节」。两者不同只说明换行符差异，不是配置内容改动；A 已核收并作为后续整改核对基线（Issue #56 评论 `<!-- A-T83-config-receipt -->`）。
 
 被测模块：`g15.pipeline.producer` → `g15.pipeline.consumer` → SQLite → `g15.reporting.builder` / `g15.reporting.metrics`。
 不测：双 Linux 部署与运维留证（属 Issue #10 / C6）；实时网络接口（本系统不要求）。
+
+> **证据性质**：本计划的 seed=42 / seed=20261016 均为开发期已暴露数据，按 Issue #56 第 1 条只作开发/回归证据，不称独立保留集。未替换 seed、未新增轮廓、未改阈值。执行顺序要求（#56 第 2/5 条）：先固定配置与规则摘要并经 A 审阅，再跑；本轮配置摘要已由 A 核收（`<!-- A-T83-config-receipt -->`），但 A 明确不追认未见证的先后顺序，故本轮结果**不主张**"跑前已完成审核固定"。
 
 ## 3 用例矩阵
 
@@ -104,7 +111,10 @@ spike / step / burst 六个受控事件，见 §3。
 2. 每个受控故障 run 的 `reports/summary.json` 与 `reports/summary.md` 同时产出，且两份数字一致。
 3. 正常场景 `alarm_count=0`、`detection_rate=null`；故障场景 `detection_rate=1.0` 且 `false_alarm_count=0`。
 4. 报告必须**同时**给出检出率与误报数，不得只报一个；未知指标写 `null`，不得捏造 0 或 100%。
-5. 工程门禁：`black --check src tests`、`pylint src/g15 --fail-under=8.5`、`pytest -q` 全部退出 0。
+5. **不可验就不得判通过**：缺真值（日志未声明 0 事件）、该 `run_id` 未消费、窗口宽度未知 → `verifiable=false`、`passed=null`、`detection_rate=null`，并在 `reasons` 写清原因。
+6. **窗口宽度一律从已存窗口几何读出**（`feature_windows` 的 `end_seq_exclusive - start_seq`），不写死 256；宽度不一致直接 `ReportError`。
+7. **点数四项自洽**：`processed_points`（已提交片）+ `rejected_points`（未消费片）= `total_points`，`analysed_points`（真实入窗）+ `dropped_points`（片内未成窗）= `processed_points`。
+8. 工程门禁：`black --check src tests`、`pylint src/g15 --fail-under=8.5`、`pytest -q` 全部退出 0。
 
 ## 8 明确不覆盖（不得在答辩中宣称）
 
