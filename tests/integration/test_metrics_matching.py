@@ -107,17 +107,88 @@ def test_one_alarm_cannot_detect_two_events() -> None:
 def test_maximum_matching_beats_greedy_when_a_later_event_has_no_alternative() -> None:
     """The matcher must find the maximum, not the first greedy assignment.
 
-    Event A (earlier) could take either alarm; event B can only take the second.
-    A greedy matcher that gives the first alarm to A leaves B undetected, so a
-    maximum of two detections is the only correct answer.
+    Event A spans ``[0, 1024)`` so its allowed window is ``[0, 1536)``: it can
+    use either alarm.  Event B spans ``[0, 1)`` so its window is ``[0, 768)``:
+    the alarm at 768 is already outside it, so B can only use the alarm at 0.
+    A greedy matcher that gives alarm 0 to A -- the first event in the sort
+    order -- leaves B undetected and scores one; the maximum is two, reached by
+    giving A the alarm at 768.
+
+    The earlier version of this test used two events whose windows both held
+    both alarms, so a greedy matcher also scored two and the case proved
+    nothing (A review of Issue #9, R5).
     """
-    events = [event(0, 256, event_id="F001"), event(256, 512, event_id="F002")]
-    alarms = [alarm(256), alarm(512)]
+    events = [event(0, 1024, event_id="F001"), event(0, 1, event_id="F002")]
+    alarms = [alarm(0), alarm(768)]
     result = match_alarms(events, alarms)
 
     assert result.detected_events == 2
     assert result.missed_events == 0
     assert result.detection_rate == 1.0
+    assert result.matches[0].matched_alarm_start == 768
+    assert result.matches[1].matched_alarm_start == 0
+
+
+def test_duplicate_alarm_keys_cannot_detect_two_events() -> None:
+    """One prediction must not become two detections (A review R5).
+
+    ``docs/interface.md`` section 9 keys an alarm on
+    ``(device_id, rule_id, start_seq)``.  Two rows sharing that key are one
+    prediction, so handing them to the public matcher twice must still yield a
+    single detection rather than a fabricated ``TP=2``.
+    """
+    events = [event(0, 256, event_id="F001"), event(256, 512, event_id="F002")]
+    duplicated = [alarm(256), alarm(256)]
+
+    result = match_alarms(events, duplicated)
+
+    assert result.alarm_count == 1
+    assert result.dropped_alarm_count == 1
+    assert result.detected_events == 1
+    assert result.missed_events == 1
+
+
+def test_duplicate_keys_on_different_levels_are_still_one_alarm() -> None:
+    """The key ignores ``level``, so ``yellow`` and ``red`` rows collapse."""
+    events = [event(0, 256, event_id="F001"), event(256, 512, event_id="F002")]
+    rows = [
+        AlarmRecord(device_id="DEV-001", rule_id="r", start_seq=256, level="yellow"),
+        AlarmRecord(device_id="DEV-001", rule_id="r", start_seq=256, level="red"),
+    ]
+
+    result = match_alarms(events, rows)
+
+    assert result.alarm_count == 1
+    assert result.dropped_alarm_count == 1
+    assert result.detected_events == 1
+
+
+def test_alarm_level_outside_the_contract_never_detects() -> None:
+    """Only ``yellow`` and ``red`` are alarms (``docs/interface.md`` section 9)."""
+    result = match_alarms(
+        [event(0, 256)],
+        [AlarmRecord(device_id="DEV-001", rule_id="r", start_seq=256, level="info")],
+    )
+
+    assert result.alarm_count == 0
+    assert result.dropped_alarm_count == 1
+    assert result.detected_events == 0
+    assert result.false_alarm_count == 0
+
+
+def test_tie_break_between_identical_events_is_pinned() -> None:
+    """Two identical events over two alarms must resolve to a fixed assignment.
+
+    Section 3 asks for a deterministic tie break, not merely a stable result
+    under permutation.  With both events over ``[0, 256)`` and alarms at 0 and
+    256, the augmenting search gives the earlier event the later alarm; that
+    exact answer is what the report prints, so it is asserted here (A review
+    R5).
+    """
+    events = [event(0, 256, event_id="F001"), event(0, 256, event_id="F002")]
+    result = match_alarms(events, [alarm(0), alarm(256)])
+
+    assert [m.matched_alarm_start for m in result.matches] == [256, 0]
 
 
 def test_matching_is_deterministic_under_a_reordered_input() -> None:

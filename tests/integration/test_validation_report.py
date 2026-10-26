@@ -224,3 +224,267 @@ def test_manifest_run_id_matches_the_report(tmp_path: Path) -> None:
     assert payload["total_points"] == manifest["total_points"]
     assert payload["scalar_value_count"] == 2 * manifest["total_points"]
     assert payload["schema_version"] == manifest["schema_version"]
+
+
+def test_report_uses_the_window_width_read_from_the_database(tmp_path: Path) -> None:
+    """A run consumed at W=64 must be judged on W=64, not on the default 256.
+
+    ``docs/interface.md`` section 9 stores no window-width column, so the only
+    honest source is the geometry of the stored windows.  A report that
+    assumed the acceptance width would widen every allowed alarm window by 4x
+    and turn a miss into a detection (review of Issue #9, R1).
+
+    The fixture is explicit: one event over ``[0, 64)``, and the only alarm row
+    is at 256.  On the real grid W=64 the allowed range is ``[0, 192)``, so the
+    alarm is a false alarm and the event is missed.  On the wrong grid W=256
+    the range becomes ``[0, 768)`` and the same alarm would be scored as a
+    detection.  The consumer's own alarm rows are removed first so the case
+    measures the grid and nothing else.
+    """
+    import sqlite3  # noqa: PLC0415
+
+    run_dir = _single_shard_run(
+        tmp_path, total_points=10240, event_start=0, event_duration=64
+    )
+    database = run_dir / "artifacts" / "results.sqlite"
+    consume_run(
+        run_dir,
+        database,
+        _consumer_config(tmp_path, window_points=64),
+    )
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute("DELETE FROM alarms")
+        connection.commit()
+    finally:
+        connection.close()
+    _insert_alarm(database, run_dir, start_seq=256)
+
+    payload = report_of(run_dir, database)
+
+    assert payload["analysis_window_points"] == 64
+    assert payload["feature_windows"] == 160
+    assert payload["events"][0]["allowed_start"] == 0
+    assert payload["events"][0]["allowed_end_exclusive"] == 192
+    assert payload["events"][0]["detected"] is False
+    assert payload["detected_events"] == 0
+    assert payload["false_alarm_count"] == 1
+    assert payload["passed"] is False
+
+
+def test_report_rejects_a_run_whose_windows_disagree_on_width(tmp_path: Path) -> None:
+    """Mixed window widths mean the grid cannot be trusted, so refuse to judge."""
+    import sqlite3  # noqa: PLC0415
+
+    from g15.reporting.builder import ReportError  # noqa: PLC0415
+
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute(
+            "UPDATE feature_windows SET end_seq_exclusive = end_seq_exclusive + 1 "
+            "WHERE rowid = (SELECT MIN(rowid) FROM feature_windows)"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(ReportError, match="do not share one width"):
+        build_report(run_dir, database)
+
+
+def test_report_does_not_read_another_runs_database(tmp_path: Path) -> None:
+    """Pairing a run with a different database must not become a pass.
+
+    ``build_report`` receives both paths and cannot assume they belong
+    together.  The ``runs`` row is the join: without it every count is zero
+    because nothing was consumed *there*, and a report that called that a pass
+    would let an unconsumed run claim acceptance (review of Issue #9, R3).
+    """
+    run_dir, _ = run_profile(tmp_path / "a", "spike", "seed42")
+    other_dir, other_database = run_profile(tmp_path / "b", "healthy", "seed42")
+
+    payload = report_of(run_dir, other_database)
+
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    assert payload["scoring_version"] is None
+    assert payload["alarm_count"] is None
+    assert payload["detection_rate"] is None
+    assert any("no runs row" in reason for reason in payload["verdict_reasons"])
+    assert other_dir != run_dir
+
+
+def test_report_reads_scoring_version_from_the_supplied_database(
+    tmp_path: Path,
+) -> None:
+    """The scoring version must come from the same database as the windows."""
+    import sqlite3  # noqa: PLC0415
+
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute("UPDATE runs SET scoring_version = 'probe-v9'")
+        connection.commit()
+    finally:
+        connection.close()
+
+    payload = report_of(run_dir, database)
+
+    assert payload["scoring_version"] == "probe-v9"
+
+
+def test_report_treats_a_missing_truth_file_as_unverifiable(tmp_path: Path) -> None:
+    """Deleting the truth must not turn a failed fault run into a pass.
+
+    The producer writes no truth file when it injected nothing, so absence is
+    only readable when the run log says zero events.  A fault run whose file
+    was deleted keeps ``fault_events == 1`` in its log, and the report must say
+    the run cannot be judged instead of silently scoring ``normal`` (A review
+    of Issue #9, R2).
+    """
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    truth = run_dir / "private_truth" / "faults.json"
+    truth.unlink()
+
+    payload = report_of(run_dir, database)
+
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    assert payload["scenario_kind"] is None
+    assert payload["detection_rate"] is None
+    assert any("private_truth" in reason for reason in payload["verdict_reasons"])
+
+
+def test_report_rejects_a_truth_file_from_another_run(tmp_path: Path) -> None:
+    """A truth file copied between runs must be refused, not substituted."""
+    import shutil as _shutil  # noqa: PLC0415
+
+    from g15.reporting.builder import ReportError  # noqa: PLC0415
+
+    run_dir, database = run_profile(tmp_path / "a", "spike", "seed42")
+    donor_dir, _ = run_profile(tmp_path / "b", "step", "seed42")
+    _shutil.copyfile(
+        donor_dir / "private_truth" / "faults.json",
+        run_dir / "private_truth" / "faults.json",
+    )
+
+    with pytest.raises(ReportError, match="belongs to run"):
+        build_report(run_dir, database)
+
+
+def test_report_rejects_a_truth_file_with_broken_json(tmp_path: Path) -> None:
+    """A JSON syntax error must surface as the documented ReportError."""
+    from g15.reporting.builder import ReportError  # noqa: PLC0415
+
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    truth = run_dir / "private_truth" / "faults.json"
+    truth.write_text('{"run_id": "x", "events": [', encoding="utf-8")
+
+    with pytest.raises(ReportError, match="invalid truth file"):
+        build_report(run_dir, database)
+
+
+def test_report_reports_analysed_and_dropped_points_separately(
+    tmp_path: Path,
+) -> None:
+    """``processed_points`` alone hides the samples no window ever covered.
+
+    A single shard of 10240 points consumed at W=7000 yields one window and
+    drops 3240 samples.  Reporting only "10240 processed, 0 rejected" would
+    claim full analysis coverage; the report must show the drop as well, and
+    the three counts must add back up to ``total_points`` (A review of Issue
+    #9, R4).
+    """
+    run_dir = _single_shard_run(
+        tmp_path, total_points=10240, event_start=512, event_duration=64
+    )
+    database = run_dir / "artifacts" / "results.sqlite"
+    consume_run(run_dir, database, _consumer_config(tmp_path, window_points=7000))
+
+    payload = report_of(run_dir, database)
+
+    assert payload["processed_points"] == 10240
+    assert payload["analysed_points"] == 7000
+    assert payload["dropped_points"] == 3240
+    assert payload["rejected_points"] == 0
+    assert payload["feature_windows"] == 1
+    assert payload["analysis_window_points"] == 7000
+    assert (
+        payload["analysed_points"]
+        + payload["dropped_points"]
+        + payload["rejected_points"]
+        == payload["total_points"]
+    )
+    markdown = (build_report(run_dir, database).parent / "summary.md").read_text(
+        encoding="utf-8"
+    )
+    assert "3240" in markdown
+
+
+def _consumer_config(tmp_path: Path, *, window_points: int):
+    """Return the committed consumer configuration with one field overridden."""
+    import dataclasses  # noqa: PLC0415
+
+    config = load_consumer_config(CONSUMER_CONFIG)
+    return dataclasses.replace(config, window_points=window_points)
+
+
+def _single_shard_run(
+    tmp_path: Path, *, total_points: int, event_start: int, event_duration: int
+) -> Path:
+    """Produce one single-shard run from the controlled spike profile.
+
+    Args:
+        tmp_path: Directory that receives the run.
+        total_points: Sample count of the run; must not exceed ``chunk_points``
+            so the run holds a single shard.
+        event_start: Absolute start of the single injected event.
+        event_duration: Event length in samples.
+
+    Returns:
+        The run directory.
+    """
+    source = (CONFIGS / "acceptance_spike_seed42.yaml").read_text(encoding="utf-8")
+    text = (
+        source.replace("id: acceptance_spike_seed42", "id: single_shard_probe")
+        .replace("total_points: 65536", f"total_points: {total_points}")
+        .replace("start_seq: 16384", f"start_seq: {event_start}")
+        .replace("duration_points: 256", f"duration_points: {event_duration}")
+    )
+    config_path = tmp_path / "single_shard_probe.yaml"
+    config_path.write_text(text, encoding="utf-8")
+    summary = produce_run_detailed(load_config(config_path), tmp_path)
+    return summary.run_dir
+
+
+def _insert_alarm(database: Path, run_dir: Path, *, start_seq: int) -> None:
+    """Insert one extra alarm row so a hand-picked grid can be judged.
+
+    The stored windows of a W=64 run never alarm, so the only way to exercise
+    "an alarm outside the allowed range" is to add the row the consumer would
+    have written had a rule fired.  The row uses the run's own device id and
+    the rule id of the committed rule set.
+    """
+    import sqlite3  # noqa: PLC0415
+
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute(
+            "INSERT INTO alarms "
+            "(run_id, device_id, rule_id, start_seq, level, reason, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                manifest["run_id"],
+                manifest["device_id"],
+                "vibration_abs",
+                start_seq,
+                "yellow",
+                "probe",
+                "2026-10-26T00:00:00Z",
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()

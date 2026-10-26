@@ -167,12 +167,19 @@ def test_damaged_truth_file_fails_the_report_not_the_consumer(
     ),
 )
 def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> None:
-    """A consumer killed with ``kill -9`` must replay to the same rows.
+    """A consumer killed with ``kill -9`` must replay to the same content.
 
     The consumer writes each shard in one transaction, so an interrupted pass
     may leave some shards processed and the rest not.  Re-running it must add
-    exactly the missing shards and end with the same window and alarm counts as
-    an uninterrupted run -- no duplicate rows, no lost shards.
+    exactly the missing shards and end with the same stored content as an
+    uninterrupted run -- not merely the same row count.
+
+    The child announces itself through a handshake file once it is inside
+    ``consume_run``, so the signal is sent while the pass is running instead of
+    after a fixed sleep that a fast machine can outrun.  The exit status is
+    asserted to be the signal death (``returncode == -SIGKILL``); a pass that
+    completed normally would report 0 and the case would be inconclusive
+    rather than a silent pass (review of Issue #9, R6).
     """
     run_dir = make_run(tmp_path)
     reference_dir = run_dir.parent / "reference"
@@ -182,14 +189,15 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
     consume_run(
         reference_dir, reference_db, load_consumer_config(CONFIGS / "consumer.yaml")
     )
-    reference_rows = consumed_rows(reference_db)
 
     database = run_dir / "artifacts" / "results.sqlite"
+    handshake = run_dir.parent / "consumer.started"
     script = (
         "import sys\n"
         "from pathlib import Path\n"
         "from g15.config import load_consumer_config\n"
         "from g15.pipeline.consumer import consume_run\n"
+        "Path(sys.argv[4]).write_text('started', encoding='utf-8')\n"
         "consume_run(Path(sys.argv[1]), Path(sys.argv[2]), "
         "load_consumer_config(Path(sys.argv[3])))\n"
     )
@@ -201,16 +209,84 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
             str(run_dir),
             str(database),
             str(CONFIGS / "consumer.yaml"),
+            str(handshake),
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    time.sleep(0.35)
-    process.send_signal(signal.SIGKILL)
-    process.wait(timeout=30)
+    try:
+        deadline = time.monotonic() + 30.0
+        while not handshake.is_file():
+            if process.poll() is not None:
+                pytest.fail(
+                    "the consumer exited before the kill -9 handshake; the "
+                    f"run is too fast to interrupt (returncode {process.returncode})"
+                )
+            if time.monotonic() > deadline:
+                pytest.fail("the consumer never reached the handshake point")
+            time.sleep(0.01)
+        assert process.poll() is None, "the consumer must still be running"
+        process.send_signal(signal.SIGKILL)
+        returncode = process.wait(timeout=30)
+    finally:
+        if process.poll() is None:  # pragma: no cover - defensive
+            process.kill()
+            process.wait(timeout=30)
+
+    assert returncode == -signal.SIGKILL, (
+        "the child must die from SIGKILL, not finish on its own "
+        f"(returncode {returncode})"
+    )
 
     consume_run(run_dir, database, load_consumer_config(CONFIGS / "consumer.yaml"))
-    assert consumed_rows(database) == reference_rows
+    assert stored_snapshot(database) == stored_snapshot(reference_db)
+
+
+def stored_snapshot(database: Path) -> dict[str, object]:
+    """Return the comparable content of one consumed database.
+
+    Counting rows proves only that the same number of windows exists.  The
+    kill -9 case compares the whole content instead: window geometry and health
+    scores, the alarms, the persisted alarm state, the processed shards, and
+    the ``runs`` row, so a replay that wrote the right number of wrong rows
+    still fails (review of Issue #9, R6).
+
+    Args:
+        database: Path to ``artifacts/results.sqlite``.
+
+    Returns:
+        A mapping of table name to the rows that table holds, in a stable
+        order.
+    """
+    queries = {
+        "runs": (
+            "SELECT run_id, scenario_id, schema_version, scoring_version, status "
+            "FROM runs ORDER BY run_id"
+        ),
+        "processed_chunks": (
+            "SELECT part_id, sha256 FROM processed_chunks ORDER BY part_id"
+        ),
+        "feature_windows": (
+            "SELECT device_id, start_seq, end_seq_exclusive, features_json, "
+            "health_score FROM feature_windows ORDER BY device_id, start_seq"
+        ),
+        "alarms": (
+            "SELECT device_id, rule_id, start_seq, level, reason FROM alarms "
+            "ORDER BY device_id, rule_id, start_seq"
+        ),
+        "alarm_states": (
+            "SELECT device_id, rule_id, last_end_seq_exclusive, state_json "
+            "FROM alarm_states ORDER BY device_id, rule_id"
+        ),
+    }
+    connection = connect(database)
+    try:
+        return {
+            name: tuple(tuple(row) for row in connection.execute(sql).fetchall())
+            for name, sql in queries.items()
+        }
+    finally:
+        connection.close()
 
 
 def test_partial_database_is_reusable_after_a_failed_shard(tmp_path: Path) -> None:
@@ -256,12 +332,14 @@ def test_second_consumption_is_idempotent(tmp_path: Path) -> None:
 
 
 def test_report_survives_a_database_that_was_only_initialised(tmp_path: Path) -> None:
-    """An empty but valid database must report honest zeros, not crash.
+    """An empty but valid database must report "unverifiable", never a pass.
 
-    The schema exists and the run really did inject one event, so nothing was
-    detected: the rate must be ``0.0`` (not ``null``, which would claim the run
-    had no events, and not ``100%``, which would be a lie).  Health bounds stay
-    ``null`` because no window was scored.
+    The schema exists but the run was never consumed, so there is no
+    ``runs`` row, no window and no alarm: every count read from the database
+    is zero because nothing was written, not because the run is clean.  A
+    report may still be produced for diagnosis, but it must not claim the run
+    passed, and the detection rate must stay ``null`` rather than being
+    computed against an unknown window width (review of Issue #9, R3/R1).
     """
     run_dir = make_run(tmp_path)
     database = run_dir / "artifacts" / "results.sqlite"
@@ -272,13 +350,14 @@ def test_report_survives_a_database_that_was_only_initialised(tmp_path: Path) ->
         connection.close()
 
     payload = json.loads(build_report(run_dir, database).read_text(encoding="utf-8"))
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
     assert payload["feature_windows"] == 0
-    assert payload["alarm_count"] == 0
+    assert payload["alarm_count"] is None
     assert payload["health_score_min"] is None
     assert payload["health_score_max"] is None
-    assert payload["fault_events"] == 1
-    assert payload["detected_events"] == 0
-    assert payload["detection_rate"] == 0.0
-    assert payload["passed"] is False
+    assert payload["detection_rate"] is None
     assert payload["processed_points"] == 0
     assert payload["rejected_points"] == payload["total_points"]
+    reasons = " ".join(payload["verdict_reasons"])
+    assert "no runs row" in reasons

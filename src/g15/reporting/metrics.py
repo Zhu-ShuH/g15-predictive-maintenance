@@ -35,6 +35,7 @@ __all__ = [
     "SCENARIO_DEGRADATION",
     "SCENARIO_FAULT",
     "SCENARIO_NORMAL",
+    "VALID_ALARM_LEVELS",
     "WINDOW_POINTS_DEFAULT",
     "AlarmRecord",
     "EventMatch",
@@ -59,6 +60,11 @@ MAX_DETECTION_LAG_WINDOWS_DEFAULT: int = 2
 SCENARIO_NORMAL: str = "normal"
 SCENARIO_DEGRADATION: str = "degradation"
 SCENARIO_FAULT: str = "fault"
+
+#: Alarm levels that may count as a detection (``docs/interface.md`` section 9).
+#: Rows outside this set are reported but never detect an event, so a stray
+#: ``info`` row cannot be counted as a controlled detection.
+VALID_ALARM_LEVELS: frozenset[str] = frozenset({"yellow", "red"})
 
 
 class TruthError(ValueError):
@@ -162,6 +168,11 @@ class MatchResult:
             assigned to an event, i.e. duplicates of a real detection.
         unmatched_alarm_count: Alarms assigned to no event, equal to
             ``false_alarm_count + redundant_alarm_count``.
+        dropped_alarm_count: Rows discarded before matching, either because
+            they repeated an ``(device_id, rule_id, start_seq)`` key already
+            seen or because their ``level`` is outside
+            :data:`VALID_ALARM_LEVELS`.  They are counted here so a caller can
+            see that rows were ignored rather than silently vanishing.
     """
 
     events: tuple[TruthEvent, ...]
@@ -170,6 +181,7 @@ class MatchResult:
     false_alarm_count: int
     redundant_alarm_count: int
     unmatched_alarm_count: int
+    dropped_alarm_count: int = 0
 
     @property
     def total_events(self) -> int:
@@ -312,7 +324,9 @@ def _event_from_mapping(payload: Mapping[str, Any], index: int) -> TruthEvent:
     )
 
 
-def load_truth_events(path: Path) -> tuple[TruthEvent, ...]:
+def load_truth_events(
+    path: Path, *, expected_run_id: str | None = None
+) -> tuple[TruthEvent, ...]:
     """Read ``private_truth/faults.json`` and return its events.
 
     Only the validator calls this.  The file is written by the producer and is
@@ -320,17 +334,31 @@ def load_truth_events(path: Path) -> tuple[TruthEvent, ...]:
 
     Args:
         path: Path to ``faults.json``.
+        expected_run_id: When given, the document's ``run_id`` must equal it.
+            A truth file copied from another run would otherwise judge this
+            run against events it never contained, so the mismatch is an
+            error rather than a silent substitution (review of Issue #9, R2).
 
     Returns:
         Events ordered by ``(start_seq, event_id)``.
 
     Raises:
-        TruthError: if the document is not a valid section 5.3 payload.
+        TruthError: if the document is not a valid section 5.3 payload, or its
+            ``run_id`` is missing, malformed, or different from
+            ``expected_run_id``.
         OSError: if the file cannot be read.
     """
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(raw, Mapping):
         raise TruthError(f"{path} must hold a JSON object, got {type(raw).__name__}")
+    run_id = raw.get("run_id")
+    if not isinstance(run_id, str) or not run_id.strip():
+        raise TruthError(f"{path} must carry a non-empty 'run_id' string")
+    if expected_run_id is not None and run_id != expected_run_id:
+        raise TruthError(
+            f"{path} belongs to run {run_id!r}, not to {expected_run_id!r}; "
+            "a truth file copied between runs cannot judge this one"
+        )
     events = raw.get("events")
     if not isinstance(events, list):
         raise TruthError(f"{path} must carry an 'events' array")
@@ -427,6 +455,46 @@ def _sort_alarms(alarms: Iterable[AlarmRecord]) -> tuple[AlarmRecord, ...]:
     )
 
 
+def _dedupe_alarms(
+    alarms: Iterable[AlarmRecord],
+) -> tuple[tuple[AlarmRecord, ...], int]:
+    """Return the alarms that may detect an event, plus how many were dropped.
+
+    ``docs/interface.md`` section 9 keys an alarm on
+    ``(run_id, device_id, rule_id, start_seq)``, so two rows sharing that key
+    are the same prediction and must not be allowed to detect two events.  A
+    real database cannot hold such a duplicate, but :func:`match_alarms` is a
+    public entry point that also receives hand-built rows, and the one-to-one
+    rule of ``docs/acceptance.md`` section 3 has to hold for those too.
+
+    A row whose ``level`` is outside :data:`VALID_ALARM_LEVELS` is not an
+    alarm the contract recognises, so it is dropped as well rather than being
+    counted as a detection or a false alarm.
+
+    Args:
+        alarms: Every alarm row handed to :func:`match_alarms`.
+
+    Returns:
+        ``(kept_alarms, dropped_count)``.  The kept rows are in the
+        deterministic order of :func:`_sort_alarms`; the first row of each key
+        wins, so the result does not depend on input order.
+    """
+    seen: set[tuple[str, str, int]] = set()
+    kept: list[AlarmRecord] = []
+    dropped = 0
+    for alarm in _sort_alarms(alarms):
+        if alarm.level not in VALID_ALARM_LEVELS:
+            dropped += 1
+            continue
+        key = (alarm.device_id, alarm.rule_id, alarm.start_seq)
+        if key in seen:
+            dropped += 1
+            continue
+        seen.add(key)
+        kept.append(alarm)
+    return tuple(kept), dropped
+
+
 def match_alarms(
     events: Sequence[TruthEvent],
     alarms: Iterable[AlarmRecord],
@@ -452,7 +520,7 @@ def match_alarms(
     ordered_events = tuple(
         sorted(events, key=lambda item: (item.start_seq, item.event_id))
     )
-    ordered_alarms = _sort_alarms(alarms)
+    ordered_alarms, dropped_alarms = _dedupe_alarms(alarms)
 
     windows = [
         allowed_alarm_window(event, window_points, max_detection_lag_windows)
@@ -516,6 +584,7 @@ def match_alarms(
         false_alarm_count=false_alarms,
         redundant_alarm_count=redundant,
         unmatched_alarm_count=false_alarms + redundant,
+        dropped_alarm_count=dropped_alarms,
     )
 
 
