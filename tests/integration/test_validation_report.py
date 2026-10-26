@@ -545,6 +545,66 @@ def test_report_refuses_a_partially_consumed_run(tmp_path: Path) -> None:
     assert report_of(run_dir, database)["passed"] is True
 
 
+def test_report_excludes_alarms_from_a_shard_whose_digest_was_swapped(
+    tmp_path: Path,
+) -> None:
+    """An alarm stored for a conflicting shard must not score this run.
+
+    ``processed_chunks.sha256`` disagreeing with the manifest means the rows in
+    that shard came from other bytes.  Counting its alarms would attribute
+    somebody else's detections to this run, which is the alarm half of the R7
+    defect: the counts have to cover the same shards as ``analysed_points``.
+    """
+    import sqlite3  # noqa: PLC0415
+
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    rows = [int(part["rows"]) for part in manifest["parts"]]
+    part_starts = [sum(rows[:index]) for index in range(len(rows))]
+
+    # An alarm inside the shard that is about to be declared conflicting.
+    _insert_alarm(database, run_dir, start_seq=part_starts[3] + 100)
+
+    before = report_of(run_dir, database)
+    assert before["raw_alarm_count"] == 2
+    assert before["excluded_alarm_count"] == 0
+    assert before["alarm_count"] == 2
+    assert before["false_alarm_count"] == 1
+
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute(
+            "UPDATE processed_chunks SET sha256 = ? WHERE part_id = 3",
+            ("0" * 64,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    after = report_of(run_dir, database)
+    # The raw record still shows both rows; the attributable count drops to the
+    # one that belongs to a valid shard.
+    assert after["raw_alarm_count"] == 2
+    assert after["excluded_alarm_count"] == 1
+    assert after["alarm_count"] == 1
+    assert after["excluded_alarm_count"] == (
+        after["raw_alarm_count"] - after["alarm_count"]
+    )
+    # The dropped alarm was a false alarm on its own; once it is out of scope
+    # the false-alarm count must follow, not keep counting another shard's row.
+    assert after["false_alarm_count"] == 0
+    assert after["verifiable"] is False
+    assert after["passed"] is None
+
+    markdown = (build_report(run_dir, database).parent / "summary.md").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "| excluded_alarm_count（不属于有效片的告警行） | "
+        f"{after['excluded_alarm_count']} |"
+    ) in markdown
+
+
 def test_report_refuses_a_run_whose_recorded_digest_was_swapped(
     tmp_path: Path,
 ) -> None:
@@ -574,5 +634,50 @@ def test_report_refuses_a_run_whose_recorded_digest_was_swapped(
     assert payload["verifiable"] is False
     assert payload["passed"] is None
     assert payload["digest_mismatch_parts"] == [3]
-    assert payload["processed_points"] == 65536 - int(manifest["parts"][3]["rows"])
+    excluded_rows = int(manifest["parts"][3]["rows"])
+    assert payload["processed_points"] == 65536 - excluded_rows
     assert any("different digest" in r for r in payload["verdict_reasons"])
+
+    # R7: the excluded shard must not be subtracted from ``processed`` while
+    # its windows are still counted as ``analysed``.  Both terms now cover the
+    # same shards, so the drop count cannot go negative and the two identities
+    # hold; the excluded rows show up as raw_/excluded_ counts instead of being
+    # silently dropped from the report.
+    assert payload["dropped_points"] >= 0
+    assert payload["analysed_points"] == payload["processed_points"]
+    assert payload["dropped_points"] == 0
+    assert (
+        payload["analysed_points"] + payload["dropped_points"]
+        == payload["processed_points"]
+    )
+    assert (
+        payload["processed_points"] + payload["rejected_points"]
+        == payload["total_points"]
+    )
+    assert payload["rejected_points"] == excluded_rows
+    assert payload["excluded_feature_windows"] > 0
+    assert (
+        payload["feature_windows"] + payload["excluded_feature_windows"]
+        == payload["raw_feature_windows"]
+    )
+    assert payload["excluded_alarm_count"] == (
+        payload["raw_alarm_count"] - payload["alarm_count"]
+    )
+
+    # The conflict shard's samples must not be counted as this run's analysis.
+    assert payload["analysed_points"] == 65536 - excluded_rows
+
+    # JSON and Markdown must state the same scope (section 5.4).
+    markdown = (build_report(run_dir, database).parent / "summary.md").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        f"| analysed_points（真实进入窗口） | {payload['analysed_points']} |"
+        in markdown
+    )
+    assert f"| dropped_points（片内未成窗） | {payload['dropped_points']} |" in markdown
+    assert (
+        "| excluded_feature_windows（不属于有效片的窗口行） | "
+        f"{payload['excluded_feature_windows']} |"
+    ) in markdown
+    assert "-10240" not in markdown

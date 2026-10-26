@@ -13,7 +13,7 @@
 | 退化场景判定 | **通过**（两 seed 后半段中位数均低于前半段） |
 | 三类独立故障注入 | 业务故障 ✔　文件损坏/SHA ✔　Linux `kill -9` ⏳（Windows 上 skip，需 Linux 留证） |
 | Issue 验收命令 | `pytest -q tests/integration tests/fault_injection` → **60 passed, 1 skipped，退出码 0** |
-| 工程门禁 | black ✔　pylint **9.91/10** ✔　全量 pytest **580 passed, 9 skipped** ✔ |
+| 工程门禁 | black ✔　pylint **9.91/10** ✔　全量 pytest **581 passed, 9 skipped** ✔ |
 | 双 Linux 实测 | **未做**（Issue #10 / C6），本报告数据全部来自 Windows |
 
 ## 2 被测身份与环境
@@ -103,6 +103,8 @@
 
 用例本身做了三件事保证它到 Linux 上真的能证伪：①子进程进入 `consume_run` 后写握手文件，父进程轮询到握手才发信号，不用固定 `sleep`；②断言 `returncode == -SIGKILL`，子进程若自己跑完（返回 0）用例即失败，不会静默通过；③重跑后逐表比对内容，写对行数但写错内容的重放也会被抓到。
 
+**握手时机的真实边界**（按 A 第三轮评审 `5648720609` 的限定）：监视线程轮询 `processed_chunks`，看到第 1 行即写握手；但轮询**不能精确保证**此时"第一片刚提交、正处理第二片"，消费者可能已提交更晚的片。因此实际断言的是**某个非空的部分前缀**（`1 <= 已提交片数 < manifest.parts` 总数），不是"恰好一片"。本报告不把该用例描述成能证明更精确的时序。
+
 **在 Windows 上 skip**（`kill -9` 是 POSIX 语义，Windows 无等价物）；按 §4 必须在 Linux 上留证，本报告**不伪造**该项结果。
 
 ### 4.4 真值隔离（已完成，可证伪）
@@ -119,12 +121,12 @@
 
 | 命令 | 退出码 | 结果 |
 |---|---|---|
-| `python -m pytest -q tests/integration tests/fault_injection` | 0 | **60 passed, 1 skipped in 7.54s** |
-| `python -m pytest -q tests/unit` | 0 | **519 passed, 2 skipped in 5.74s** |
-| `python -m pytest -q tests/integration` | 0 | **52 passed in 5.49s** |
-| `python -m pytest -q tests/fault_injection` | 0 | **8 passed, 1 skipped in 3.24s** |
+| `python -m pytest -q tests/integration tests/fault_injection` | 0 | **61 passed, 1 skipped in 6.90s** |
+| `python -m pytest -q tests/unit` | 0 | **519 passed, 2 skipped in 3.97s** |
+| `python -m pytest -q tests/integration` | 0 | **53 passed in 5.99s** |
+| `python -m pytest -q tests/fault_injection` | 0 | **8 passed, 1 skipped in 2.00s** |
 | `python -m pytest -q tests/performance` | 0 | **6 skipped**（opt-in，需显式开启） |
-| `python -m pytest -q` | 0 | **580 passed, 9 skipped in 11.61s** |
+| `python -m pytest -q` | 0 | **581 passed, 9 skipped in 12.80s** |
 | `python -m black --check src tests` | 0 | **47 files would be left unchanged** |
 | `python -m pylint src/g15 --fail-under=8.5` | 0 | **9.91/10** |
 
@@ -135,26 +137,27 @@
 | 目录 | 用例数 |
 |---|---|
 | `tests/unit/` | 521 |
-| `tests/integration/` | 52（其中我新增 22 条匹配规则 + 30 条端到端报告） |
+| `tests/integration/` | 53（其中我新增 22 条匹配规则 + 31 条端到端报告） |
 | `tests/fault_injection/` | 9（全部新增） |
 | `tests/performance/` | 6 |
 | `tests/test_package_import.py` | 1 |
-| **合计** | **589** |
+| **合计** | **590** |
 
 单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5）。
 
-## 6.1 复审整改（A 的 R1–R6，2026-10-26）
+## 6.1 复审整改（A 的 R1–R7，2026-10-26）
 
-A 在 `5646201287` 上给了六条 CHANGES_REQUESTED。逐条整改与可证伪证据如下（R2/R3/R6 含第二轮追加）：
+A 在 `5646201287` 上给了六条 CHANGES_REQUESTED（R1–R6），第三轮 `5648720609` 追加 R7。逐条整改与可证伪证据如下（R2/R3/R6 含第二轮追加）：
 
 | 编号 | 问题 | 整改 | 证伪方式 |
 |---|---|---|---|
 | R1 | 报告默认 `W=256`，把配置化消费误判成 100% 检出 | 窗口宽度改为**从已存窗口几何读出**（`end_seq - start_seq`）；宽度不一致直接 `ReportError` | `test_report_uses_the_window_width_read_from_the_database`：真实 W=64、事件 `[0,64)`、告警在 256，允许区间 `[0,192)` → 判**未检出 + 1 误报**；若仍按 256 算，区间变 `[0,768)` 会误判成检出 |
 | R2 | 缺真值被当成"零事件"，故障 run 变正常通过 | 缺文件时**只认日志 `run_complete.fault_events == 0`**；否则 `verifiable=false`、`passed=null`；真值 `run_id` 必须与 manifest 一致；JSON 语法错也走 `ReportError`。**第二轮追加**：真值未知时 `fault_events`/`detected_events`/`missed_events`/`false_alarm_count`/`redundant_alarm_count`/`unmatched_alarm_count` 一律 `null`，不得把可能命中隐形事件的告警算成误报 | 删真值 → `verifiable=false`；拷别的 run 的真值 → `ReportError: belongs to run`；半截 JSON → `ReportError: invalid truth file`；`test_validator_never_reads_the_truth_file_through_the_consumer` 断言六个计数全 `null` |
 | R3 | 读另一个硬编码库的 `scoring_version`，空库也能通过；**有 `runs` 行就当整 run 完成** | 一律用**传入的 `database_path`**，按 `manifest.run_id` 查 `runs` 行；**第二轮追加**：`manifest.parts` 每个分片都要有 `processed_chunks` 行且 `sha256` 与清单一致，缺行/不符即部分消费，`verifiable=false`、`passed=null`，并新增 `pending_parts`/`digest_mismatch_parts` 字段 | `test_report_does_not_read_another_runs_database`（A 的库配 B 的 run → `passed=null`）；`test_report_reads_scoring_version_from_the_supplied_database`；`test_report_survives_a_database_that_was_only_initialised`；**`test_report_refuses_a_partially_consumed_run`**（真实生产 65536 点 → 损坏第 2 片 → 消费在第一片提交后失败 → 报告 `pending_parts=[1..6]`、`processed=10240`、`rejected=55296`、`passed=null`；修好重跑 → `passed=true`、`pending=[]`）；**`test_report_refuses_a_run_whose_recorded_digest_was_swapped`**（改 `processed_chunks.sha256` → `digest_mismatch_parts=[3]`、`passed=null`） |
-| R4 | `processed_points` 把整片 rows 当成分析覆盖 | 拆成 `processed_points`（已提交片覆盖）/ `analysed_points`（真实入窗）/ `dropped_points`（片内未成窗）/ `rejected_points`（未消费片），四项之和等于 `total_points` | `test_report_reports_analysed_and_dropped_points_separately`：单片 10240、W=7000 → `processed=10240, analysed=7000, dropped=3240, rejected=0`，和 = 10240 |
+| R4 | `processed_points` 把整片 rows 当成分析覆盖 | 拆成 `processed_points`（已提交片覆盖）/ `analysed_points`（真实入窗）/ `dropped_points`（片内未成窗）/ `rejected_points`（未消费片）。四个字段不构成一条和式，而是两条恒等式：`processed + rejected = total`（分片口径），`analysed + dropped = processed`（分析口径） | `test_report_reports_analysed_and_dropped_points_separately`：单片 10240、W=7000 → `processed=10240, analysed=7000, dropped=3240, rejected=0`，两式分别为 `10240+0=10240` 与 `7000+3240=10240` |
 | R5 | 告警未去重，一条预测能检出两个事件；贪心反例不成立 | 按 `(device_id, rule_id, start_seq)` 去重并限定 `yellow/red`，被丢弃行计入 `dropped_alarm_count`；贪心反例改成真的反例；并列多解的指派写进断言 | `test_duplicate_alarm_keys_cannot_detect_two_events`、`test_duplicate_keys_on_different_levels_are_still_one_alarm`、`test_alarm_level_outside_the_contract_never_detects`、`test_maximum_matching_beats_greedy_when_a_later_event_has_no_alternative`（A 提的真实反例：A=`[0,1024)`、B=`[0,1)`、告警 0/768 → 最大 2）、`test_tie_break_between_identical_events_is_pinned` |
-| R6 | `kill -9` 用例用固定 sleep、不查返回码、只比行数；**握手点在 `consume_run` 之前** | 改为**子进程监视线程轮询 `processed_chunks`**：第一片事务提交后写握手，此时消费者正在处理后续分片；断言 `returncode == -SIGKILL`；信号后先断言 `1 <= len(processed_chunks) < manifest.parts` 证明是真实中间态；重跑后逐表比对五张表全部内容 | 用例在 Windows 上 skip；到 Linux 上才真正执行。Windows 上**不伪造**该结果。握手靠观察数据库取得，**未给业务代码加任何测试专用参数** |
+| R6 | `kill -9` 用例用固定 sleep、不查返回码、只比行数；**握手点在 `consume_run` 之前** | 改为**子进程监视线程轮询 `processed_chunks`**：第一片事务提交后写握手；断言 `returncode == -SIGKILL`；信号后先断言 `1 <= len(processed_chunks) < manifest.parts` 证明是真实中间态；重跑后逐表比对五张表全部内容。**边界限定**（A `5648720609`）：轮询不能精确保证"刚提交第一片、正处理第二片"，实际观察到的是某个**非空部分前缀**，文档按此表述，不声称更精确时序 | 用例在 Windows 上 skip；到 Linux 上才真正执行。Windows 上**不伪造**该结果。握手靠观察数据库取得，**未给业务代码加任何测试专用参数** |
+| R7 | 摘要冲突时报告混用两套口径：`processed_points` 扣掉冲突片，`analysed_points` 却仍统计该片窗口 → **负丢弃点**（`-10240`），且检出率仍来自含无效片的窗口/告警 | **统一有效数据范围**：新增 `_part_ranges`/`_contains`，按 manifest 累加 rows 得每片 seq 区间；窗口与告警只在**有效片**（已提交且摘要一致）内计入 `analysed_points`/`alarm_count`/匹配指标。无法归属的行**不静默丢弃**，另列 `raw_feature_windows`/`excluded_feature_windows`/`raw_alarm_count`/`excluded_alarm_count`，把"库中原始记录"与"可归属当前 manifest 的数据"分开；不使用 `max(0, dropped)` 掩盖范围不一致 | `test_report_refuses_a_run_whose_recorded_digest_was_swapped` 扩充：断言 `dropped_points >= 0`、`analysed == processed`、两式恒等、`excluded_feature_windows > 0`、`feature_windows + excluded_feature_windows == raw_feature_windows`、`excluded_alarm_count == raw_alarm_count - alarm_count`、Markdown 与 JSON 同源且不含 `-10240`。新增 `test_report_excludes_alarms_from_a_shard_whose_digest_was_swapped`：往 part 3 插一条告警（`raw_alarm_count=2`、`false_alarm_count=1`）→ 置换 part 3 摘要后 `excluded_alarm_count=1`、`alarm_count=1`、`false_alarm_count=0`，Markdown 同步。**变异测试**：把窗口归属改回"全部计入" → `assert -10240 >= 0` 失败；把告警归属改回"全部保留" → `assert 0 == 1` 失败；两处恢复后均通过 |
 
 另：`docs/test_plan.md` §6.3/§6.4 已同步成上述口径。
 

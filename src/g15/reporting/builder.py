@@ -20,7 +20,7 @@ import sqlite3
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from g15.pipeline.consumer import ConsumptionError, load_manifest_from_run_dir
 from g15.reporting.metrics import (
@@ -78,10 +78,21 @@ class _RunFacts:
         digest_mismatch_parts: Parts whose recorded digest differs from the
             manifest's.  The consumer refuses such a shard on the next pass, so
             the report must not score the rows already stored for it.
-        analysed_points: Samples actually covered by stored feature windows,
-            summed over the windows of every processed shard.
-        dropped_points: Samples inside the processed shards that no stored
-            window covers, i.e. ``submitted_points - analysed_points``.
+        analysed_points: Samples actually covered by the windows that belong to
+            this run's *valid* shards, i.e. the ones that were consumed and whose
+            recorded digest still matches the manifest.
+        dropped_points: Samples inside the valid shards that no stored window
+            covers, i.e. ``submitted_points - analysed_points``.  Both terms now
+            cover the same shards, so the difference cannot go negative
+            (review of Issue #9, R7).
+        raw_feature_windows: Every ``feature_windows`` row stored for the run,
+            including rows that cannot be attributed to a valid shard.
+        excluded_feature_windows: Rows in ``raw_feature_windows`` that fall
+            outside the valid shards and are therefore not counted as this
+            run's analysis.
+        raw_alarm_count: Every ``alarms`` row stored for the run.
+        excluded_alarm_count: Rows in ``raw_alarm_count`` outside the valid
+            shards; they are not used for matching.
         window_points: Analysis window width read back from the stored
             windows, or ``None`` when no window was written.
         elapsed_seconds: Producer measurement window, or ``None``.
@@ -102,6 +113,10 @@ class _RunFacts:
     digest_mismatch_parts: tuple[int, ...]
     analysed_points: int
     dropped_points: int
+    raw_feature_windows: int
+    excluded_feature_windows: int
+    raw_alarm_count: int
+    excluded_alarm_count: int
     window_points: int | None
     elapsed_seconds: float | None
     errors: tuple[str, ...]
@@ -135,16 +150,26 @@ def _open_readonly(database_path: Path) -> sqlite3.Connection:
 
 
 def _read_alarms(
-    connection: sqlite3.Connection, run_id: str
-) -> tuple[AlarmRecord, ...]:
-    """Read every stored alarm of ``run_id``.
+    connection: sqlite3.Connection,
+    run_id: str,
+    valid_ranges: Sequence[tuple[int, int]],
+) -> tuple[tuple[AlarmRecord, ...], int]:
+    """Read the stored alarms that can be attributed to a valid shard.
+
+    An alarm is produced by an analysis window, so an alarm whose ``start_seq``
+    falls outside every valid shard was computed from data this run cannot
+    vouch for.  Scoring it would let a shard with a mismatched digest detect an
+    event -- the conflict data would then set the detection rate even though its
+    samples are excluded from ``analysed_points`` (review of Issue #9, R7).
 
     Args:
         connection: Open read-only connection.
         run_id: The run to read.
+        valid_ranges: Half-open sequence ranges of the valid shards.
 
     Returns:
-        Alarm rows in database order.
+        ``(kept, excluded_count)`` where ``excluded_count`` counts the stored
+        rows that fall outside the valid shards.
     """
     rows = connection.execute(
         """
@@ -153,39 +178,76 @@ def _read_alarms(
         """,
         (run_id,),
     ).fetchall()
-    return tuple(
-        AlarmRecord(
-            device_id=str(row[0]),
-            rule_id=str(row[1]),
-            start_seq=int(row[2]),
-            level=str(row[3]),
+    kept: list[AlarmRecord] = []
+    excluded = 0
+    for row in rows:
+        if not _contains(valid_ranges, int(row[2])):
+            excluded += 1
+            continue
+        kept.append(
+            AlarmRecord(
+                device_id=str(row[0]),
+                rule_id=str(row[1]),
+                start_seq=int(row[2]),
+                level=str(row[3]),
+            )
         )
-        for row in rows
-    )
+    return (tuple(kept), excluded)
 
 
 def _read_health_scores(
-    connection: sqlite3.Connection, run_id: str
+    connection: sqlite3.Connection,
+    run_id: str,
+    valid_ranges: Sequence[tuple[int, int]],
 ) -> tuple[float, ...]:
-    """Read health scores in window order.
+    """Read health scores in window order, restricted to the valid shards.
 
     Args:
         connection: Open read-only connection.
         run_id: The run to read.
+        valid_ranges: Half-open sequence ranges of the valid shards.
 
     Returns:
         Scores ordered by ``start_seq``.
     """
     rows = connection.execute(
-        "SELECT health_score FROM feature_windows WHERE run_id = ? ORDER BY start_seq",
+        "SELECT start_seq, health_score FROM feature_windows "
+        "WHERE run_id = ? ORDER BY start_seq",
         (run_id,),
     ).fetchall()
-    return tuple(float(row[0]) for row in rows)
+    return tuple(float(row[1]) for row in rows if _contains(valid_ranges, int(row[0])))
+
+
+def _part_ranges(manifest: Any) -> tuple[tuple[int, int, int], ...]:
+    """Return ``(part_id, start_seq, end_seq_exclusive)`` for every shard.
+
+    The manifest stores per-shard ``rows`` but not the starting sequence of each
+    shard; shards are contiguous and ordered by ``part_id``, so the start of a
+    shard is the sum of the rows before it (``docs/interface.md`` section 8.1).
+
+    Args:
+        manifest: The run manifest.
+
+    Returns:
+        One triple per part, in ``part_id`` order.
+    """
+    ranges: list[tuple[int, int, int]] = []
+    offset = 0
+    for entry in sorted(manifest.parts, key=lambda item: item.part_id):
+        rows = int(entry.rows)
+        ranges.append((int(entry.part_id), offset, offset + rows))
+        offset += rows
+    return tuple(ranges)
+
+
+def _contains(ranges: Sequence[tuple[int, int]], seq: int) -> bool:
+    """Return whether ``seq`` falls inside one of the half-open ``ranges``."""
+    return any(start <= seq < end for start, end in ranges)
 
 
 def _read_processed_points(
     connection: sqlite3.Connection, run_id: str, manifest: Any
-) -> tuple[int, tuple[int, ...], tuple[int, ...]]:
+) -> tuple[int, tuple[int, ...], tuple[int, ...], tuple[tuple[int, int], ...]]:
     """Return the samples covered by consumed shards and what is still missing.
 
     A shard counts as processed when the consumer recorded its digest in
@@ -201,13 +263,20 @@ def _read_processed_points(
     pass, so the rows already stored for it cannot be scored as this run
     (review of Issue #9, R3).
 
+    The valid sequence ranges are returned as well so that the window and alarm
+    readers can attribute every stored row to a shard.  Without that
+    attribution the report subtracts a mismatched shard from ``processed`` while
+    still counting all of its windows as ``analysed``, which yields a negative
+    drop count and scores conflict data as this run's analysis (R7).
+
     Args:
         connection: Open read-only connection.
         run_id: The run to read.
         manifest: The run manifest.
 
     Returns:
-        ``(submitted_points, pending_part_ids, digest_mismatch_part_ids)``.
+        ``(submitted_points, pending_part_ids, digest_mismatch_part_ids,
+        valid_ranges)``.
     """
     rows = connection.execute(
         "SELECT part_id, sha256 FROM processed_chunks WHERE run_id = ?", (run_id,)
@@ -216,6 +285,8 @@ def _read_processed_points(
     pending: list[int] = []
     mismatched: list[int] = []
     submitted = 0
+    valid: list[tuple[int, int]] = []
+    geometry = {part_id: (start, end) for part_id, start, end in _part_ranges(manifest)}
     for entry in manifest.parts:
         digest = recorded.get(entry.part_id)
         if digest is None:
@@ -225,12 +296,16 @@ def _read_processed_points(
             mismatched.append(entry.part_id)
             continue
         submitted += int(entry.rows)
-    return (submitted, tuple(pending), tuple(mismatched))
+        start, end = geometry[int(entry.part_id)]
+        valid.append((start, end))
+    return (submitted, tuple(pending), tuple(mismatched), tuple(valid))
 
 
 def _read_window_geometry(
-    connection: sqlite3.Connection, run_id: str
-) -> tuple[int | None, int]:
+    connection: sqlite3.Connection,
+    run_id: str,
+    valid_ranges: Sequence[tuple[int, int]],
+) -> tuple[int | None, int, int, int]:
     """Return the stored window width and the samples the windows cover.
 
     The width comes from the geometry of the stored windows -- ``end_seq``
@@ -239,18 +314,24 @@ def _read_window_geometry(
     different width against the wrong grid, which is exactly the defect the
     review of Issue #9 calls out as R1.
 
-    The covered sample count sums the width of every stored window.  Windows
-    are disjoint by contract, so the sum is the number of samples that really
-    entered analysis; the gap against the submitted shard rows is what the
-    consumer dropped.
+    The covered sample count sums the width of the windows that belong to a
+    *valid* shard.  Windows are disjoint by contract, so the sum is the number
+    of samples that really entered analysis; the gap against the submitted
+    shard rows is what the consumer dropped.  Both terms are restricted to the
+    same shards, so ``submitted - analysed`` cannot be negative and the drop
+    count means what it says (review of Issue #9, R7).  Windows outside the
+    valid shards are still counted separately, so nothing stored in the database
+    silently disappears from the report.
 
     Args:
         connection: Open read-only connection.
         run_id: The run to read.
+        valid_ranges: Half-open sequence ranges of the shards that were consumed
+            with a matching digest.
 
     Returns:
-        ``(window_points, covered_points)``; ``window_points`` is ``None``
-        when no window was stored.
+        ``(window_points, covered_points, raw_windows, excluded_windows)``;
+        ``window_points`` is ``None`` when no window was stored at all.
 
     Raises:
         ReportError: if the stored windows disagree on their width.
@@ -263,7 +344,7 @@ def _read_window_geometry(
         (run_id,),
     ).fetchall()
     if not rows:
-        return (None, 0)
+        return (None, 0, 0, 0)
     widths = {int(end) - int(start) for start, end in rows}
     if len(widths) != 1:
         raise ReportError(
@@ -273,7 +354,14 @@ def _read_window_geometry(
     width = widths.pop()
     if width <= 0:
         raise ReportError(f"the stored feature windows have width {width}")
-    return (width, width * len(rows))
+    covered = 0
+    excluded = 0
+    for start, _end in rows:
+        if _contains(valid_ranges, int(start)):
+            covered += width
+        else:
+            excluded += 1
+    return (width, covered, len(rows), excluded)
 
 
 def _read_log(run_dir: Path) -> tuple[float | None, tuple[str, ...], int | None]:
@@ -376,15 +464,17 @@ def _gather(run_dir: Path, database_path: Path) -> _RunFacts:
     connection = _open_readonly(database_path)
     try:
         consumed, scoring_version = _read_run_row(connection, manifest.run_id)
-        alarms = _read_alarms(connection, manifest.run_id)
-        health_scores = _read_health_scores(connection, manifest.run_id)
+        submitted_points, pending_parts, mismatch_parts, valid_ranges = (
+            _read_processed_points(connection, manifest.run_id, manifest)
+        )
+        window_points, analysed_points, raw_windows, excluded_windows = (
+            _read_window_geometry(connection, manifest.run_id, valid_ranges)
+        )
+        alarms, excluded_alarms = _read_alarms(
+            connection, manifest.run_id, valid_ranges
+        )
+        health_scores = _read_health_scores(connection, manifest.run_id, valid_ranges)
         feature_windows = len(health_scores)
-        submitted_points, pending_parts, mismatch_parts = _read_processed_points(
-            connection, manifest.run_id, manifest
-        )
-        window_points, analysed_points = _read_window_geometry(
-            connection, manifest.run_id
-        )
     except sqlite3.Error as exc:
         raise ReportError(f"cannot read {database_path}: {exc}") from exc
     finally:
@@ -401,6 +491,10 @@ def _gather(run_dir: Path, database_path: Path) -> _RunFacts:
         digest_mismatch_parts=mismatch_parts,
         analysed_points=analysed_points,
         dropped_points=submitted_points - analysed_points,
+        raw_feature_windows=raw_windows,
+        excluded_feature_windows=excluded_windows,
+        raw_alarm_count=len(alarms) + excluded_alarms,
+        excluded_alarm_count=excluded_alarms,
         window_points=window_points,
         elapsed_seconds=elapsed,
         errors=errors,
@@ -573,7 +667,10 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
             f"the database recorded a different digest for manifest part(s) "
             f"{list(facts.digest_mismatch_parts)} of run {run_id!r}; those rows "
             "were consumed from bytes the manifest does not describe, so they "
-            "cannot be scored as this run"
+            "cannot be scored as this run.  Every metric below counts only the "
+            "shards whose digest still matches; the rows excluded from that "
+            "scope are reported as raw_/excluded_ counts rather than dropped "
+            "from the report silently"
         )
     if facts.consumed and facts.window_points is None:
         blockers.append(
@@ -625,6 +722,10 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
         "rejected_points": facts.manifest.total_points - facts.submitted_points,
         "pending_parts": list(facts.pending_parts),
         "digest_mismatch_parts": list(facts.digest_mismatch_parts),
+        "raw_feature_windows": facts.raw_feature_windows,
+        "excluded_feature_windows": facts.excluded_feature_windows,
+        "raw_alarm_count": facts.raw_alarm_count,
+        "excluded_alarm_count": facts.excluded_alarm_count,
         "feature_windows": facts.feature_windows,
         "alarm_count": matched_alarm_count,
         "dropped_alarm_count": (
@@ -778,6 +879,19 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
         (
             "| digest_mismatch_parts（摘要与清单不符的片） | "
             f"{payload['digest_mismatch_parts'] or '无'} |"
+        ),
+        (
+            "| raw_feature_windows（库中全部窗口行） | "
+            f"{payload['raw_feature_windows']} |"
+        ),
+        (
+            "| excluded_feature_windows（不属于有效片的窗口行） | "
+            f"{payload['excluded_feature_windows']} |"
+        ),
+        f"| raw_alarm_count（库中全部告警行） | {payload['raw_alarm_count']} |",
+        (
+            "| excluded_alarm_count（不属于有效片的告警行） | "
+            f"{payload['excluded_alarm_count']} |"
         ),
         f"| feature_windows | {payload['feature_windows']} |",
         f"| health_score_min | {_format_optional(payload['health_score_min'])} |",

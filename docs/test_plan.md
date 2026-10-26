@@ -93,7 +93,8 @@ spike / step / burst 六个受控事件，见 §3。
 
 用例 `test_kill_dash_nine_replay_matches_an_uninterrupted_run` 的做法：
 
-1. 子进程**先启动一个监视线程**，轮询消费者自己写出的 `processed_chunks` 表；当该表出现第 1 行（即**第一片事务已提交**）时写握手文件，此时消费者正在处理后面的分片。握手点因此落在"至少一片已落库、整体尚未完成"的真实中间态，而不是在 `consume_run` 调用之前（固定 `sleep` 或调用前握手都能被快机器跑过去，证明不了任何事）。
+1. 子进程**先启动一个监视线程**，轮询消费者自己写出的 `processed_chunks` 表；当该表出现第 1 行（即**第一片事务已提交**）时写握手文件。握手点因此落在"至少一片已落库、整体尚未完成"的真实中间态，而不是在 `consume_run` 调用之前（固定 `sleep` 或调用前握手都能被快机器跑过去，证明不了任何事）。
+   边界说明（按 A 第三轮评审 `5648720609` 的限定）：轮询**不能精确保证**握手发生在"第一片刚提交、正处理第二片"那一刻。监视线程看到第 1 行时，消费者可能已经提交了更晚的片，因此实际观察到的是**某个非空的部分前缀**（`1 <= 已提交片数 < 总片数`），而不是"恰好一片"。用例按这个真实边界断言，不声称更精确的时序。
 2. 握手靠**观察数据库**取得，不往业务代码里加测试专用参数，生产路径保持干净。
 3. 父进程轮询到握手才发信号；发 `SIGKILL` 后断言 `returncode == -SIGKILL`；若子进程自己跑完（`returncode == 0`）则用例失败，而不是静默通过。
 4. 信号之后先断言库处于**部分提交**状态：`processed_chunks` 行数 `>= 1` 且 `< manifest.parts` 总数——否则说明信号打在消费开始前或结束之后，用例失败。
@@ -119,7 +120,8 @@ spike / step / burst 六个受控事件，见 §3。
 7. **真值未知时不得声称零事件**：`fault_events` 等一切依赖真值的计数为 `null`；库侧 `alarm_count` 照常报出。
 8. **窗口宽度一律从已存窗口几何读出**（`feature_windows` 的 `end_seq_exclusive - start_seq`），不写死 256；宽度不一致直接 `ReportError`。
 9. **点数四项自洽**：`processed_points`（已提交片）+ `rejected_points`（未消费片）= `total_points`，`analysed_points`（真实入窗）+ `dropped_points`（片内未成窗）= `processed_points`。
-10. 工程门禁：`black --check src tests`、`pylint src/g15 --fail-under=8.5`、`pytest -q` 全部退出 0。
+10. **摘要冲突时口径必须统一**（R7）：`analysed_points`、`alarm_count` 与一切匹配指标只统计**有效片**（已提交且 `sha256` 与清单一致）的数据；`dropped_points` 因此不可能为负，**不得**用 `max(0, ...)` 掩盖。无法归属当前 manifest 的库中行不得静默丢弃，必须以 `raw_feature_windows` / `excluded_feature_windows` / `raw_alarm_count` / `excluded_alarm_count` 报出，把"库中原始记录"与"可归属当前 manifest 的数据"分开；`summary.json` 与 `summary.md` 必须同源。
+11. 工程门禁：`black --check src tests`、`pylint src/g15 --fail-under=8.5`、`pytest -q` 全部退出 0。
 
 ## 8 明确不覆盖（不得在答辩中宣称）
 
