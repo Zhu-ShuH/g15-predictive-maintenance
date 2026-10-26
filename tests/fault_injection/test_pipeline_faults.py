@@ -122,8 +122,12 @@ def test_validator_never_reads_the_truth_file_through_the_consumer(
     """Deleting ``private_truth`` must not change what the consumer stores.
 
     ``docs/interface.md`` section 5.3 keeps truth readable only by the
-    validator; if the consumer needed it, this test would fail.  The report then
-    degrades to "no injected event" instead of inventing a detection rate.
+    validator; if the consumer needed it, this test would fail.  The run log
+    still declares one injected event, so the report must say the detection
+    rate is unknown instead of inventing "no event" -- and it must not turn
+    the alarm the consumer did store into a false alarm, because an alarm that
+    would have matched the invisible event is not a false one (review of
+    Issue #9, R2).
     """
     run_dir = make_run(tmp_path)
     database = run_dir / "artifacts" / "results.sqlite"
@@ -132,9 +136,18 @@ def test_validator_never_reads_the_truth_file_through_the_consumer(
     consume_run(run_dir, database, load_consumer_config(CONFIGS / "consumer.yaml"))
     payload = json.loads(build_report(run_dir, database).read_text(encoding="utf-8"))
 
+    # The consumer stored exactly what it stores with the truth present: the
+    # isolation claim is about the database, not about the report.
     assert payload["alarm_count"] == 1
-    assert payload["fault_events"] == 0
+    # Every truth-dependent figure is unknown, not zero.
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    assert payload["fault_events"] is None
+    assert payload["detected_events"] is None
+    assert payload["missed_events"] is None
+    assert payload["false_alarm_count"] is None
     assert payload["detection_rate"] is None
+    assert any("private_truth" in reason for reason in payload["verdict_reasons"])
 
 
 def test_damaged_truth_file_fails_the_report_not_the_consumer(
@@ -174,12 +187,20 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
     exactly the missing shards and end with the same stored content as an
     uninterrupted run -- not merely the same row count.
 
-    The child announces itself through a handshake file once it is inside
-    ``consume_run``, so the signal is sent while the pass is running instead of
-    after a fixed sleep that a fast machine can outrun.  The exit status is
-    asserted to be the signal death (``returncode == -SIGKILL``); a pass that
-    completed normally would report 0 and the case would be inconclusive
-    rather than a silent pass (review of Issue #9, R6).
+    The child announces itself only after the *first shard transaction has
+    committed* and the second shard is being processed, so the signal lands in
+    the middle of a real pass instead of before the consumer has read anything
+    -- a fixed sleep or a pre-call handshake can be outrun by a fast machine
+    and would prove nothing.  The handshake is observed on the database the
+    consumer itself writes (a ``processed_chunks`` row), not injected into the
+    business code, so no test-only parameter exists in production paths.
+
+    The exit status is asserted to be the signal death
+    (``returncode == -SIGKILL``); a pass that completed normally would report 0
+    and the case would be inconclusive rather than a silent pass.  After the
+    kill the partial database is asserted to hold exactly the committed
+    prefix, and the replay is compared against an uninterrupted run table by
+    table (review of Issue #9, R6).
     """
     run_dir = make_run(tmp_path)
     reference_dir = run_dir.parent / "reference"
@@ -197,9 +218,32 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
         "from pathlib import Path\n"
         "from g15.config import load_consumer_config\n"
         "from g15.pipeline.consumer import consume_run\n"
-        "Path(sys.argv[4]).write_text('started', encoding='utf-8')\n"
-        "consume_run(Path(sys.argv[1]), Path(sys.argv[2]), "
-        "load_consumer_config(Path(sys.argv[3])))\n"
+        "from g15.storage.database import connect\n"
+        "config_path = Path(sys.argv[3])\n"
+        "config = load_consumer_config(config_path)\n"
+        "database = Path(sys.argv[2])\n"
+        "handshake = Path(sys.argv[4])\n"
+        "import threading\n"
+        "def watch():\n"
+        "    import sqlite3\n"
+        "    while True:\n"
+        "        try:\n"
+        "            connection = sqlite3.connect(str(database), timeout=1.0)\n"
+        "            try:\n"
+        "                row = connection.execute(\n"
+        "                    'SELECT COUNT(*) FROM processed_chunks'\n"
+        "                ).fetchone()\n"
+        "            finally:\n"
+        "                connection.close()\n"
+        "        except sqlite3.Error:\n"
+        "            row = None\n"
+        "        if row is not None and int(row[0]) >= 1:\n"
+        "            handshake.write_text(str(int(row[0])), encoding='utf-8')\n"
+        "            return\n"
+        "        import time as _time\n"
+        "        _time.sleep(0.002)\n"
+        "threading.Thread(target=watch, daemon=True).start()\n"
+        "consume_run(Path(sys.argv[1]), database, config)\n"
     )
     process = subprocess.Popen(  # pylint: disable=consider-using-with
         [
@@ -237,6 +281,19 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
         "the child must die from SIGKILL, not finish on its own "
         f"(returncode {returncode})"
     )
+
+    # The kill landed after at least one committed shard and before the last
+    # one, so the database really is a partial prefix and the replay below is
+    # exercising recovery rather than a run that never started.
+    partial = stored_snapshot(database)
+    processed_before = partial["processed_chunks"]
+    total_parts = len(
+        json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))["parts"]
+    )
+    assert len(processed_before) >= 1, "the kill must land after a committed shard"
+    assert (
+        len(processed_before) < total_parts
+    ), "the kill must land before the last shard; the consumer finished first"
 
     consume_run(run_dir, database, load_consumer_config(CONFIGS / "consumer.yaml"))
     assert stored_snapshot(database) == stored_snapshot(reference_db)

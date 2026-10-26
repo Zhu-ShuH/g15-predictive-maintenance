@@ -70,6 +70,14 @@ class _RunFacts:
         feature_windows: Number of stored feature windows.
         submitted_points: Samples covered by the shards the consumer recorded
             as committed, i.e. ``processed_chunks`` joined with the manifest.
+        pending_parts: Manifest parts the consumer never recorded as processed.
+            A ``runs`` row only proves the run was *started* in this database;
+            until every part carries a ``processed_chunks`` row the run is
+            partially consumed, and a partially consumed run must not be
+            reported as a whole pass (review of Issue #9, R3).
+        digest_mismatch_parts: Parts whose recorded digest differs from the
+            manifest's.  The consumer refuses such a shard on the next pass, so
+            the report must not score the rows already stored for it.
         analysed_points: Samples actually covered by stored feature windows,
             summed over the windows of every processed shard.
         dropped_points: Samples inside the processed shards that no stored
@@ -90,6 +98,8 @@ class _RunFacts:
     health_scores: tuple[float, ...]
     feature_windows: int
     submitted_points: int
+    pending_parts: tuple[int, ...]
+    digest_mismatch_parts: tuple[int, ...]
     analysed_points: int
     dropped_points: int
     window_points: int | None
@@ -175,8 +185,8 @@ def _read_health_scores(
 
 def _read_processed_points(
     connection: sqlite3.Connection, run_id: str, manifest: Any
-) -> int:
-    """Return the number of samples covered by consumed shards.
+) -> tuple[int, tuple[int, ...], tuple[int, ...]]:
+    """Return the samples covered by consumed shards and what is still missing.
 
     A shard counts as processed when the consumer recorded its digest in
     ``processed_chunks``; the row count comes from the manifest, which is the
@@ -184,21 +194,38 @@ def _read_processed_points(
     count: it says the samples reached the consumer, not that every one of
     them entered a stored feature window.
 
+    Two things make the count incomplete rather than merely smaller.  A part
+    with no ``processed_chunks`` row was never consumed, and a part whose
+    recorded digest differs from the manifest's was consumed from different
+    bytes than the manifest describes -- the consumer refuses it on the next
+    pass, so the rows already stored for it cannot be scored as this run
+    (review of Issue #9, R3).
+
     Args:
         connection: Open read-only connection.
         run_id: The run to read.
         manifest: The run manifest.
 
     Returns:
-        Sum of ``rows`` over the processed shards.
+        ``(submitted_points, pending_part_ids, digest_mismatch_part_ids)``.
     """
     rows = connection.execute(
-        "SELECT part_id FROM processed_chunks WHERE run_id = ?", (run_id,)
+        "SELECT part_id, sha256 FROM processed_chunks WHERE run_id = ?", (run_id,)
     ).fetchall()
-    processed_ids = {int(row[0]) for row in rows}
-    return sum(
-        int(entry.rows) for entry in manifest.parts if entry.part_id in processed_ids
-    )
+    recorded = {int(row[0]): str(row[1]) for row in rows}
+    pending: list[int] = []
+    mismatched: list[int] = []
+    submitted = 0
+    for entry in manifest.parts:
+        digest = recorded.get(entry.part_id)
+        if digest is None:
+            pending.append(entry.part_id)
+            continue
+        if digest != entry.sha256:
+            mismatched.append(entry.part_id)
+            continue
+        submitted += int(entry.rows)
+    return (submitted, tuple(pending), tuple(mismatched))
 
 
 def _read_window_geometry(
@@ -352,7 +379,9 @@ def _gather(run_dir: Path, database_path: Path) -> _RunFacts:
         alarms = _read_alarms(connection, manifest.run_id)
         health_scores = _read_health_scores(connection, manifest.run_id)
         feature_windows = len(health_scores)
-        submitted_points = _read_processed_points(connection, manifest.run_id, manifest)
+        submitted_points, pending_parts, mismatch_parts = _read_processed_points(
+            connection, manifest.run_id, manifest
+        )
         window_points, analysed_points = _read_window_geometry(
             connection, manifest.run_id
         )
@@ -368,6 +397,8 @@ def _gather(run_dir: Path, database_path: Path) -> _RunFacts:
         health_scores=health_scores,
         feature_windows=feature_windows,
         submitted_points=submitted_points,
+        pending_parts=pending_parts,
+        digest_mismatch_parts=mismatch_parts,
         analysed_points=analysed_points,
         dropped_points=submitted_points - analysed_points,
         window_points=window_points,
@@ -490,14 +521,16 @@ def _counts(result: MatchResult) -> dict[str, Any]:
 def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
     """Compute the report payload for one run.
 
-    The report never decides "passed" from incomplete evidence.  Three facts
+    The report never decides "passed" from incomplete evidence.  Four facts
     are required before any verdict is produced: the run must be consumed in
-    the database it was handed (R3), the truth must be readable and belong to
-    this run (R2), and the analysis window width must come from the stored
-    windows rather than a default (R1).  When one of them is missing the
-    payload is still produced -- a diagnostic report is useful -- but
-    ``verifiable`` is ``False``, ``passed`` is ``None``, and every metric that
-    could not be established stays ``null``.
+    the database it was handed, *every* manifest part must carry a matching
+    ``processed_chunks`` row (a ``runs`` row alone only means the run was
+    started there), the truth must be readable and belong to this run (R2),
+    and the analysis window width must come from the stored windows rather
+    than a default (R1).  When one of them is missing the payload is still
+    produced -- a diagnostic report is useful -- but ``verifiable`` is
+    ``False``, ``passed`` is ``None``, and every metric that could not be
+    established stays ``null``.
 
     Args:
         run_dir: The run directory.
@@ -527,6 +560,20 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
             "the run carries no private_truth/faults.json and its log does not "
             "declare zero injected events; a missing truth file cannot be read "
             "as 'no event injected', so the detection rate is unknown"
+        )
+    if facts.consumed and facts.pending_parts:
+        blockers.append(
+            f"the database holds processed rows for only part of run {run_id!r}: "
+            f"manifest part(s) {list(facts.pending_parts)} carry no "
+            "processed_chunks row, so the consumer never finished this run; a "
+            "partially consumed run cannot be reported as a whole pass"
+        )
+    if facts.consumed and facts.digest_mismatch_parts:
+        blockers.append(
+            f"the database recorded a different digest for manifest part(s) "
+            f"{list(facts.digest_mismatch_parts)} of run {run_id!r}; those rows "
+            "were consumed from bytes the manifest does not describe, so they "
+            "cannot be scored as this run"
         )
     if facts.consumed and facts.window_points is None:
         blockers.append(
@@ -576,6 +623,8 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
         "analysed_points": facts.analysed_points,
         "dropped_points": facts.dropped_points,
         "rejected_points": facts.manifest.total_points - facts.submitted_points,
+        "pending_parts": list(facts.pending_parts),
+        "digest_mismatch_parts": list(facts.digest_mismatch_parts),
         "feature_windows": facts.feature_windows,
         "alarm_count": matched_alarm_count,
         "dropped_alarm_count": (
@@ -604,9 +653,15 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
             for match in (result.matches if result is not None else ())
         ],
     }
-    if result is not None:
+    if result is not None and events is not None:
         payload.update(_counts(result))
     else:
+        # The truth is unknown, so nothing that depends on it may be stated:
+        # not the event total, not the detection rate, and above all not a
+        # false-alarm count -- an alarm that would have matched an event we
+        # cannot see is not a false alarm (review of Issue #9, R2).  The alarm
+        # side of the database is still a fact, so ``alarm_count`` and
+        # ``dropped_alarm_count`` above stay as read.
         payload.update(
             {
                 "fault_events": None,
@@ -719,6 +774,11 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
         f"| analysed_points（真实进入窗口） | {payload['analysed_points']} |",
         f"| dropped_points（片内未成窗） | {payload['dropped_points']} |",
         f"| rejected_points（未消费的片） | {payload['rejected_points']} |",
+        f"| pending_parts（无处理记录的片） | {payload['pending_parts'] or '无'} |",
+        (
+            "| digest_mismatch_parts（摘要与清单不符的片） | "
+            f"{payload['digest_mismatch_parts'] or '无'} |"
+        ),
         f"| feature_windows | {payload['feature_windows']} |",
         f"| health_score_min | {_format_optional(payload['health_score_min'])} |",
         f"| health_score_max | {_format_optional(payload['health_score_max'])} |",
@@ -745,7 +805,7 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
                 f"{_format_optional(event['first_alarm_start'])} | "
                 f"{_format_optional(event['lag_samples'])} |"
             )
-    elif not payload["verifiable"]:
+    elif payload["fault_events"] is None:
         lines.append("真值不可用或事件未知，逐事件匹配无法进行；这不是「零事件」。")
     else:
         lines.append("本运行的真值文件明确记录零个注入事件。")

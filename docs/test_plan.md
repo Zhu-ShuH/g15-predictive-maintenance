@@ -93,14 +93,17 @@ spike / step / burst 六个受控事件，见 §3。
 
 用例 `test_kill_dash_nine_replay_matches_an_uninterrupted_run` 的做法：
 
-1. 子进程进入 `consume_run` 后写一个握手文件，父进程轮询到握手才发信号——不用固定 `sleep`，机器快也不会在消费者已结束之后才发信号；
-2. 发 `SIGKILL` 后断言 `returncode == -SIGKILL`；若子进程自己跑完（`returncode == 0`）则用例失败，而不是静默通过；
-3. 重跑消费后比对 `runs`、`processed_chunks`、`feature_windows`、`alarms`、`alarm_states` 五张表的**全部内容**（含窗口几何、健康分、告警级别与持久化状态），不只比总行数——这样"写对行数但写错内容"的重放也会被抓到。
+1. 子进程**先启动一个监视线程**，轮询消费者自己写出的 `processed_chunks` 表；当该表出现第 1 行（即**第一片事务已提交**）时写握手文件，此时消费者正在处理后面的分片。握手点因此落在"至少一片已落库、整体尚未完成"的真实中间态，而不是在 `consume_run` 调用之前（固定 `sleep` 或调用前握手都能被快机器跑过去，证明不了任何事）。
+2. 握手靠**观察数据库**取得，不往业务代码里加测试专用参数，生产路径保持干净。
+3. 父进程轮询到握手才发信号；发 `SIGKILL` 后断言 `returncode == -SIGKILL`；若子进程自己跑完（`returncode == 0`）则用例失败，而不是静默通过。
+4. 信号之后先断言库处于**部分提交**状态：`processed_chunks` 行数 `>= 1` 且 `< manifest.parts` 总数——否则说明信号打在消费开始前或结束之后，用例失败。
+5. 重跑消费后比对 `runs`、`processed_chunks`、`feature_windows`、`alarms`、`alarm_states` 五张表的**全部内容**（含窗口几何、健康分、告警级别与持久化状态），不只比总行数——这样"写对行数但写错内容"的重放也会被抓到。
 
 该用例在 Windows 上 **skip**，理由写进用例：`kill -9` 是 POSIX 语义，Windows 没有等价物，按 §4 必须在 Linux 留证，不在 Windows 伪造。
 
 ### 6.4 真值隔离（可证伪）
 - 删除 `private_truth/faults.json` 后**消费仍然成功**（消费者不读真值），但报告必须判为**不可验证**（`verifiable=false`、`passed=null`、`detection_rate=null`），并给出"缺真值"的原因——不能把"文件没了"当成"没有事件"而判正常通过。
+- 真值未知时，**一切依赖真值的计数一律为 `null`**：`fault_events`、`detected_events`、`missed_events`、`false_alarm_count`、`redundant_alarm_count`、`unmatched_alarm_count` 全部 `null`。特别地，不得把库里的告警算成"误报"——它本来可能命中那个看不见的事件。库侧的已知事实（`alarm_count`、`dropped_alarm_count`）单独保留，仍然报出。
 - 只有当运行日志 `run_complete.fault_events` 明确写着 0 时，缺文件才被读作"零事件"。
 - 真值文件被写坏（JSON 语法错或字段非法）时，**消费已成功**，`build_report` 抛 `ReportError`——证明真值只在报告层被读。
 - 真值文件来自另一个 run（`run_id` 不符）时同样抛 `ReportError`，不允许张冠李戴。
@@ -112,9 +115,11 @@ spike / step / burst 六个受控事件，见 §3。
 3. 正常场景 `alarm_count=0`、`detection_rate=null`；故障场景 `detection_rate=1.0` 且 `false_alarm_count=0`。
 4. 报告必须**同时**给出检出率与误报数，不得只报一个；未知指标写 `null`，不得捏造 0 或 100%。
 5. **不可验就不得判通过**：缺真值（日志未声明 0 事件）、该 `run_id` 未消费、窗口宽度未知 → `verifiable=false`、`passed=null`、`detection_rate=null`，并在 `reasons` 写清原因。
-6. **窗口宽度一律从已存窗口几何读出**（`feature_windows` 的 `end_seq_exclusive - start_seq`），不写死 256；宽度不一致直接 `ReportError`。
-7. **点数四项自洽**：`processed_points`（已提交片）+ `rejected_points`（未消费片）= `total_points`，`analysed_points`（真实入窗）+ `dropped_points`（片内未成窗）= `processed_points`。
-8. 工程门禁：`black --check src tests`、`pylint src/g15 --fail-under=8.5`、`pytest -q` 全部退出 0。
+6. **有 `runs` 行不等于消费完成**：`manifest.parts` 里每个分片都必须有 `processed_chunks` 行且 `sha256` 与清单一致；缺行或摘要不符即为**部分消费**，`verifiable=false`、`passed=null`，`pending_parts`/`digest_mismatch_parts` 列出具体片号。
+7. **真值未知时不得声称零事件**：`fault_events` 等一切依赖真值的计数为 `null`；库侧 `alarm_count` 照常报出。
+8. **窗口宽度一律从已存窗口几何读出**（`feature_windows` 的 `end_seq_exclusive - start_seq`），不写死 256；宽度不一致直接 `ReportError`。
+9. **点数四项自洽**：`processed_points`（已提交片）+ `rejected_points`（未消费片）= `total_points`，`analysed_points`（真实入窗）+ `dropped_points`（片内未成窗）= `processed_points`。
+10. 工程门禁：`black --check src tests`、`pylint src/g15 --fail-under=8.5`、`pytest -q` 全部退出 0。
 
 ## 8 明确不覆盖（不得在答辩中宣称）
 

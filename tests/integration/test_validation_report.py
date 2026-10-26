@@ -488,3 +488,91 @@ def _insert_alarm(database: Path, run_dir: Path, *, start_seq: int) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+# -- R3: a partially consumed run is not a pass -----------------------------
+
+
+def test_report_refuses_a_partially_consumed_run(tmp_path: Path) -> None:
+    """A run whose second shard is damaged must not be reported as a pass.
+
+    This is the real failure path A reproduced: the producer publishes a
+    complete run, ``consume_run`` commits the first shard, the second shard's
+    digest no longer matches the manifest, and consumption aborts.  The
+    database therefore holds a ``runs`` row, some windows and some alarms --
+    but the run was never consumed as a whole.  Reporting ``passed=true`` off
+    the committed prefix would certify a run whose data is half missing
+    (review of Issue #9, R3).
+
+    The test then repairs the shard and re-runs the consumer, and asserts the
+    same report turns into a pass: the blocker must be about consumption
+    completeness, not about a permanently unverifiable run.
+    """
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    # Damage the second shard *after* the first pass proved the run is
+    # consumable, then consume into a fresh database so the abort happens
+    # inside a single ``consume_run`` call.
+    second = run_dir / manifest["parts"][1]["path"]
+    good_bytes = second.read_bytes()
+    second.write_bytes(good_bytes[:-8] + b"deadbeef")
+
+    fresh = tmp_path / "partial" / "results.sqlite"
+    fresh.parent.mkdir(parents=True)
+    with pytest.raises(Exception):
+        consume_run(run_dir, fresh, load_consumer_config(CONSUMER_CONFIG))
+
+    payload = report_of(run_dir, fresh)
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    assert payload["pending_parts"] == [1, 2, 3, 4, 5, 6]
+    assert payload["processed_points"] == 10240
+    assert payload["rejected_points"] == 65536 - 10240
+    assert any("never finished this run" in r for r in payload["verdict_reasons"])
+
+    # Repair and re-consume: the same report must now be a pass, so the
+    # blocker is about completeness rather than about the fixture.
+    second.write_bytes(good_bytes)
+    consume_run(run_dir, fresh, load_consumer_config(CONSUMER_CONFIG))
+    repaired = report_of(run_dir, fresh)
+    assert repaired["pending_parts"] == []
+    assert repaired["verifiable"] is True
+    assert repaired["passed"] is True
+    assert repaired["processed_points"] == 65536
+    assert repaired["rejected_points"] == 0
+    # The original database is untouched by any of this.
+    assert report_of(run_dir, database)["passed"] is True
+
+
+def test_report_refuses_a_run_whose_recorded_digest_was_swapped(
+    tmp_path: Path,
+) -> None:
+    """A shard consumed from other bytes cannot be scored as this run.
+
+    ``processed_chunks.sha256`` is the consumer's own record of what it read.
+    When it disagrees with the manifest, the rows already stored for that part
+    belong to different data, so a report that scores them would attribute
+    somebody else's samples to this run (review of Issue #9, R3).
+    """
+    import sqlite3  # noqa: PLC0415
+
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute(
+            "UPDATE processed_chunks SET sha256 = ? WHERE part_id = 3",
+            ("0" * 64,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    payload = report_of(run_dir, database)
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    assert payload["digest_mismatch_parts"] == [3]
+    assert payload["processed_points"] == 65536 - int(manifest["parts"][3]["rows"])
+    assert any("different digest" in r for r in payload["verdict_reasons"])
