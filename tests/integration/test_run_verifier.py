@@ -510,3 +510,220 @@ def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+# --------------------------------------------------------------------------- #
+# Section 5.1: four parallel columns of one table
+#
+# The digest gate alone cannot catch these: the manifest is rewritten with the
+# new digest, so the bytes are exactly the bytes the manifest declares.  What is
+# wrong is the *shape* of the table, and a verifier that only looks at
+# ``seq.shape[0]`` would call all three of them clean.
+# --------------------------------------------------------------------------- #
+
+
+def _shorten(run_dir: Path, field: str, rows: int) -> None:
+    """Replace one column of part 0 with its first ``rows`` entries."""
+    path = run_dir / "raw" / "part-000000.npz"
+    with np.load(path, allow_pickle=False) as archive:
+        arrays = {name: np.asarray(archive[name]) for name in archive.files}
+    arrays[field] = arrays[field][:rows]
+    np.savez(path, **arrays)
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][0]["sha256"] = _sha256(path)
+    _rewrite_manifest(run_dir, payload)
+
+
+@pytest.mark.parametrize("field", ["vibration", "temperature", "timestamp_ns"])
+def test_a_column_that_is_not_as_long_as_seq_is_reported(
+    run_dir: Path, field: str
+) -> None:
+    """Section 5.1: the four arrays are columns of one table.
+
+    ``seq`` is left at 256 rows on purpose -- the only broken thing is that one
+    column no longer has 256 entries.  Reporting ``passed`` here would mean
+    claiming ``2 x rows`` signal scalars were verified when one column is short.
+    """
+    _shorten(run_dir, field, 255)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.length_mismatch" in result.failures
+    shard = result.shards[0]
+    assert shard.dtype_ok is True  # the remaining values are still legal
+    assert shard.observed_rows == 256  # seq is intact
+    # The short column is not a verified table, so it must not be counted as
+    # 2 x rows verified scalars.
+    assert result.verified_part_count == 3
+    assert result.rows_sum == 768
+
+
+def test_an_empty_signal_column_is_reported(run_dir: Path) -> None:
+    """Zero rows in ``vibration`` against 256 in ``seq`` is the same defect."""
+    _shorten(run_dir, "vibration", 0)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.length_mismatch" in result.failures
+
+
+def test_a_length_mismatch_does_not_hide_the_remaining_shards(
+    run_dir: Path,
+) -> None:
+    """One bad column must not stop the other three shards from being checked."""
+    _shorten(run_dir, "temperature", 100)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert result.part_count == 4
+    assert result.verified_part_count == 3
+    assert all(shard.hash_ok is True for shard in result.shards)
+
+
+# --------------------------------------------------------------------------- #
+# Damaged ``seq`` must be reported, never raised
+#
+# ``seq`` is read twice: once to check the column, once to record the boundary
+# values.  The second read must not run when the first already failed, or a NaN
+# column would raise ``ValueError`` out of a content check and abandon the
+# shards that follow.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf, -np.inf])
+def test_a_non_integer_seq_column_is_reported_not_raised(
+    run_dir: Path, bad_value: float
+) -> None:
+    """A float ``seq`` full of NaN/Inf is content damage, not a caller error."""
+    path = run_dir / "raw" / "part-000000.npz"
+    with np.load(path, allow_pickle=False) as archive:
+        arrays = {name: np.asarray(archive[name]) for name in archive.files}
+    arrays["seq"] = np.full(arrays["seq"].shape, bad_value, dtype=np.float64)
+    np.savez(path, **arrays)
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][0]["sha256"] = _sha256(path)
+    _rewrite_manifest(run_dir, payload)
+
+    result = verify_run(run_dir)  # must not raise
+
+    assert result.passed is False
+    assert "shard.dtype_mismatch" in result.failures
+    shard = result.shards[0]
+    assert shard.dtype_ok is False
+    assert shard.seq_ok is False
+    # Unreadable boundary stays unknown instead of being fabricated.
+    assert shard.first_seq is None
+    assert shard.last_seq is None
+    # The other three shards are still inspected.
+    assert result.verified_part_count == 3
+
+
+def test_a_broken_seq_does_not_stop_later_shards(run_dir: Path) -> None:
+    """A NaN ``seq`` in part 0 plus a real gap in part 2 must both be reported."""
+    path = run_dir / "raw" / "part-000000.npz"
+    with np.load(path, allow_pickle=False) as archive:
+        arrays = {name: np.asarray(archive[name]) for name in archive.files}
+    arrays["seq"] = np.full(arrays["seq"].shape, np.nan, dtype=np.float64)
+    np.savez(path, **arrays)
+
+    gap_path = run_dir / "raw" / "part-000002.npz"
+    with np.load(gap_path, allow_pickle=False) as archive:
+        gap = {name: np.asarray(archive[name]) for name in archive.files}
+    seq = gap["seq"].copy()
+    seq[10] = 999
+    gap["seq"] = seq
+    np.savez(gap_path, **gap)
+
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][0]["sha256"] = _sha256(path)
+    payload["parts"][2]["sha256"] = _sha256(gap_path)
+    _rewrite_manifest(run_dir, payload)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.dtype_mismatch" in result.failures
+    assert "shard.seq_gap" in result.failures
+
+
+# --------------------------------------------------------------------------- #
+# The container itself can be wrong
+# --------------------------------------------------------------------------- #
+
+
+def test_an_npy_payload_in_place_of_an_npz_is_reported(run_dir: Path) -> None:
+    """A legal ``.npy`` file saved under the shard name is not an NPZ archive.
+
+    ``np.load`` returns a bare ``ndarray`` for those bytes, so this case used to
+    escape as ``TypeError`` (no context-manager protocol) instead of a shard
+    verdict.
+    """
+    path = run_dir / "raw" / "part-000000.npz"
+    with np.load(path, allow_pickle=False) as archive:
+        payload_array = np.asarray(archive["vibration"])
+    npy = run_dir / "raw" / "payload.npy"
+    np.save(npy, payload_array)
+    shutil.copy(npy, path)
+    npy.unlink()
+
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][0]["sha256"] = _sha256(path)
+    _rewrite_manifest(run_dir, payload)
+
+    result = verify_run(run_dir)  # must not raise TypeError
+
+    assert result.passed is False
+    assert "shard.not_archive" in result.failures
+    assert result.shards[0].hash_ok is True
+    assert result.shards[0].observed_rows is None
+    assert result.verified_part_count == 3
+
+
+def test_an_npy_payload_does_not_stop_the_other_shards(run_dir: Path) -> None:
+    """The remaining shards are still hashed and checked after a bad container."""
+    path = run_dir / "raw" / "part-000001.npz"
+    with np.load(path, allow_pickle=False) as archive:
+        payload_array = np.asarray(archive["temperature"])
+    npy = run_dir / "raw" / "payload.npy"
+    np.save(npy, payload_array)
+    shutil.copy(npy, path)
+    npy.unlink()
+
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][1]["sha256"] = _sha256(path)
+    _rewrite_manifest(run_dir, payload)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.not_archive" in result.failures
+    assert result.verified_part_count == 3
+    assert result.shards[2].hash_ok is True
+    assert result.shards[3].hash_ok is True
+
+
+# --------------------------------------------------------------------------- #
+# The origin check belongs to part 0 only
+# --------------------------------------------------------------------------- #
+
+
+def test_an_unreadable_first_shard_does_not_blame_the_second(
+    run_dir: Path,
+) -> None:
+    """``seq.not_from_zero`` is a statement about part 0, not about whoever is
+    readable first.
+
+    If part 0 is unreadable and part 1 starts at 256, the chain baseline is
+    unknown; reporting ``seq.not_from_zero`` would blame a healthy shard.
+    """
+    path = run_dir / "raw" / "part-000000.npz"
+    path.unlink()
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.missing" in result.failures
+    assert "seq.not_from_zero" not in result.failures

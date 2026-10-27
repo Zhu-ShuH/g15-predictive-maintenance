@@ -83,8 +83,16 @@ _MISSING: Final[str] = "shard.missing"
 _UNREADABLE: Final[str] = "shard.unreadable"
 #: Failure code used when the archive does not carry exactly the four fields.
 _FIELDS: Final[str] = "shard.fields"
+#: Failure code used when the loaded object is not an NPZ archive at all.
+#:
+#: ``np.load`` happily returns a bare :class:`numpy.ndarray` for a ``.npy``
+#: payload, so a file whose digest matches the manifest can still be the wrong
+#: kind of container.  That is content damage, not a caller error.
+_NOT_ARCHIVE: Final[str] = "shard.not_archive"
 #: Failure code used when a field has the wrong dtype, shape or finiteness.
 _DTYPE: Final[str] = "shard.dtype_mismatch"
+#: Failure code used when the four arrays do not all have the same length.
+_LENGTHS: Final[str] = "shard.length_mismatch"
 #: Failure code used when the observed row count differs from the entry.
 _ROWS: Final[str] = "shard.rows_mismatch"
 #: Failure code used when ``seq`` does not advance by exactly one inside a shard.
@@ -338,6 +346,11 @@ def _load_arrays(
 ) -> tuple[dict[str, np.ndarray[Any, Any]] | None, str]:
     """Load every array of one shard without trusting pickled payloads.
 
+    The container is checked before it is used: ``np.load`` returns a bare
+    :class:`numpy.ndarray` when the bytes are a ``.npy`` payload, and an
+    ``ndarray`` has no ``files``/context-manager protocol.  Letting that surface
+    as a ``TypeError`` would report content damage as a programming error.
+
     Args:
         shard_path: Shard file.
 
@@ -345,9 +358,20 @@ def _load_arrays(
         A pair ``(arrays, failure)``.  Exactly one element is ``None``.
     """
     try:
-        with np.load(shard_path, allow_pickle=False) as archive:
-            arrays = {name: np.asarray(archive[name]) for name in archive.files}
+        loaded = np.load(shard_path, allow_pickle=False)
     except (OSError, ValueError, EOFError, zipfile.BadZipFile):
+        return None, _UNREADABLE
+
+    if not isinstance(loaded, np.lib.npyio.NpzFile):
+        # A single-array .npy payload saved under the shard's name.
+        if isinstance(loaded, np.ndarray):
+            return None, _NOT_ARCHIVE
+        return None, _UNREADABLE
+
+    try:
+        with loaded as archive:
+            arrays = {name: np.asarray(archive[name]) for name in archive.files}
+    except (OSError, ValueError, EOFError, zipfile.BadZipFile, TypeError):
         return None, _UNREADABLE
     return arrays, ""
 
@@ -356,6 +380,12 @@ def _check_arrays(
     arrays: dict[str, np.ndarray[Any, Any]], entry: ChunkManifestEntry
 ) -> tuple[bool, bool, int | None, list[str]]:
     """Compare one shard's arrays against section 5.1.
+
+    Section 5.1 describes four parallel columns of one table, so the four arrays
+    must be one-dimensional, carry the frozen dtypes, and be *the same length*.
+    Checking only ``seq.shape[0]`` would accept a shard whose vibration column
+    lost a row while its digest was recomputed to match, which is exactly the
+    damage this module exists to catch.
 
     Args:
         arrays: Arrays loaded from the shard.
@@ -367,12 +397,9 @@ def _check_arrays(
     failures: list[str] = []
 
     if set(arrays) != set(NPZ_FIELDS):
-        missing = sorted(set(NPZ_FIELDS) - set(arrays))
-        unknown = sorted(set(arrays) - set(NPZ_FIELDS))
         failures.append(_FIELDS)
         # The dtype verdict is still meaningful for the fields that are there,
         # but the row count is not, so it stays unknown.
-        del missing, unknown
         return False, False, None, failures
 
     dtype_ok = True
@@ -387,12 +414,20 @@ def _check_arrays(
     if not dtype_ok:
         failures.append(_DTYPE)
 
+    lengths = {name: int(arrays[name].shape[0]) for name in NPZ_FIELDS}
+    equal_lengths = len(set(lengths.values())) == 1
+    if not equal_lengths:
+        failures.append(_LENGTHS)
+
     seq = arrays["seq"]
-    observed_rows = int(seq.shape[0]) if seq.ndim == 1 else None
+    observed_rows = lengths["seq"] if seq.ndim == 1 else None
 
     if observed_rows is not None and observed_rows != entry.rows:
         failures.append(_ROWS)
 
+    # ``seq`` is only inspected when it is an int64 vector: on any other dtype
+    # the values are not a legal column and converting them (NaN -> int) would
+    # raise out of a content check.
     seq_ok = True
     if seq.ndim != 1 or seq.dtype != FIELD_DTYPES["seq"] or observed_rows == 0:
         seq_ok = False
@@ -506,7 +541,11 @@ def _check_shard(run_dir: Path, entry: ChunkManifestEntry) -> ShardCheck:
 
     dtype_ok, seq_ok, observed_rows, array_failures = _check_arrays(arrays, entry)
     failures.extend(array_failures)
-    if observed_rows:
+    # The boundary values are only readable when ``seq`` is a legal int64 vector
+    # and the shard is not empty.  Converting a NaN/Inf/object column here would
+    # raise out of a content check and stop the remaining shards from being
+    # inspected, so an unreadable boundary stays unknown instead.
+    if seq_ok and observed_rows:
         first_seq = int(arrays["seq"][0])
         last_seq = int(arrays["seq"][-1])
 
@@ -568,7 +607,11 @@ def _cross_shard_failures(
         if shard.first_seq is None or shard.last_seq is None or shard.seq_ok is False:
             continue
         if expected_next is None:
-            if shard.first_seq != 0:
+            # Only ``part_id == 0`` may be judged against the origin.  When the
+            # first shard itself is unreadable, the next readable shard becomes
+            # the baseline of the chain; flagging it as "not from zero" would
+            # blame a healthy shard for a neighbour's damage.
+            if shard.part_id == 0 and shard.first_seq != 0:
                 failures.append(_SEQ_ORIGIN)
         elif shard.first_seq != expected_next:
             failures.append(_SEQ_CROSS)
@@ -631,7 +674,17 @@ def verify_run(
     for shard in shards:
         failures.extend(shard.failures)
 
-    verified = tuple(shard for shard in shards if shard.observed_rows is not None)
+    # Only shards whose four columns were read, carry the frozen dtypes and
+    # agree in length count as verified tables.  A shard whose vibration column
+    # lost a row still has a readable ``seq``, but claiming ``2 x rows`` scalars
+    # were verified would repeat exactly the mistake section 5.1 forbids.
+    verified = tuple(
+        shard
+        for shard in shards
+        if shard.observed_rows is not None
+        and _LENGTHS not in shard.failures
+        and _DTYPE not in shard.failures
+    )
     rows_sum = sum(shard.observed_rows or 0 for shard in verified)
     first_seq = verified[0].first_seq if verified else None
 
