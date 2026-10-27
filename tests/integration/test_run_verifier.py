@@ -727,3 +727,98 @@ def test_an_unreadable_first_shard_does_not_blame_the_second(
     assert result.passed is False
     assert "shard.missing" in result.failures
     assert "seq.not_from_zero" not in result.failures
+
+
+# --------------------------------------------------------------------------- #
+# A column with no row axis at all
+#
+# The length check reads shape[0], which does not exist on a 0-d array.  A
+# shard damaged that way must still produce a per-shard verdict: raising
+# IndexError here would abandon every shard after it, which is the same class
+# of bug as the NaN ``seq`` case one layer up.
+# --------------------------------------------------------------------------- #
+
+
+def _replace_column(run_dir: Path, field: str, value: Any) -> None:
+    """Replace one column of part 0 with ``value`` and refresh the digest."""
+    path = run_dir / "raw" / "part-000000.npz"
+    with np.load(path, allow_pickle=False) as archive:
+        arrays = {name: np.asarray(archive[name]) for name in archive.files}
+    arrays[field] = np.asarray(value)
+    np.savez(path, **arrays)
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][0]["sha256"] = _sha256(path)
+    _rewrite_manifest(run_dir, payload)
+
+
+@pytest.mark.parametrize("field", ["seq", "timestamp_ns", "vibration", "temperature"])
+def test_a_zero_dimensional_column_is_reported_not_raised(
+    run_dir: Path, field: str
+) -> None:
+    """A 0-d column has no rows to compare, so its length is unknown."""
+    if field == "seq":
+        _replace_column(run_dir, field, np.array(0, dtype=np.int64))
+    else:
+        _replace_column(run_dir, field, np.array(35.0))
+
+    result = verify_run(run_dir)  # must not raise IndexError
+
+    assert result.passed is False
+    assert "shard.dtype_mismatch" in result.failures
+    shard = result.shards[0]
+    assert shard.dtype_ok is False
+    if field == "seq":
+        # No row axis means no row count, and no fabricated boundary values.
+        assert shard.observed_rows is None
+        assert shard.first_seq is None
+        assert shard.last_seq is None
+    else:
+        # ``seq`` is intact, so the row count is still observable -- but the
+        # shard is not a valid table and must not be counted as verified.
+        assert shard.observed_rows == 256
+    # The other three shards are still inspected.
+    assert result.verified_part_count == 3
+
+
+@pytest.mark.parametrize("field", ["seq", "timestamp_ns", "vibration", "temperature"])
+def test_a_two_dimensional_column_is_reported_not_raised(
+    run_dir: Path, field: str
+) -> None:
+    """A 2-d column is the wrong shape for a table column."""
+    if field == "seq":
+        _replace_column(run_dir, field, np.zeros((16, 16), dtype=np.int64))
+    else:
+        _replace_column(run_dir, field, np.zeros((16, 16), dtype=np.float64))
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.dtype_mismatch" in result.failures
+    assert result.verified_part_count == 3
+    if field == "seq":
+        assert result.shards[0].observed_rows is None
+
+
+def test_a_zero_dimensional_column_does_not_stop_later_damage(
+    run_dir: Path,
+) -> None:
+    """A bad dimension in part 0 and a real gap in part 2 must both be reported."""
+    _replace_column(run_dir, "timestamp_ns", np.array(0, dtype=np.int64))
+
+    gap_path = run_dir / "raw" / "part-000002.npz"
+    with np.load(gap_path, allow_pickle=False) as archive:
+        gap = {name: np.asarray(archive[name]) for name in archive.files}
+    seq = gap["seq"].copy()
+    seq[10] = 999
+    gap["seq"] = seq
+    np.savez(gap_path, **gap)
+
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][2]["sha256"] = _sha256(gap_path)
+    _rewrite_manifest(run_dir, payload)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.dtype_mismatch" in result.failures
+    assert "shard.seq_gap" in result.failures

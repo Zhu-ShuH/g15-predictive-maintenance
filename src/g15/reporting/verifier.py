@@ -387,6 +387,11 @@ def _check_arrays(
     lost a row while its digest was recomputed to match, which is exactly the
     damage this module exists to catch.
 
+    A column length only exists for a one-dimensional array.  A 0-d or 2-d
+    array has no row axis to compare, so its length is *unknown* rather than
+    zero: reading ``shape[0]`` on a 0-d array raises ``IndexError`` and would
+    abandon every shard after it.
+
     Args:
         arrays: Arrays loaded from the shard.
         entry: Manifest entry describing it.
@@ -414,13 +419,19 @@ def _check_arrays(
     if not dtype_ok:
         failures.append(_DTYPE)
 
-    lengths = {name: int(arrays[name].shape[0]) for name in NPZ_FIELDS}
-    equal_lengths = len(set(lengths.values())) == 1
-    if not equal_lengths:
+    # A length is observable only for a 1-d column.  Anything else already
+    # failed the dtype check above; comparing a length that does not exist would
+    # turn "this column is the wrong shape" into a crash or a bogus mismatch.
+    lengths: dict[str, int | None] = {
+        name: int(arrays[name].shape[0]) if arrays[name].ndim == 1 else None
+        for name in NPZ_FIELDS
+    }
+    observable = [length for length in lengths.values() if length is not None]
+    if len(observable) == len(NPZ_FIELDS) and len(set(observable)) != 1:
         failures.append(_LENGTHS)
 
     seq = arrays["seq"]
-    observed_rows = lengths["seq"] if seq.ndim == 1 else None
+    observed_rows = lengths["seq"]
 
     if observed_rows is not None and observed_rows != entry.rows:
         failures.append(_ROWS)
