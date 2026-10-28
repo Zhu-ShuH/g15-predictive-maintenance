@@ -495,6 +495,19 @@ def _check_window_grid(parts: Sequence[ChunkManifestEntry], window_points: int) 
     ``chunk_points``, so the nominal shard length is read back from the shards
     that are not the tail: those must all have the same length.
 
+    The same inference also yields the **upper bound for the tail**: the tail
+    may not be longer than the nominal shard length, because the producer
+    derives it as ``total_points - (n-1) * chunk_points`` and that difference
+    is at most ``chunk_points``. A tail that is longer than the nominal
+    length means the run was not cut the way the manifest claims, and its
+    samples would land on window positions the other shards do not use.
+
+    The bound is **inclusive**: when ``total_points`` is an exact multiple of
+    ``chunk_points`` the tail holds exactly ``chunk_points`` rows, which is
+    legal and must not be refused. Only a tail *longer* than the nominal
+    length is a contract violation. See the inclusive-bound correction in
+    ``interface.md`` section 8.1.
+
     This runs before any write, so an illegal layout leaves the database
     exactly as it was -- not even a ``runs`` row.
 
@@ -508,12 +521,17 @@ def _check_window_grid(parts: Sequence[ChunkManifestEntry], window_points: int) 
 
     Raises:
         ConsumptionError: if ``window_points`` is not positive, the non-final
-            shards disagree in length, or their length is not a multiple of
-            ``window_points``.
+            shards disagree in length, their length is not a multiple of
+            ``window_points``, or the tail is longer than the inferred nominal
+            shard length.
     """
     if window_points <= 0:
         raise ConsumptionError(f"window_points must be positive, got {window_points}")
     if len(parts) <= 1:
+        # A single shard is the tail itself. The manifest does not carry the
+        # nominal ``chunk_points``, so there is nothing to infer an upper
+        # bound from -- inventing one would reject runs that are perfectly
+        # legal. Section 4 keeps this case with the caller's responsibility.
         return 0
 
     non_final = list(parts[:-1])
@@ -529,6 +547,20 @@ def _check_window_grid(parts: Sequence[ChunkManifestEntry], window_points: int) 
         )
 
     chunk_points = lengths.pop()
+
+    # The tail may not exceed the nominal shard length. This is checked before
+    # the divisibility rule so the error names the tail rather than a
+    # non-final shard that is merely a symptom of the same wrong layout.
+    tail = parts[-1]
+    if tail.rows > chunk_points:
+        raise ConsumptionError(
+            f"part {tail.part_id} is the final shard and holds {tail.rows} rows, "
+            f"which exceeds the nominal shard length {chunk_points} inferred from "
+            f"the earlier shards; a final shard is at most one nominal shard "
+            f"long, so this run was not cut the way its manifest claims. "
+            f"Nothing was written"
+        )
+
     if chunk_points % window_points == 0:
         return chunk_points
 
