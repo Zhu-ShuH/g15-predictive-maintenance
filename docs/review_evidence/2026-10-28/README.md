@@ -26,3 +26,9 @@ PR #72 的 abc6dfa4 记录故意保留“全量通过但诊断假通过/异常�
 所有运行均为 Windows / Python 3.11.9 / NumPy 2.3.5 / pytest 8.4.2。环境、跳过与耗时按各次真实记录引用。Black/Pylint 没有在这些 A 侧记录中另跑；远端 CI 属独立来源。#72 作者机器自报的配置失败未在 A 环境复现，不能据此确认其根因。
 
 本归档不包括虚拟环境、源码候选副本、pytest 临时目录、生产运行数据或私人规划笔记。A 的自动代码复核不替代成员人工合并审批；接口冻结、双 Linux、真实 kill-9、独立保留集及正式性能/检出率仍按各自任务留证。
+
+## 摘要字节与索引格式
+
+校验摘要时读取 Git blob 的原始字节；例如通过 Python 的 `subprocess.check_output(["git", "show", "<commit>:<仓库内路径>"])` 取得 bytes 后计算 SHA-256。不要把终端显示或文本重定向后的内容当原始字节。Windows 的 `core.autocrlf=true` 可能把工作树 LF 转成 CRLF，直接对工作树算摘要会与 blob 不同；这不表示归档损坏。若使用工作树核验，应在全新检出前设置 `core.autocrlf=false`。
+
+本目录索引是含 `artifacts` 数组的对象：`sha256` / `bytes` 指发布后 blob，`source_sha256` 指本地原始字节。历史归档 [PR #78](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/78) 的索引直接为数组，对应字段为 `published_sha256` / `published_bytes` / `original_sha256`。批量读取时，先按顶层类型取数组（数组直接用，对象取 `artifacts`），再按上述映射读取。已有索引与证据字节保持原样，后续归档沿用 #78 的明确字段名，不把发布摘要当原始摘要。
