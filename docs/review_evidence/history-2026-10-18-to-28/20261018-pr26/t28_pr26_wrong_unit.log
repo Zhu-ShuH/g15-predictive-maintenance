@@ -1,0 +1,2 @@
+
+error: signals.vibration.unit: must be one of ['g'], got 'm/s2'

@@ -1,0 +1,30 @@
+{
+  "environment": {
+    "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.22631-SP0",
+    "numpy": "2.4.6",
+    "scipy": "1.18.0",
+    "pyarrow": "23.0.1",
+    "pydantic": "2.13.4",
+    "PyYAML": "6.0.3",
+    "plotly": "6.7.0",
+    "pytest": "9.0.3"
+  },
+  "checks": [
+    {
+      "name": "tests",
+      "exit": 0,
+      "tail": "....................................................................     [100%]\n68 passed in 16.79s\n\n"
+    },
+    {
+      "name": "preflight",
+      "exit": 0,
+      "tail": "{\"passed\": true, \"environment\": {\"python\": \"3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]\", \"executable\": \"<LOCAL_PATH>\", \"platform\": \"Windows-11-10.0.22631-SP0\", \"processor\": \"AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD\", \"logical_cpus\": 16, \"packages\": {\"numpy\": \"2.4.6\", \"scipy\": \"1.18.0\", \"pyarrow\": \"23.0.1\", \"pydantic\": \"2.13.4\", \"PyYAML\": \"6.0.3\", \"plotly\": \"6.7.0\", \"pytest\": \"9.0.3\"}, \"source_sha256\": \"55ca540dc281725e4892deb4fa6722ca2a116381dc5e3b62309f43646d60d8eb\", \"timestamp_utc\": \"2026-10-23T07:49:41.402868+00:00\"}, \"baseline_exists\": false, \"note\": \"acceptance builds independent calibration before consumption\"}"
+    },
+    {
+      "name": "functional_acceptance",
+      "exit": 5,
+      "tail": "63998b1\", \"alarm-6dfc94ef3a8331a584b6b2c4\", \"alarm-988d9423ae1178074ec9bff2\", \"alarm-64c757f032f9d5b05290ae27\", \"alarm-ea84b724ee389a4179e00c42\", \"alarm-ad4612f4a7957bfc9992174e\", \"alarm-5f4b613a458a52e5bf2e212e\", \"alarm-d444b9918df63cc351757529\", \"alarm-0e249ceb595864beac20bd40\", \"alarm-eb9777e45c2d7a01bb89731b\", \"alarm-170dae84324504da9480c68c\", \"alarm-d5a71d5673009ca92bfd4705\", \"alarm-d0811c7c82e4277586015c54\", \"alarm-4cff032fa4d4f1fbad8fae09\"], \"recovery_violation_ids\": [], \"false_alarms_per_asset_hour\": 0.0, \"median_detection_delay_s\": 2.9, \"normal_run\": false}}, {\"kind\": \"normal\", \"seed\": 20261025, \"path\": \"<LOCAL_PATH>\", \"metrics\": {\"schema_version\": \"1.0\", \"run_id\": \"331ff6e3-ea8c-418f-a078-2fa3a2881316\", \"seed\": 20261025, \"passed\": true, \"status\": \"passed\", \"expected_events\": 0, \"planned_events\": 0, \"injected_events\": 0, \"captured_events\": 0, \"recall\": null, \"false_alarms\": 0, \"extra_alarms\": 0, \"recovery_violations\": 0, \"normal_exposure_hours\": 1.0, \"max_detection_delay_s\": null, \"errors\": [], \"simulation_config_hash\": \"f0bd1ff150696e135c65657311761446b95dcb43b550177fbe091ebb50ab62c1\", \"evaluation_config_hash\": \"d28d0f2202d3b703cffb6fc2109c7d41784a1b6cb84bf95f683cd3d2b8a5e052\", \"total_alarms\": 0, \"false_alarm_ids\": [], \"extra_alarm_ids\": [], \"recovery_violation_ids\": [], \"false_alarms_per_asset_hour\": 0.0, \"median_detection_delay_s\": null, \"normal_run\": true}}], \"errors\": [], \"benchmark\": null, \"reproducibility\": {\"passed\": true, \"same_seed_data_equal\": true, \"plan_and_truth_equal\": true, \"output_chunk_invariant\": true, \"read_batch_alarms_equal\": true, \"different_seed_changes_data\": true, \"input_config_hash\": \"e8a96e21bac0b5c749b41ee5e2d2aeb252c651d3096fff51d7f29cf27a842fb8\", \"environment\": {\"python\": \"3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]\", \"executable\": \"<LOCAL_PATH>\", \"platform\": \"Windows-11-10.0.22631-SP0\", \"processor\": \"AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD\", \"logical_cpus\": 16, \"packages\": {\"numpy\": \"2.4.6\", \"scipy\": \"1.18.0\", \"pyarrow\": \"23.0.1\", \"pydantic\": \"2.13.4\", \"PyYAML\": \"6.0.3\", \"plotly\": \"6.7.0\", \"pytest\": \"9.0.3\"}, \"source_sha256\": \"55ca540dc281725e4892deb4fa6722ca2a116381dc5e3b62309f43646d60d8eb\", \"timestamp_utc\": \"2026-10-23T07:51:03.829519+00:00\"}}, \"robustness\": [], \"planned_events\": 45, \"injected_events\": 45, \"captured_events\": 45}\n\n"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "observer": "A",
+  "record_date": "20261019",
+  "candidate_commit": "8042e5194d60d56866d1dd351de58b2842908daa",
+  "binding": "recorded candidate context",
+  "scope_note": "SHA from same-session remote snapshot, not a per-log content attestation.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "pr43_serialization.log",
+      "summary": [
+        "86 passed, 1 skipped in 1.16s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "pr43_serialization.log"
+  ]
+}

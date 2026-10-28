@@ -1,0 +1,36 @@
+{
+  "observer": "A",
+  "record_date": "20261019",
+  "candidate_commit": "2c20de33d0cf0d56ae45559db4ad008d3a585a10",
+  "binding": "recorded candidate context",
+  "scope_note": "",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "pr30_pytest.log",
+      "summary": [
+        "315 passed, 7 skipped in 5.90s"
+      ]
+    },
+    {
+      "artifact": "pr30_black.log",
+      "summary": [
+        "40 files would be left unchanged."
+      ]
+    },
+    {
+      "artifact": "pr30_pylint.log",
+      "summary": [
+        "Your code has been rated at 9.97/10 (previous run: 9.95/10, +0.02)"
+      ]
+    }
+  ],
+  "artifacts": [
+    "pr30_pytest.log",
+    "pr30_black.log",
+    "pr30_pylint.log",
+    "probe30_result.json"
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "consumer_cases": [
+    {
+      "name": "overlong",
+      "rows": [
+        128,
+        256
+      ],
+      "policy": "drop",
+      "exception": "ConsumptionError",
+      "message": "part 1 is the final shard and holds 256 rows, which exceeds the nominal shard length 128 inferred from the earlier shards; a final shard is at most one nominal shard long, so this run was not cut the way its manifest claims. Nothing was written",
+      "table_counts": {
+        "alarm_states": 0,
+        "alarms": 0,
+        "feature_windows": 0,
+        "processed_chunks": 0,
+        "runs": 0
+      }
+    },
+    {
+      "name": "equal",
+      "rows": [
+        256,
+        256
+      ],
+      "policy": "drop",
+      "summary": {
+        "shards_processed": 2,
+        "windows_written": 8,
+        "windows_dropped": 0
+      },
+      "table_counts": {
+        "alarm_states": 1,
+        "alarms": 0,
+        "feature_windows": 8,
+        "processed_chunks": 2,
+        "runs": 1
+      }
+    },
+    {
+      "name": "short_drop",
+      "rows": [
+        128,
+        100
+      ],
+      "policy": "drop",
+      "summary": {
+        "shards_processed": 2,
+        "windows_written": 3,
+        "windows_dropped": 36
+      },
+      "table_counts": {
+        "alarm_states": 1,
+        "alarms": 0,
+        "feature_windows": 3,
+        "processed_chunks": 2,
+        "runs": 1
+      }
+    },
+    {
+      "name": "short_error",
+      "rows": [
+        128,
+        100
+      ],
+      "policy": "error",
+      "exception": "ConsumptionError",
+      "message": "the final shard holds 100 samples, which is not a multiple of window_points=64; the incomplete_window policy is 'error', so the 36-sample tail is refused rather than dropped",
+      "table_counts": {
+        "alarm_states": 1,
+        "alarms": 0,
+        "feature_windows": 2,
+        "processed_chunks": 1,
+        "runs": 1
+      }
+    },
+    {
+      "name": "single",
+      "rows": [
+        512
+      ],
+      "policy": "drop",
+      "summary": {
+        "shards_processed": 1,
+        "windows_written": 8,
+        "windows_dropped": 0
+      },
+      "table_counts": {
+        "alarm_states": 1,
+        "alarms": 0,
+        "feature_windows": 8,
+        "processed_chunks": 1,
+        "runs": 1
+      }
+    },
+    {
+      "name": "precedence",
+      "rows": [
+        100,
+        200
+      ],
+      "policy": "drop",
+      "exception": "ConsumptionError",
+      "message": "part 1 is the final shard and holds 200 rows, which exceeds the nominal shard length 100 inferred from the earlier shards; a final shard is at most one nominal shard long, so this run was not cut the way its manifest claims. Nothing was written",
+      "table_counts": {
+        "alarm_states": 0,
+        "alarms": 0,
+        "feature_windows": 0,
+        "processed_chunks": 0,
+        "runs": 0
+      }
+    }
+  ],
+  "verifier_cases": [
+    {
+      "name": "short_middle",
+      "passed": false,
+      "failures": [
+        "shard.length_mismatch"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "shard_shape": "4x256",
+      "first_seq": 0,
+      "last_seq": 1023
+    },
+    {
+      "name": "short_last",
+      "passed": false,
+      "failures": [
+        "shard.length_mismatch"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "shard_shape": "4x256",
+      "first_seq": 0,
+      "last_seq": 1023
+    },
+    {
+      "name": "timestamp_zero",
+      "passed": true,
+      "failures": [],
+      "rows_sum": 1024,
+      "verified_part_count": 4,
+      "shard_shape": "4x256",
+      "first_seq": 0,
+      "last_seq": 1023
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "source_head": "82bafa437e6b35f56f9c034ce1cc5402ceb3e7a2",
+  "configuration": "configs/benchmark_1m.yaml",
+  "consumer_window": 256,
+  "last_rows": 78400,
+  "last_remainder": 64,
+  "summary": {
+    "run_id": "20261024T144817Z-benchmark_1m-8d16ac",
+    "device_id": "DEV-005",
+    "windows_written": 3906,
+    "alarms_written": 9,
+    "shards_processed": 10,
+    "shards_skipped": 0,
+    "windows_dropped": 64
+  },
+  "performance_timing_measured": false,
+  "new_holdout": false
+}

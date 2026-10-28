@@ -1,0 +1,14 @@
+[
+  {
+    "probe": "C3_real_config",
+    "expected_id": "bearing_001",
+    "error": "ManifestError",
+    "message": "scenario_id must be a non-empty string, got ''"
+  },
+  {
+    "probe": "missing_fault_hook",
+    "requested": 1,
+    "actual": 0,
+    "manifest": "complete"
+  }
+]

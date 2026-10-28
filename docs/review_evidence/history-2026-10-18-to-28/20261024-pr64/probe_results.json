@@ -1,0 +1,130 @@
+{
+  "head": "8b47fe307ffeacffd7381e917afa1daed53b6e2b",
+  "environment": {
+    "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+    "numpy": "2.4.6",
+    "platform": "Windows-11-10.0.22631-SP0"
+  },
+  "R1": {
+    "ok": false,
+    "type": "ConsumptionError",
+    "error": "part 0 holds 100 rows, which is not a multiple of window_points=64 (36 samples left over); section 8.1 requires every non-final shard to be a whole number of windows, so cutting the remainder off would drop samples at every shard boundary. Nothing was written",
+    "runs": 0
+  },
+  "single": {
+    "ok": true,
+    "value": {
+      "run_id": "20261024T101834Z-healthy_001-038ec1",
+      "device_id": "DEV-002",
+      "windows_written": 0,
+      "alarms_written": 0,
+      "shards_processed": 1,
+      "shards_skipped": 0,
+      "windows_dropped": 100
+    }
+  },
+  "R3_version": {
+    "ok": false,
+    "type": "RunConflictError",
+    "error": "run '20261024T101834Z-healthy_001-19b888' is already recorded with different metadata (scoring_version: stored 'heuristic-v1', requested 't73-new-version'); refusing to mix two analyses under one run id. Consume into a new database, or reset explicitly if the change is intended"
+  },
+  "R3_grid": {
+    "ok": false,
+    "type": "ConsumptionError",
+    "error": "run '20261024T101834Z-healthy_001-19b888' already holds windows of 64 samples but window_points=128 is requested; the stored analysis was produced on a different grid. Consume into a new database, or reset the run explicitly if the change is intended"
+  },
+  "R3_same_version_content": {
+    "ok": true,
+    "value": {
+      "run_id": "20261024T101834Z-healthy_001-19b888",
+      "device_id": "DEV-002",
+      "windows_written": 0,
+      "alarms_written": 0,
+      "shards_processed": 0,
+      "shards_skipped": 4,
+      "windows_dropped": 0
+    }
+  },
+  "R3_tail_policy": {
+    "ok": true,
+    "value": {
+      "run_id": "20261024T101834Z-healthy_001-19b888",
+      "device_id": "DEV-002",
+      "windows_written": 0,
+      "alarms_written": 0,
+      "shards_processed": 0,
+      "shards_skipped": 4,
+      "windows_dropped": 0
+    }
+  },
+  "R2": {
+    "reset_event": {
+      "previous_state": {
+        "active_level": null,
+        "alarm_windows": 0,
+        "consecutive_breaches": 0,
+        "last_window_start_seq": 128,
+        "normal_windows": 0,
+        "recovered_at_seq": null,
+        "rule_id": "rule",
+        "scoring_version": "v1"
+      },
+      "previous_state_json": "{\"reset_event\": {\"previous_state\": {\"active_level\": null, \"alarm_windows\": 0, \"consecutive_breaches\": 2, \"last_window_start_seq\": 64, \"normal_windows\": 0, \"recovered_at_seq\": null, \"rule_id\": \"rule\", \"scoring_version\": \"v1\"}, \"previous_state_json\": \"{\\\"reset_event\\\": null, \\\"state\\\": {\\\"active_level\\\": null, \\\"alarm_windows\\\": 0, \\\"consecutive_breaches\\\": 2, \\\"last_window_start_seq\\\": 64, \\\"normal_windows\\\": 0, \\\"recovered_at_seq\\\": null, \\\"rule_id\\\": \\\"rule\\\", \\\"scoring_version\\\": \\\"v1\\\"}, \\\"state_schema_version\\\": \\\"1\\\"}\", \"previous_state_schema_version\": \"1\", \"reason\": \"rule_change\", \"reset_at_utc\": \"2026-10-24T10:18:34.941311Z\"}, \"state\": {\"active_level\": null, \"alarm_windows\": 0, \"consecutive_breaches\": 0, \"last_window_start_seq\": 128, \"normal_windows\": 0, \"recovered_at_seq\": null, \"rule_id\": \"rule\", \"scoring_version\": \"v1\"}, \"state_schema_version\": \"1\"}",
+      "previous_state_schema_version": "1",
+      "reason": "operator_reset",
+      "reset_at_utc": "2026-10-24T10:18:34.943248Z"
+    },
+    "reset_history": [
+      {
+        "previous_state": {
+          "active_level": null,
+          "alarm_windows": 0,
+          "consecutive_breaches": 2,
+          "last_window_start_seq": 64,
+          "normal_windows": 0,
+          "recovered_at_seq": null,
+          "rule_id": "rule",
+          "scoring_version": "v1"
+        },
+        "previous_state_json": "{\"reset_event\": null, \"state\": {\"active_level\": null, \"alarm_windows\": 0, \"consecutive_breaches\": 2, \"last_window_start_seq\": 64, \"normal_windows\": 0, \"recovered_at_seq\": null, \"rule_id\": \"rule\", \"scoring_version\": \"v1\"}, \"state_schema_version\": \"1\"}",
+        "previous_state_schema_version": "1",
+        "reason": "rule_change",
+        "reset_at_utc": "2026-10-24T10:18:34.941311Z"
+      }
+    ],
+    "state": {
+      "active_level": null,
+      "alarm_windows": 0,
+      "consecutive_breaches": 0,
+      "last_window_start_seq": null,
+      "normal_windows": 0,
+      "recovered_at_seq": null,
+      "rule_id": "rule",
+      "scoring_version": "v1"
+    },
+    "state_schema_version": "1"
+  },
+  "R4_normal": {
+    "type": "StateCompatibilityError",
+    "error": "state_json has no state_schema_version; it was written before the field existed, so the rule set that produced it cannot be established. Start a new streak with AlarmState() if the old streak is to be dropped"
+  },
+  "R4_reset": {
+    "reset_event": {
+      "previous_state_json": "{\"active_level\": null, \"consecutive_breaches\": 2, \"normal_windows\": 0, \"alarm_windows\": 0, \"last_window_start_seq\": 64, \"recovered_at_seq\": null}",
+      "previous_state_schema_version": null,
+      "reason": "legacy_unattributable",
+      "reset_at_utc": "2026-10-24T10:18:34.959335Z"
+    },
+    "state": {
+      "active_level": null,
+      "alarm_windows": 0,
+      "consecutive_breaches": 0,
+      "last_window_start_seq": null,
+      "normal_windows": 0,
+      "recovered_at_seq": null,
+      "rule_id": "rule",
+      "scoring_version": "v1"
+    },
+    "state_schema_version": "1"
+  }
+}

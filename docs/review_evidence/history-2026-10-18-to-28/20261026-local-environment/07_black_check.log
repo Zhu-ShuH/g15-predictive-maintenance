@@ -1,0 +1,24 @@
+python.exe : would reformat <SOURCE_ROOT>\src\g15\__init__.py
+At line:31 char:1
++ & $py -m black --check src tests 2>&1 | Out-File "$out\07_black_check ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (would reformat ...g15\__init__.py:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+would reformat <SOURCE_ROOT>\tests\test_streaming.py
+would reformat <SOURCE_ROOT>\src\g15_contracts\__init__.py
+would reformat <SOURCE_ROOT>\tests\test_config_contracts.py
+would reformat <SOURCE_ROOT>\src\g15_contracts\streaming.py
+would reformat <SOURCE_ROOT>\src\g15_evaluation\reporting.py
+would reformat <SOURCE_ROOT>\tests\test_evaluation.py
+would reformat <SOURCE_ROOT>\tests\test_simulator.py
+would reformat <SOURCE_ROOT>\src\g15_config\__init__.py
+would reformat <SOURCE_ROOT>\tests\test_pipeline.py
+would reformat <SOURCE_ROOT>\src\g15_evaluation\evaluation.py
+would reformat <SOURCE_ROOT>\src\g15_simulator\simulator.py
+would reformat <SOURCE_ROOT>\src\g15\cli.py
+would reformat <SOURCE_ROOT>\src\g15_pipeline\pipeline.py
+
+Oh no! \U0001f4a5 \U0001f494 \U0001f4a5
+14 files would be reformatted, 5 files would be left unchanged.
+EXIT=1

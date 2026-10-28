@@ -1,0 +1,200 @@
+{
+  "source_head": "4c4e025eee09cfe8c787adb40db6e63895e386cb",
+  "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+  "numpy": "2.4.6",
+  "pyyaml": "6.0.3",
+  "platform": "Windows-11-10.0.22631-SP0",
+  "config_module": "<SOURCE_ROOT>\\src\\g15\\config.py",
+  "engine_module": "<SOURCE_ROOT>\\src\\g15\\simulation\\engine.py",
+  "cases": [
+    {
+      "name": "config/engine public ceiling agrees",
+      "passed": true,
+      "actual": [
+        1000000000,
+        1000000000
+      ]
+    },
+    {
+      "name": "interface ceiling retained",
+      "passed": true,
+      "actual": "1 GHz explicit"
+    },
+    {
+      "name": "YAML load/validate 100",
+      "passed": true,
+      "actual": 100
+    },
+    {
+      "name": "kernel nonempty 100",
+      "passed": true,
+      "actual": [
+        1791936000000000000,
+        1791936000010000000,
+        1791936000020000000,
+        1791936000030000000,
+        1791936000040000000,
+        1791936000050000000,
+        1791936000060000000,
+        1791936000070000000
+      ]
+    },
+    {
+      "name": "kernel count=0 legal 100",
+      "passed": true,
+      "actual": "int64"
+    },
+    {
+      "name": "CLI exit 100",
+      "passed": true,
+      "actual": {
+        "code": 0,
+        "stderr": ""
+      }
+    },
+    {
+      "name": "YAML load/validate 1000000000",
+      "passed": true,
+      "actual": 1000000000
+    },
+    {
+      "name": "kernel nonempty 1000000000",
+      "passed": true,
+      "actual": [
+        1791936000000000000,
+        1791936000000000001,
+        1791936000000000002,
+        1791936000000000003,
+        1791936000000000004,
+        1791936000000000005,
+        1791936000000000006,
+        1791936000000000007
+      ]
+    },
+    {
+      "name": "kernel count=0 legal 1000000000",
+      "passed": true,
+      "actual": "int64"
+    },
+    {
+      "name": "CLI exit 1000000000",
+      "passed": true,
+      "actual": {
+        "code": 0,
+        "stderr": ""
+      }
+    },
+    {
+      "name": "YAML rejects 1000000001",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz: must be at most 1000000000, got 1000000001: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "kernel bypass rejects 1000000001",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz must be at most 1000000000, got 1000000001: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "timestamp count=0 rejects 1000000001",
+      "passed": true,
+      "actual": "sample_rate_hz must be at most 1000000000, got 1000000001: a sub-nanosecond period cannot be represented by int64 nanoseconds and would repeat or wrap the timestamps"
+    },
+    {
+      "name": "simulate count=0 rejects 1000000001",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz must be at most 1000000000, got 1000000001: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "CLI exit 1000000001",
+      "passed": true,
+      "actual": {
+        "code": 2,
+        "stderr": "error: scenario.sample_rate_hz: must be at most 1000000000, got 1000000001: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+      }
+    },
+    {
+      "name": "YAML rejects 9223372034",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz: must be at most 1000000000, got 9223372034: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "kernel bypass rejects 9223372034",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz must be at most 1000000000, got 9223372034: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "timestamp count=0 rejects 9223372034",
+      "passed": true,
+      "actual": "sample_rate_hz must be at most 1000000000, got 9223372034: a sub-nanosecond period cannot be represented by int64 nanoseconds and would repeat or wrap the timestamps"
+    },
+    {
+      "name": "simulate count=0 rejects 9223372034",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz must be at most 1000000000, got 9223372034: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "CLI exit 9223372034",
+      "passed": true,
+      "actual": {
+        "code": 2,
+        "stderr": "error: scenario.sample_rate_hz: must be at most 1000000000, got 9223372034: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+      }
+    },
+    {
+      "name": "YAML rejects 10000000000",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz: must be at most 1000000000, got 10000000000: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "kernel bypass rejects 10000000000",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz must be at most 1000000000, got 10000000000: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "timestamp count=0 rejects 10000000000",
+      "passed": true,
+      "actual": "sample_rate_hz must be at most 1000000000, got 10000000000: a sub-nanosecond period cannot be represented by int64 nanoseconds and would repeat or wrap the timestamps"
+    },
+    {
+      "name": "simulate count=0 rejects 10000000000",
+      "passed": true,
+      "actual": "scenario.sample_rate_hz must be at most 1000000000, got 10000000000: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+    },
+    {
+      "name": "CLI exit 10000000000",
+      "passed": true,
+      "actual": {
+        "code": 2,
+        "stderr": "error: scenario.sample_rate_hz: must be at most 1000000000, got 10000000000: a sub-nanosecond period cannot be represented by int64 nanoseconds"
+      }
+    },
+    {
+      "name": "half-up upper bound counterexample",
+      "passed": true,
+      "actual": "timestamps for seq [1, 2) do not fit in int64 nanoseconds (first value 9223372036854775808, last value 9223372036854775808)"
+    },
+    {
+      "name": "start below int64",
+      "passed": true,
+      "actual": "start_time_utc_ns=-9223372036854775809 is outside the int64 nanosecond range"
+    },
+    {
+      "name": "valid exact int64 upper bound",
+      "passed": true,
+      "actual": [
+        9223372036854775807
+      ]
+    },
+    {
+      "name": "1GHz exact consecutive ns",
+      "passed": true,
+      "actual": [
+        0,
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "all_passed": true
+}

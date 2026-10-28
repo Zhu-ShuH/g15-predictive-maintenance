@@ -1,0 +1,35 @@
+{
+  "observer": "A",
+  "record_date": "20261023",
+  "candidate_commit": "81c13d17faf8189a240989b4ee43b937820bb911",
+  "binding": "recorded candidate context",
+  "scope_note": "A local execution of remote main snapshot; not downloaded remote CI.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "remote_main-pytest.log",
+      "summary": [
+        "484 passed, 8 skipped in 4.35s"
+      ]
+    },
+    {
+      "artifact": "remote_main-black.log",
+      "summary": [
+        "43 files would be left unchanged."
+      ]
+    },
+    {
+      "artifact": "remote_main-pylint.log",
+      "summary": [
+        "Your code has been rated at 9.96/10"
+      ]
+    }
+  ],
+  "artifacts": [
+    "remote_main-pytest.log",
+    "remote_main-black.log",
+    "remote_main-pylint.log"
+  ]
+}

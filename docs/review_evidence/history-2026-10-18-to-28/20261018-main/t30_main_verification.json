@@ -1,0 +1,67 @@
+[
+  {
+    "name": "pytest",
+    "exit": 0,
+    "expected_exit": 0,
+    "passed": true,
+    "seconds": 3.61,
+    "tail": [
+      "ssssss.................................................................. [ 36%]",
+      "........................................................................ [ 72%]",
+      ".......................................................                  [100%]",
+      "193 passed, 6 skipped in 2.68s",
+      ""
+    ]
+  },
+  {
+    "name": "black",
+    "exit": 0,
+    "expected_exit": 0,
+    "passed": true,
+    "seconds": 1.64,
+    "tail": [
+      "",
+      "All done! \\u2728 \\U0001f370 \\u2728",
+      "36 files would be left unchanged."
+    ]
+  },
+  {
+    "name": "pylint",
+    "exit": 0,
+    "expected_exit": 0,
+    "passed": true,
+    "seconds": 7.03,
+    "tail": [
+      "    Uses CRC-32 rather than :func:`hash` so the tag does not change between",
+      "    interpreter runs or platforms.",
+      "    \"\"\" (duplicate-code)",
+      "",
+      "------------------------------------------------------------------",
+      "Your code has been rated at 9.97/10 (previous run: 9.97/10, +0.00)",
+      "",
+      ""
+    ]
+  },
+  {
+    "name": "validate",
+    "exit": 0,
+    "expected_exit": 0,
+    "passed": true,
+    "seconds": 0.31,
+    "tail": [
+      "Configuration OK: configs\\default.yaml (scenario=bearing_001, total_points=1000000, chunk_points=102400, events=1)",
+      ""
+    ]
+  },
+  {
+    "name": "doctor_placeholder",
+    "exit": 5,
+    "expected_exit": 5,
+    "passed": true,
+    "seconds": 0.27,
+    "tail": [
+      "",
+      "error: subcommand 'doctor' is not implemented yet; only 'validate' is available in this issue"
+    ]
+  }
+]

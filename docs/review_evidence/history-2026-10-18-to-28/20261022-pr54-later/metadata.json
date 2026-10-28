@@ -1,0 +1,24 @@
+{
+  "observer": "A",
+  "record_date": "20261022",
+  "candidate_commit": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+  "binding": "recorded candidate context",
+  "scope_note": "SHA from same-session snapshot; collection is not test execution.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "analysis_pytest.log",
+      "summary": [
+        "113 passed in 0.82s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "analysis_pytest.log",
+    "collect_features.log",
+    "collect_health.log",
+    "collect_alarms.log"
+  ]
+}

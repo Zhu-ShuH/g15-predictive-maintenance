@@ -1,0 +1,32 @@
+[
+  {
+    "case": "mixed_integer_string",
+    "expected_exit": 2,
+    "actual_exit": 1,
+    "last_error": [
+      "TypeError: '<' not supported between instances of 'str' and 'int'"
+    ]
+  },
+  {
+    "case": "mixed_bool_string",
+    "expected_exit": 2,
+    "actual_exit": 1,
+    "last_error": [
+      "TypeError: '<' not supported between instances of 'str' and 'bool'"
+    ]
+  },
+  {
+    "case": "wrong_unit",
+    "expected_exit": 2,
+    "actual_exit": 0,
+    "last_error": []
+  },
+  {
+    "case": "overflow",
+    "expected_exit": 2,
+    "actual_exit": 1,
+    "last_error": [
+      "OverflowError: int too large to convert to float"
+    ]
+  }
+]

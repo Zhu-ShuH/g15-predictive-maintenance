@@ -1,0 +1,12 @@
+{
+  "before_after_32800_samples": {
+    "seq": true,
+    "timestamp_ns": true,
+    "vibration": true,
+    "temperature": true
+  },
+  "C4_head": "a9bf2d942465299df9597e7f32681e241c89cd95",
+  "C4_read_returns_unique_shared_type": true,
+  "C4_round_trip_bit_identical": true,
+  "C4_empty_file_rejected": true
+}

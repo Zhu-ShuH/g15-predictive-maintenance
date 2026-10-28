@@ -1,0 +1,38 @@
+{
+  "observer": "A",
+  "record_date": "20261026",
+  "candidate_commit": null,
+  "binding": "commit binding unavailable",
+  "scope_note": "Unbound local prototype/environment check: pytest 1 failed / 67 passed, Black 14 would reformat / 5 unchanged, Pylint 5.39. Includes permission/environment failures, not formal repository acceptance. Private environment exports, package lists and ACL inventories excluded.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "06_pytest_isolated_copy.log",
+      "summary": [
+        "1 failed, 67 passed in 14.14s"
+      ]
+    },
+    {
+      "artifact": "07_black_check.log",
+      "summary": [
+        "would reformat <SOURCE_ROOT>\\src\\g15\\cli.py",
+        "would reformat <SOURCE_ROOT>\\src\\g15_pipeline\\pipeline.py",
+        "14 files would be reformatted, 5 files would be left unchanged."
+      ]
+    },
+    {
+      "artifact": "08_pylint.log",
+      "summary": [
+        "Your code has been rated at 5.39/10 (previous run: 5.39/10, +0.00)"
+      ]
+    }
+  ],
+  "artifacts": [
+    "06_pytest_isolated_copy.log",
+    "07_black_check.log",
+    "08_pylint.log",
+    "10_conda_doctor.log"
+  ]
+}

@@ -1,0 +1,66 @@
+..........................................F.........................     [100%]
+================================== FAILURES ===================================
+___________ test_follow_replay_has_same_events_as_completed_dataset ___________
+
+tmp_path = WindowsPath('<LOCAL_PATH>')
+
+    def test_follow_replay_has_same_events_as_completed_dataset(tmp_path):
+        from g15_contracts.streaming import replay
+    
+        config = configured(tmp_path)
+        values = telemetry(n=1000)
+        values[200:205, 0] += 8
+        values[600:700, 1] = np.nan
+        source = write_observations(tmp_path / "input", values)
+        completed = tmp_path / "completed-results"
+        live_results = tmp_path / "live-results"
+        live_input = tmp_path / "live-input"
+        offline = consume(source, completed, config, batch_size=31)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            receiver = pool.submit(consume, live_input, live_results, config, 7, True, 5, 5)
+            sender = pool.submit(replay, source, live_input, 100, 17, 0.05)
+            sender.result(timeout=10)
+>           live = receiver.result(timeout=10)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+<SOURCE_ROOT>\tests\test_pipeline.py:216: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+<LOCAL_PATH>
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+<LOCAL_PATH>
+    raise self._exception
+<LOCAL_PATH>
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\g15_pipeline\pipeline.py:423: in consume
+    for batch in batches:
+                 ^^^^^^^
+src\g15_contracts\streaming.py:58: in follow_observations
+    m=read_json(directory/"manifest.json")
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\g15_contracts\__init__.py:27: in read_json
+    with Path(path).open(encoding="utf-8") as handle:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('<LOCAL_PATH>')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '<LOCAL_PATH>'
+
+<LOCAL_PATH>
+=========================== short test summary info ===========================
+FAILED tests/test_pipeline.py::test_follow_replay_has_same_events_as_completed_dataset
+1 failed, 67 passed in 14.14s
+EXIT=1

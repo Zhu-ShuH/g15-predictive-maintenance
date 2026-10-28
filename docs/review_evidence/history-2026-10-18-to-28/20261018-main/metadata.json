@@ -1,0 +1,46 @@
+{
+  "observer": "A",
+  "record_date": "20261018",
+  "candidate_commit": "8d29cd3b689a2068eee38ff9920cf577368904ee",
+  "binding": "recorded candidate context",
+  "scope_note": "doctor placeholder exit 5 is retained; this is not acceptance success.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "t30_main_pytest.log",
+      "summary": [
+        "193 passed, 6 skipped in 2.68s"
+      ]
+    },
+    {
+      "artifact": "t30_main_black.log",
+      "summary": [
+        "36 files would be left unchanged."
+      ]
+    },
+    {
+      "artifact": "t30_main_pylint.log",
+      "summary": [
+        "Your code has been rated at 9.97/10 (previous run: 9.97/10, +0.00)"
+      ]
+    },
+    {
+      "artifact": "t30_main_verification.json",
+      "summary": [
+        "      \"193 passed, 6 skipped in 2.68s\",",
+        "      \"36 files would be left unchanged.\"",
+        "      \"Your code has been rated at 9.97/10 (previous run: 9.97/10, +0.00)\","
+      ]
+    }
+  ],
+  "artifacts": [
+    "t30_main_pytest.log",
+    "t30_main_black.log",
+    "t30_main_pylint.log",
+    "t30_main_validate.log",
+    "t30_main_doctor_placeholder.log",
+    "t30_main_verification.json"
+  ]
+}

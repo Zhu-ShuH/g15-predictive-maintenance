@@ -1,0 +1,30 @@
+{
+  "head": "b80caa6b6107a75c2b2ba1d5e1e224f2baf98abe",
+  "environment": {
+    "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+    "numpy": "2.4.6",
+    "pyyaml": "6.0.3",
+    "platform": "Windows-11-10.0.22631-SP0"
+  },
+  "pytest": {
+    "exit_code": 0,
+    "result": "371 passed, 8 skipped",
+    "log": "pytest55.log"
+  },
+  "black": {
+    "exit_code": 0,
+    "result": "40 files unchanged",
+    "log": "black55.log"
+  },
+  "pylint": {
+    "exit_code": 0,
+    "result": "9.97/10",
+    "log": "pylint55.log"
+  },
+  "joint_probe": {
+    "exit_code": 0,
+    "cases": 29,
+    "log": "joint_probe.json"
+  },
+  "scope": "Additional Windows/Python3.14 verification; target 3.11/3.12 verified by current CI; no dual Linux/performance claim"
+}

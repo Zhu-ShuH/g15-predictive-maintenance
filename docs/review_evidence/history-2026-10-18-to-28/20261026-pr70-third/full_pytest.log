@@ -1,0 +1,15 @@
+.....s.......................................................ssssss..... [ 12%]
+........................................................................ [ 24%]
+........................................................................ [ 36%]
+...................................s.................................... [ 48%]
+........................................................................ [ 61%]
+........................................................................ [ 73%]
+........................................s............................... [ 85%]
+........................................................................ [ 97%]
+.............                                                            [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\fault_injection\test_pipeline_faults.py:175: kill -9 �� POSIX �źţ�Windows û�еȼ����壻��һ��֤�ݰ� docs/acceptance.md ��4 ������ Linux ����֤��Windows �ϲ�α�졣
+SKIPPED [6] tests\performance\test_simulation_benchmark.py:69: performance benchmark is opt-in; set G15_RUN_BENCHMARK=1 to measure (a shared CI runner is not a valid measurement host)
+SKIPPED [1] tests\unit\test_doc_references.py:94: Symlink creation unavailable on this OS/account
+SKIPPED [1] tests\unit\test_serialization.py:912: this platform cannot create symlinks without elevation
+580 passed, 9 skipped in 23.51s

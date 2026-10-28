@@ -1,0 +1,21 @@
+{
+  "observer": "A",
+  "record_date": "20261021",
+  "candidate_commit": "4c4e025eee09cfe8c787adb40db6e63895e386cb",
+  "binding": "recorded candidate context",
+  "scope_note": "Diagnostic probe only; no full pytest result for this head in this group.",
+  "environment_records": [
+    {
+      "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+      "numpy": "2.4.6",
+      "pyyaml": "6.0.3",
+      "platform": "Windows-11-10.0.22631-SP0"
+    }
+  ],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [],
+  "artifacts": [
+    "joint_probe_main.json"
+  ]
+}

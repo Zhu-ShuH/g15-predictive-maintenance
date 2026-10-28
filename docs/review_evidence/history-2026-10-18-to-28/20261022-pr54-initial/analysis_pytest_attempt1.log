@@ -1,0 +1,166 @@
+..........................................FF............................ [ 75%]
+........................                                                 [100%]
+================================== FAILURES ===================================
+_______________ test_shipped_rule_file_loads_and_is_consistent ________________
+
+path = WindowsPath('<LOCAL_PATH>')
+
+    def load_health_rules(path: Path | str) -> HealthRules:
+        """Load and validate ``configs/health_rules.yaml``.
+    
+        Args:
+            path: Path to the rule document.
+    
+        Returns:
+            The validated, immutable rule set.
+    
+        Raises:
+            HealthRulesError: if the file is missing, unreadable, not valid YAML or
+                does not satisfy the rule schema.
+        """
+        rules_path = Path(path)
+        try:
+>           text = rules_path.read_text(encoding="utf-8")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src\g15\analysis\health.py:298: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+<LOCAL_PATH>
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('<LOCAL_PATH>')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '<LOCAL_PATH>'
+
+<LOCAL_PATH>
+
+The above exception was the direct cause of the following exception:
+
+    def test_shipped_rule_file_loads_and_is_consistent() -> None:
+        """The delivered YAML must load, sum to one and cover all eight features."""
+>       rules = load_health_rules(RULES_PATH)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\test_health.py:266: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('<LOCAL_PATH>')
+
+    def load_health_rules(path: Path | str) -> HealthRules:
+        """Load and validate ``configs/health_rules.yaml``.
+    
+        Args:
+            path: Path to the rule document.
+    
+        Returns:
+            The validated, immutable rule set.
+    
+        Raises:
+            HealthRulesError: if the file is missing, unreadable, not valid YAML or
+                does not satisfy the rule schema.
+        """
+        rules_path = Path(path)
+        try:
+            text = rules_path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+>           raise HealthRulesError(str(rules_path), "file not found") from exc
+E           g15.analysis.health.HealthRulesError: <LOCAL_PATH>
+
+src\g15\analysis\health.py:300: HealthRulesError
+______ test_shipped_rule_file_keeps_the_acceptance_thresholds_reachable _______
+
+path = WindowsPath('<LOCAL_PATH>')
+
+    def load_health_rules(path: Path | str) -> HealthRules:
+        """Load and validate ``configs/health_rules.yaml``.
+    
+        Args:
+            path: Path to the rule document.
+    
+        Returns:
+            The validated, immutable rule set.
+    
+        Raises:
+            HealthRulesError: if the file is missing, unreadable, not valid YAML or
+                does not satisfy the rule schema.
+        """
+        rules_path = Path(path)
+        try:
+>           text = rules_path.read_text(encoding="utf-8")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src\g15\analysis\health.py:298: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+<LOCAL_PATH>
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('<LOCAL_PATH>')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '<LOCAL_PATH>'
+
+<LOCAL_PATH>
+
+The above exception was the direct cause of the following exception:
+
+    def test_shipped_rule_file_keeps_the_acceptance_thresholds_reachable() -> None:
+        """A healthy record must score above yellow with the shipped rules."""
+>       rules = load_health_rules(RULES_PATH)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\test_health.py:281: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('<LOCAL_PATH>')
+
+    def load_health_rules(path: Path | str) -> HealthRules:
+        """Load and validate ``configs/health_rules.yaml``.
+    
+        Args:
+            path: Path to the rule document.
+    
+        Returns:
+            The validated, immutable rule set.
+    
+        Raises:
+            HealthRulesError: if the file is missing, unreadable, not valid YAML or
+                does not satisfy the rule schema.
+        """
+        rules_path = Path(path)
+        try:
+            text = rules_path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+>           raise HealthRulesError(str(rules_path), "file not found") from exc
+E           g15.analysis.health.HealthRulesError: <LOCAL_PATH>
+
+src\g15\analysis\health.py:300: HealthRulesError
+=========================== short test summary info ===========================
+FAILED tests/unit/test_health.py::test_shipped_rule_file_loads_and_is_consistent
+FAILED tests/unit/test_health.py::test_shipped_rule_file_keeps_the_acceptance_thresholds_reachable
+2 failed, 94 passed in 0.61s
+

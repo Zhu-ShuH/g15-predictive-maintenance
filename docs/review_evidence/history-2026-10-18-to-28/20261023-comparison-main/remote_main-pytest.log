@@ -1,0 +1,13 @@
+ssssss.................................................................. [ 14%]
+........................................................................ [ 29%]
+...........s............................................................ [ 43%]
+........................................................................ [ 58%]
+........................................................................ [ 73%]
+...............s........................................................ [ 87%]
+............................................................             [100%]
+=========================== short test summary info ===========================
+SKIPPED [6] tests\performance\test_simulation_benchmark.py:69: performance benchmark is opt-in; set G15_RUN_BENCHMARK=1 to measure (a shared CI runner is not a valid measurement host)
+SKIPPED [1] tests\unit\test_doc_references.py:94: Symlink creation unavailable on this OS/account
+SKIPPED [1] tests\unit\test_serialization.py:912: this platform cannot create symlinks without elevation
+484 passed, 8 skipped in 4.35s
+

@@ -1,0 +1,32 @@
+[
+  {
+    "probe": "invalid_part_id",
+    "error": "ChunkIOError",
+    "old_bytes_unchanged": true
+  },
+  {
+    "probe": "outside_run_dir",
+    "error": "ChunkIOError",
+    "target_created": false,
+    "parent_created": false
+  },
+  {
+    "probe": "wrong_units",
+    "accepted": {
+      "vibration": "m/s2",
+      "temperature": "K"
+    }
+  },
+  {
+    "probe": "wrong_units",
+    "accepted": {
+      "vibration": "",
+      "temperature": ""
+    }
+  },
+  {
+    "probe": "matching_hash_invalid_zip",
+    "error": "BadZipFile",
+    "is_contract_error": false
+  }
+]

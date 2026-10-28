@@ -1,0 +1,102 @@
+************* Module g15.config
+src\g15\config.py:1:0: C0302: Too many lines in module (1120/1000) (too-many-lines)
+************* Module g15.analysis.alarms
+src\g15\analysis\alarms.py:92:0: R0902: Too many instance attributes (8/7) (too-many-instance-attributes)
+************* Module g15.analysis.features
+src\g15\analysis\features.py:74:0: R0902: Too many instance attributes (11/7) (too-many-instance-attributes)
+************* Module g15.analysis.health
+src\g15\analysis\health.py:121:0: R0902: Too many instance attributes (8/7) (too-many-instance-attributes)
+************* Module g15.storage.__init__
+src\g15\storage\__init__.py:1:0: R0801: Similar lines in 2 files
+==g15.simulation.engine:[177:213]
+==g15.simulation.faults:[135:163]
+    block = _lookup(source, name)
+    return source if block is _ABSENT else block
+
+
+def _as_int(value: object, path: str) -> int:
+    """Return ``value`` as a Python int.
+
+    Raises:
+        ValueError: if ``value`` is not integral and finite.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"{path} must be an integer, got {value!r}")
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    if isinstance(value, (float, np.floating)):
+        number = float(value)
+        if not math.isfinite(number) or number != int(number):
+            raise ValueError(f"{path} must be an integer, got {value!r}")
+        return int(number)
+    raise ValueError(f"{path} must be an integer, got {value!r}")
+
+
+def _parse_start_time(value: object, path: str) -> int:
+    """Return the scenario start instant as UTC Unix nanoseconds.
+
+    Args:
+        value: ``datetime``, ISO-8601 string, or integer nanosecond count.
+        path: Dotted path used in error messages.
+
+    Returns:
+        Nanoseconds since the Unix epoch, computed with integer arithmetic so
+        that no floating-point rounding is introduced.
+
+    Raises:
+        ValueError: if the value cannot be interpreted as an instant.
+    """ (duplicate-code)
+src\g15\storage\__init__.py:1:0: R0801: Similar lines in 2 files
+==g15.simulation.engine:[126:158]
+==g15.simulation.faults:[102:130]
+    if source is None:
+        return _ABSENT
+    if isinstance(source, Mapping):
+        return source[name] if name in source else _ABSENT
+    return getattr(source, name, _ABSENT)
+
+
+def _field(source: object, name: str, path: str, default: Any = _ABSENT) -> Any:
+    """Read one field from a mapping or an object attribute.
+
+    Args:
+        source: Mapping or object to read from.
+        name: Field name.
+        path: Dotted path used in error messages.
+        default: Value returned when the field is absent; when omitted, an
+            absent field is an error.
+
+    Returns:
+        The field value, or ``default``.
+
+    Raises:
+        ValueError: if the field is absent and no default was supplied.
+    """
+    value = _lookup(source, name)
+    if value is not _ABSENT:
+        return value
+    if default is not _ABSENT:
+        return default (duplicate-code)
+src\g15\storage\__init__.py:1:0: R0801: Similar lines in 2 files
+==g15.simulation.degradation:[62:71]
+==g15.simulation.noise:[93:108]
+    try:
+        result = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{path} must be a finite number, got {value!r}") from exc
+    if not math.isfinite(result):
+        raise ValueError(f"{path} must be finite, got {value!r}")
+    return result
+
+
+def _stream_tag(stream: str) -> int:
+    """Return a stable 32-bit tag for a stream name.
+
+    Uses CRC-32 rather than :func:`hash` so the tag does not change between
+    interpreter runs or platforms.
+    """ (duplicate-code)
+
+-----------------------------------
+Your code has been rated at 9.96/10
+
+

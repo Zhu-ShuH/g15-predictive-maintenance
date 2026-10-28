@@ -1,0 +1,116 @@
+{
+  "source": "<LOCAL_PATH>",
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "numpy": "2.3.5",
+  "probes": {
+    "tail_accounting": {
+      "consumer": {
+        "run_id": "20261026T003446Z-tail-740d9f",
+        "device_id": "DEV-002",
+        "windows_written": 1,
+        "alarms_written": 0,
+        "shards_processed": 1,
+        "shards_skipped": 0,
+        "windows_dropped": 3240
+      },
+      "report": {
+        "total_points": 10240,
+        "processed_points": 10240,
+        "rejected_points": 0,
+        "feature_windows": 1
+      },
+      "expected_analyzed_samples": 7000,
+      "dropped_samples": 3240
+    },
+    "external_database_version": {
+      "actual_db_scoring_version": "heuristic-v1",
+      "report_scoring_version": null
+    },
+    "unconsumed_normal": {
+      "passed": true,
+      "fault_events": 0,
+      "feature_windows": 0,
+      "processed_points": 0,
+      "rejected_points": 512,
+      "total_points": 512
+    },
+    "wrong_run_database": {
+      "run_id": "20261026T003446Z-wrong_database-02ad93",
+      "passed": true,
+      "feature_windows": 0,
+      "processed_points": 0,
+      "scoring_version": null
+    },
+    "actual_grid64_vs_report256": {
+      "stored_window_width": 64,
+      "alarm_start": 256,
+      "event": [
+        0,
+        64
+      ],
+      "expected_TP": 0,
+      "expected_allowed": [
+        0,
+        192
+      ],
+      "report": {
+        "detected_events": 1,
+        "detection_rate": 1.0,
+        "passed": true,
+        "events": [
+          {
+            "event_id": "F001",
+            "type": "spike",
+            "start_seq": 0,
+            "end_seq_exclusive": 64,
+            "allowed_start": 0,
+            "allowed_end_exclusive": 768,
+            "detected": true,
+            "matched_alarm_start": 256,
+            "matched_alarm_rule": "health_heuristic",
+            "first_alarm_start": 256,
+            "lag_samples": 192
+          }
+        ]
+      }
+    },
+    "invalid_json_exception": {
+      "type": "JSONDecodeError",
+      "is_ReportError": false
+    },
+    "duplicate_alarm_inflates": {
+      "events": 2,
+      "unique_alarm_keys": 1,
+      "reported_TP": 2,
+      "reported_alarm_count": 2
+    },
+    "tie_break": [
+      {
+        "event": "A",
+        "alarm_start": 256
+      },
+      {
+        "event": "B",
+        "alarm_start": 0
+      }
+    ]
+  },
+  "matching_cardinality_exhaustive_graphs": 512,
+  "config_hashes": {
+    "health_rules.yaml": {
+      "LF": "2b3a2763c72e32abd276b2d2617224b8bb941ca5d82807d2258db8d4c3f92d8b",
+      "CRLF": "c26bad78809424599a48ccebd7f92b1b290e9d598a0367778127c9e1b9c77f1f",
+      "blob": "5ec8114b9c765de53942f5b091253505391bddcd"
+    },
+    "consumer.yaml": {
+      "LF": "8006460052a9b741c1595ec94e5c487e99e54931315bc87482c9b197a5adde8c",
+      "CRLF": "aebb18a9191f154c16e1320a73d7593774879d44573d5c10811fea8e35c08bac",
+      "blob": "036d8910cae39adb7fbac86ee298ad7081ebb975"
+    },
+    "benchmark_1m.yaml": {
+      "LF": "fa7ad03a153446707fd4aa49c6bccb5915a578eff471d6477d577c36c44ebd05",
+      "CRLF": "47ceeee975bae5ef0a47dddcb00b4468fb74430fcd6e5cee5a906640e0b4c1ab",
+      "blob": "ed5f660273830f5499dd7680755681014bc4de50"
+    }
+  }
+}
