@@ -330,7 +330,7 @@ build_report(run_dir: Path, database_path: Path) -> Path
 此约定只描述仿真函数调用，不允许 `total_points=0` 的生产运行，也不允许
 把空块作为 NPZ 分片发布；生产配置和分片非空约束继续按 §4、§5 执行。
 
-**设计约束**：特征、评分、告警规则尽量使用无副作用的纯函数；文件 I/O 仅位于 pipeline/storage/reporting；不跨模块 import 私有 `_name`；不在 import 时执行仿真或访问文件。不要把 `assert` 用于生产输入校验，应使用 `ValueError`/专门异常并映射到明确的 CLI 退出码。
+**设计约束**：特征、评分、告警规则尽量使用无副作用的纯函数；运行数据与结果的文件 I/O 位于 pipeline/storage/reporting；现有 `analysis.health.load_health_rules(path)` 读取规则 YAML 是已知配置加载例外，不读取运行数据或真值，算法计算本身仍不读文件；不跨模块 import 私有 `_name`；不在 import 时执行仿真或访问文件。不要把 `assert` 用于生产输入校验，应使用 `ValueError`/专门异常并映射到明确的 CLI 退出码。
 
 ### 6.1 消费窗口、存储与 CLI 的责任
 
@@ -477,7 +477,7 @@ CREATE TABLE alarm_states (
 上述五表、字段、主键和外键不因 JSON 信封新增或改变：
 
 - `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
-- 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION="1.0"` 是另一个常量。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
+- 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION` 是另一个常量（当前值见该模块；#73 候选拟由 `1.0` 升为 `1.1`，未合入前不写成主线已升级）。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
 - `alarms.created_at` 是消费落库 UTC RFC3339 `Z` 时间，不是数据采样时刻或真值事件时间；run/device 来源于公开 Manifest。
 - `runs.status` 镜像 Manifest 状态，不代表消费已完成；完成进度由已提交 `processed_chunks` 与 Manifest 对照。相同 run 的已记录元数据/评分版本与已有窗口宽度冲突时拒收。
 - 同片同 SHA 重放跳过分析、保留已提交状态；同 ID 异 SHA 拒收。片事务成功后才推进内存状态，失败/重启从提交态恢复，不继承未提交的计算结果。
