@@ -1,0 +1,185 @@
+{
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "numpy": "2.3.5",
+  "g15": "<candidate>\\src\\g15\\__init__.py",
+  "cases": [
+    {
+      "name": "vibration_short",
+      "passed": false,
+      "failures": [
+        "shard.length_mismatch"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "c79b950454623a6f4c26d0bbb5e883defbe91234b5e2fc72b27c7be9b56724f6",
+        "observed_rows": 256,
+        "observed_sha256": "c79b950454623a6f4c26d0bbb5e883defbe91234b5e2fc72b27c7be9b56724f6",
+        "first_seq": 0,
+        "last_seq": 255,
+        "dtype_ok": true,
+        "seq_ok": true,
+        "hash_ok": true,
+        "failures": [
+          "shard.length_mismatch"
+        ]
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "chunk arrays must be equally long, got {'seq': 256, 'timestamp_ns': 256, 'vibration': 1, 'temperature': 256}"
+      }
+    },
+    {
+      "name": "temperature_empty",
+      "passed": false,
+      "failures": [
+        "shard.length_mismatch"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "5e93622874fbaf15c30c22171b1a0f2399790a0708a0836961075d9a881381b2",
+        "observed_rows": 256,
+        "observed_sha256": "5e93622874fbaf15c30c22171b1a0f2399790a0708a0836961075d9a881381b2",
+        "first_seq": 0,
+        "last_seq": 255,
+        "dtype_ok": true,
+        "seq_ok": true,
+        "hash_ok": true,
+        "failures": [
+          "shard.length_mismatch"
+        ]
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "chunk arrays must be equally long, got {'seq': 256, 'timestamp_ns': 256, 'vibration': 256, 'temperature': 0}"
+      }
+    },
+    {
+      "name": "timestamp_short",
+      "passed": false,
+      "failures": [
+        "shard.length_mismatch"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "53c78ffd5c8d64d37c2ccd2c5544803adfb10a16565832ad40c30a9aa92f9f19",
+        "observed_rows": 256,
+        "observed_sha256": "53c78ffd5c8d64d37c2ccd2c5544803adfb10a16565832ad40c30a9aa92f9f19",
+        "first_seq": 0,
+        "last_seq": 255,
+        "dtype_ok": true,
+        "seq_ok": true,
+        "hash_ok": true,
+        "failures": [
+          "shard.length_mismatch"
+        ]
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "chunk arrays must be equally long, got {'seq': 256, 'timestamp_ns': 2, 'vibration': 256, 'temperature': 256}"
+      }
+    },
+    {
+      "name": "seq_nan",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch",
+        "shard.seq_gap"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "7745cb7e779342cd4e581b9b142f8f961f4b8e8473c0802ca27a09a68370087d",
+        "observed_rows": 256,
+        "observed_sha256": "7745cb7e779342cd4e581b9b142f8f961f4b8e8473c0802ca27a09a68370087d",
+        "first_seq": null,
+        "last_seq": null,
+        "dtype_ok": false,
+        "seq_ok": false,
+        "hash_ok": true,
+        "failures": [
+          "shard.dtype_mismatch",
+          "shard.seq_gap"
+        ]
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "seq must be int64, got float64"
+      }
+    },
+    {
+      "name": "seq_inf",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch",
+        "shard.seq_gap"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "1265b4d86e8fc2e34df87d0a0e34e897c92318294da753f2d531cf2561cb79d5",
+        "observed_rows": 256,
+        "observed_sha256": "1265b4d86e8fc2e34df87d0a0e34e897c92318294da753f2d531cf2561cb79d5",
+        "first_seq": null,
+        "last_seq": null,
+        "dtype_ok": false,
+        "seq_ok": false,
+        "hash_ok": true,
+        "failures": [
+          "shard.dtype_mismatch",
+          "shard.seq_gap"
+        ]
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "seq must be int64, got float64"
+      }
+    },
+    {
+      "name": "npy_instead_of_npz",
+      "passed": false,
+      "failures": [
+        "shard.not_archive"
+      ],
+      "rows_sum": 768,
+      "verified_part_count": 3,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "21546057ab4ef0cd69aa7cf6b9e114be26c00143714d419d79c1fec3ad6565f5",
+        "observed_rows": null,
+        "observed_sha256": "21546057ab4ef0cd69aa7cf6b9e114be26c00143714d419d79c1fec3ad6565f5",
+        "first_seq": null,
+        "last_seq": null,
+        "dtype_ok": null,
+        "seq_ok": null,
+        "hash_ok": true,
+        "failures": [
+          "shard.not_archive"
+        ]
+      },
+      "read_chunk": {
+        "exception": "TypeError",
+        "message": "'numpy.ndarray' object does not support the context manager protocol"
+      }
+    }
+  ]
+}

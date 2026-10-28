@@ -1,0 +1,106 @@
+{
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "numpy": "2.3.5",
+  "g15": "<candidate>\\src\\g15\\__init__.py",
+  "cases": [
+    {
+      "dim": 0,
+      "field": "seq",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch",
+        "shard.seq_gap"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": null
+    },
+    {
+      "dim": 0,
+      "field": "timestamp_ns",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": 256
+    },
+    {
+      "case": "scalar-plus-later-bad-digest",
+      "failures": [
+        "seq.cross_shard_gap",
+        "shard.dtype_mismatch",
+        "shard.hash_mismatch"
+      ],
+      "shard_count": 4
+    },
+    {
+      "dim": 0,
+      "field": "vibration",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": 256
+    },
+    {
+      "dim": 0,
+      "field": "temperature",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": 256
+    },
+    {
+      "dim": 2,
+      "field": "seq",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch",
+        "shard.seq_gap"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": null
+    },
+    {
+      "dim": 2,
+      "field": "timestamp_ns",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": 256
+    },
+    {
+      "dim": 2,
+      "field": "vibration",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": 256
+    },
+    {
+      "dim": 2,
+      "field": "temperature",
+      "passed": false,
+      "failures": [
+        "shard.dtype_mismatch"
+      ],
+      "verified": 3,
+      "rows_sum": 768,
+      "observed_rows": 256
+    }
+  ]
+}

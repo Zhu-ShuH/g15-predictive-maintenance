@@ -1,0 +1,31 @@
+{
+  "id": "pr72-abc6dfa4",
+  "pr": 72,
+  "head": "abc6dfa49136a0ddb02d960a5ee6e1e8ed95ca23",
+  "date": "2026-10-27",
+  "full_suite": {
+    "passed": 548,
+    "skipped": 9,
+    "exit_code": 0,
+    "elapsed_seconds": 12.68
+  },
+  "skip_reasons": [
+    "6 performance opt-in",
+    "3 symlink permissions"
+  ],
+  "review_url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72#pullrequestreview-5668814813",
+  "notes": "原R1-R3诊断：非seq列缺行假通过、NaN/Inf seq转换异常、NPY内容异常。pytest通过与这些反例同时成立。",
+  "observer": "A",
+  "environment": {
+    "os": "Windows",
+    "python": "3.11.9",
+    "numpy": "2.3.5",
+    "pytest": "8.4.2"
+  },
+  "pytest_command": "python -m pytest -q -ra -p no:cacheprovider --basetemp <external-temp>",
+  "black_pylint_in_this_record": "not rerun by A; CI evidence is a separate source",
+  "artifacts": [
+    "pytest.log",
+    "diagnostics.json"
+  ]
+}

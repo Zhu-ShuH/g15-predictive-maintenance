@@ -1,0 +1,12 @@
+[
+  {
+    "field": "temperature",
+    "exception": "IndexError",
+    "message": "tuple index out of range"
+  },
+  {
+    "field": "seq",
+    "exception": "IndexError",
+    "message": "tuple index out of range"
+  }
+]

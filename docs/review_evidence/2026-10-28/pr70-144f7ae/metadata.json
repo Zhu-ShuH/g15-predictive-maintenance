@@ -1,0 +1,32 @@
+{
+  "id": "pr70-144f7ae",
+  "pr": 70,
+  "head": "144f7ae20f5be73f3bde37026fe6118087aae8d8",
+  "date": "2026-10-26",
+  "full_suite": {
+    "passed": 581,
+    "skipped": 9,
+    "exit_code": 0,
+    "elapsed_seconds": 15.51
+  },
+  "skip_reasons": [
+    "6 performance opt-in",
+    "2 symlink permissions",
+    "1 POSIX kill-9 unavailable on Windows"
+  ],
+  "review_url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70#pullrequestreview-5650335018",
+  "notes": "R7摘要冲突范围排除、部分消费与缺真值的实际诊断；Linux强杀未在Windows实测。原始日志中的中文乱码在采集时已存在，本归档不尝试还原。",
+  "observer": "A",
+  "environment": {
+    "os": "Windows",
+    "python": "3.11.9",
+    "numpy": "2.3.5",
+    "pytest": "8.4.2"
+  },
+  "pytest_command": "python -m pytest -q -ra -p no:cacheprovider --basetemp <external-temp>",
+  "black_pylint_in_this_record": "not rerun by A; CI evidence is a separate source",
+  "artifacts": [
+    "pytest.log",
+    "diagnostics.json"
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "numpy": "2.3.5",
+  "g15": "<candidate>\\src\\g15\\__init__.py",
+  "cases": [
+    {
+      "name": "vibration_short",
+      "passed": true,
+      "failures": [],
+      "rows_sum": 1024,
+      "verified_part_count": 4,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "c79b950454623a6f4c26d0bbb5e883defbe91234b5e2fc72b27c7be9b56724f6",
+        "observed_rows": 256,
+        "observed_sha256": "c79b950454623a6f4c26d0bbb5e883defbe91234b5e2fc72b27c7be9b56724f6",
+        "first_seq": 0,
+        "last_seq": 255,
+        "dtype_ok": true,
+        "seq_ok": true,
+        "hash_ok": true,
+        "failures": []
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "chunk arrays must be equally long, got {'seq': 256, 'timestamp_ns': 256, 'vibration': 1, 'temperature': 256}"
+      }
+    },
+    {
+      "name": "temperature_empty",
+      "passed": true,
+      "failures": [],
+      "rows_sum": 1024,
+      "verified_part_count": 4,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "5e93622874fbaf15c30c22171b1a0f2399790a0708a0836961075d9a881381b2",
+        "observed_rows": 256,
+        "observed_sha256": "5e93622874fbaf15c30c22171b1a0f2399790a0708a0836961075d9a881381b2",
+        "first_seq": 0,
+        "last_seq": 255,
+        "dtype_ok": true,
+        "seq_ok": true,
+        "hash_ok": true,
+        "failures": []
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "chunk arrays must be equally long, got {'seq': 256, 'timestamp_ns': 256, 'vibration': 256, 'temperature': 0}"
+      }
+    },
+    {
+      "name": "timestamp_short",
+      "passed": true,
+      "failures": [],
+      "rows_sum": 1024,
+      "verified_part_count": 4,
+      "first_shard": {
+        "part_id": 0,
+        "path": "raw/part-000000.npz",
+        "expected_rows": 256,
+        "expected_sha256": "53c78ffd5c8d64d37c2ccd2c5544803adfb10a16565832ad40c30a9aa92f9f19",
+        "observed_rows": 256,
+        "observed_sha256": "53c78ffd5c8d64d37c2ccd2c5544803adfb10a16565832ad40c30a9aa92f9f19",
+        "first_seq": 0,
+        "last_seq": 255,
+        "dtype_ok": true,
+        "seq_ok": true,
+        "hash_ok": true,
+        "failures": []
+      },
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "chunk arrays must be equally long, got {'seq': 256, 'timestamp_ns': 2, 'vibration': 256, 'temperature': 256}"
+      }
+    },
+    {
+      "name": "seq_nan",
+      "exception": "ValueError",
+      "message": "cannot convert float NaN to integer",
+      "traceback": "Traceback (most recent call last):\n  File \"<review-root>/probes72.py\", line 33, in <module>\n    result=verify_run(run);item.update({'passed':result.passed,'failures':result.failures,'rows_sum':result.rows_sum,'verified_part_count':result.verified_part_count,'first_shard':result.shards[0].to_dict()})\n           ^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 618, in verify_run\n    shards = tuple(_check_shard(Path(run_dir), entry) for entry in entries)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 618, in <genexpr>\n    shards = tuple(_check_shard(Path(run_dir), entry) for entry in entries)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 510, in _check_shard\n    first_seq = int(arrays[\"seq\"][0])\n                ^^^^^^^^^^^^^^^^^^^^^\nValueError: cannot convert float NaN to integer\n",
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "seq must be int64, got float64"
+      }
+    },
+    {
+      "name": "seq_inf",
+      "exception": "OverflowError",
+      "message": "cannot convert float infinity to integer",
+      "traceback": "Traceback (most recent call last):\n  File \"<review-root>/probes72.py\", line 33, in <module>\n    result=verify_run(run);item.update({'passed':result.passed,'failures':result.failures,'rows_sum':result.rows_sum,'verified_part_count':result.verified_part_count,'first_shard':result.shards[0].to_dict()})\n           ^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 618, in verify_run\n    shards = tuple(_check_shard(Path(run_dir), entry) for entry in entries)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 618, in <genexpr>\n    shards = tuple(_check_shard(Path(run_dir), entry) for entry in entries)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 510, in _check_shard\n    first_seq = int(arrays[\"seq\"][0])\n                ^^^^^^^^^^^^^^^^^^^^^\nOverflowError: cannot convert float infinity to integer\n",
+      "read_chunk": {
+        "exception": "ChunkValidationError",
+        "message": "seq must be int64, got float64"
+      }
+    },
+    {
+      "name": "npy_instead_of_npz",
+      "exception": "TypeError",
+      "message": "'numpy.ndarray' object does not support the context manager protocol",
+      "traceback": "Traceback (most recent call last):\n  File \"<review-root>/probes72.py\", line 33, in <module>\n    result=verify_run(run);item.update({'passed':result.passed,'failures':result.failures,'rows_sum':result.rows_sum,'verified_part_count':result.verified_part_count,'first_shard':result.shards[0].to_dict()})\n           ^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 618, in verify_run\n    shards = tuple(_check_shard(Path(run_dir), entry) for entry in entries)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 618, in <genexpr>\n    shards = tuple(_check_shard(Path(run_dir), entry) for entry in entries)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 489, in _check_shard\n    arrays, load_failure = _load_arrays(shard_path)\n                           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<candidate>\\src\\g15\\reporting\\verifier.py\", line 348, in _load_arrays\n    with np.load(shard_path, allow_pickle=False) as archive:\nTypeError: 'numpy.ndarray' object does not support the context manager protocol\n",
+      "read_chunk": {
+        "exception": "TypeError",
+        "message": "'numpy.ndarray' object does not support the context manager protocol"
+      }
+    }
+  ]
+}

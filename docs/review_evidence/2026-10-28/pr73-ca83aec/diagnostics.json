@@ -1,0 +1,127 @@
+{
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "numpy": "2.3.5",
+  "features_version": "1.0",
+  "cases": [
+    {
+      "name": "complex",
+      "exception": "ValueError",
+      "message": "vibration must be real-valued, got dtype complex128"
+    },
+    {
+      "name": "large100",
+      "values": {
+        "mean": 0.0,
+        "std": 1e+100,
+        "rms": 1e+100,
+        "ptp": 2e+100,
+        "kurtosis_excess": -1.9999999999999998,
+        "crest_factor": 1.0,
+        "dominant_freq_hz": 50.0,
+        "zero_crossing_rate": 1.0
+      }
+    },
+    {
+      "name": "large200",
+      "values": {
+        "mean": 0.0,
+        "std": 1e+200,
+        "rms": 1e+200,
+        "ptp": 2e+200,
+        "kurtosis_excess": -2.0,
+        "crest_factor": 1.0,
+        "dominant_freq_hz": 50.0,
+        "zero_crossing_rate": 1.0
+      }
+    },
+    {
+      "name": "tiny",
+      "values": {
+        "mean": 1e-300,
+        "std": 1.6329931618554523e-300,
+        "rms": 1.9148542155126764e-300,
+        "ptp": 4e-300,
+        "kurtosis_excess": -1.5000000000000002,
+        "crest_factor": 1.5666989036012806,
+        "dominant_freq_hz": 33.333333333333336,
+        "zero_crossing_rate": 1.0
+      }
+    },
+    {
+      "name": "overflow",
+      "exception": "ValueError",
+      "message": "vibration is finite but its ptp exceeds the float64 range even after rescaling by 8.988e+307; rescale the window before extracting features"
+    },
+    {
+      "name": "smallest_subnormal",
+      "values": {
+        "mean": 0.0,
+        "std": 0.0,
+        "rms": 5e-324,
+        "ptp": 5e-324,
+        "kurtosis_excess": -2.0,
+        "crest_factor": 1.414213562373095,
+        "dominant_freq_hz": 50.0,
+        "zero_crossing_rate": 1.0
+      }
+    },
+    {
+      "name": "max_constant",
+      "values": {
+        "mean": 1.7976931348623157e+308,
+        "std": 0.0,
+        "rms": 1.7976931348623157e+308,
+        "ptp": 0.0,
+        "kurtosis_excess": 0.0,
+        "crest_factor": 1.0,
+        "dominant_freq_hz": 0.0,
+        "zero_crossing_rate": 0.0
+      }
+    },
+    {
+      "name": "uint64",
+      "values": {
+        "mean": 1.8446744073709552e+19,
+        "std": 0.0,
+        "rms": 1.8446744073709552e+19,
+        "ptp": 0.0,
+        "kurtosis_excess": 0.0,
+        "crest_factor": 1.0,
+        "dominant_freq_hz": 0.0,
+        "zero_crossing_rate": 0.0
+      }
+    },
+    {
+      "name": "timedelta",
+      "values": {
+        "mean": 1.5,
+        "std": 0.5,
+        "rms": 1.5811388300841898,
+        "ptp": 1.0,
+        "kurtosis_excess": -2.0,
+        "crest_factor": 1.2649110640673518,
+        "dominant_freq_hz": 50.0,
+        "zero_crossing_rate": 1.0
+      }
+    }
+  ],
+  "differential": {
+    "normal_cases": 400,
+    "exactly_equal": 399,
+    "different": [
+      {
+        "index": 384,
+        "n": 1024,
+        "amplitude": 1e-05,
+        "minimum": -4.595505003804556e-05,
+        "maximum": 1.234872852641957e-05,
+        "differences": {
+          "kurtosis_excess": [
+            -0.18370102779317943,
+            -0.18370102779317987
+          ]
+        }
+      }
+    ]
+  }
+}
