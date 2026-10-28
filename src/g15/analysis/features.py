@@ -22,18 +22,40 @@ Contract decisions that callers must know:
 * **Every division is guarded.** Zero variance, an all-zero window and a
   one-sample window return ``0.0`` for the affected feature rather than
   ``NaN``/``Inf``, so the consumer may store any window it can produce.
-* **Real inputs only.** A complex window is rejected instead of being cast to
-  ``float64``: that cast raises a warning and silently drops the imaginary part,
-  so the returned features would describe data the caller never passed. The
-  consumer reads ``float64`` shards, so this narrows the public entry point only.
+* **Real inputs only, from an explicit list of dtypes.** A complex window is
+  rejected instead of being cast to ``float64``: that cast raises a warning and
+  silently drops the imaginary part, so the returned features would describe
+  data the caller never passed. ``np.issubdtype(dtype, np.number)`` is *not*
+  used as the gate, because NumPy counts ``timedelta64`` as a number: a window
+  of ``timedelta64[D]`` would be read as a vibration in ``g`` and the same
+  physical duration in ``[s]`` would give a different feature vector. The
+  supported set is listed in :data:`REAL_SAMPLE_DTYPES` and anything else is
+  rejected with its dtype named.
+* **Integers must survive the conversion to ``float64``.** An integer window is
+  converted before the moments are formed, and ``[2**64-1, 2**64-2]`` collapses
+  to one ``float64`` value, so ``std`` and ``ptp`` would both be ``0.0`` for two
+  samples that differ by one. A window is therefore accepted only when every
+  sample has an exact ``float64`` value: everything inside
+  ``|value| <= 2**53`` does, and past that only the values that land on the
+  widened spacing (``2**53 + 2`` yes, ``2**53 + 1`` no). The ``float64`` shards
+  the consumer reads never reach this path.
 * **Moments are formed on a rescaled window.** The window is divided by a power
-  of two before the moments are computed. That division is exact in binary
-  floating point for ordinary magnitudes, so feature numbers do not move, while
-  the largest rescaled magnitude stays in ``(1, 2]`` and ``centered**4`` can no
-  longer overflow for large-but-finite samples (``1e100`` used to return a
-  ``NaN`` excess kurtosis, ``1e200`` an ``inf`` RMS). Features are scaled back
-  before they are returned; a feature that still cannot be represented as a
-  finite ``float64`` makes the extraction raise instead of returning ``Inf``.
+  of two before the moments are computed, so the largest rescaled magnitude
+  stays in ``(1, 2)`` (the peak is ``1.0`` for an all-zero window) and
+  ``centered**4`` stays below ``256`` instead of overflowing for
+  large-but-finite samples (``1e100`` used to return a ``NaN`` excess kurtosis,
+  ``1e200`` an ``inf`` RMS). Features are scaled back before they are returned;
+  a feature that still cannot be represented as a finite ``float64`` makes the
+  extraction raise instead of returning ``Inf``.
+
+  Dividing by a power of two is exact for every finite input except where a
+  sample is pushed into the subnormal range, so ordinary windows keep their
+  numbers in practice: a 400-window sweep over ordinary magnitudes (see
+  :data:`FEATURES_VERSION`) matched ``1.0`` bit for bit on NumPy 2.5.4 and
+  differed by a single ulp of ``kurtosis_excess`` on one window under NumPy
+  2.3.5. That is a rounding difference, not a formula change -- but "identical
+  for every ordinary input" is not claimed, which is why the version moved to
+  ``1.1``.
 """
 
 from __future__ import annotations
@@ -48,14 +70,33 @@ from numpy.typing import NDArray
 __all__ = [
     "FEATURES_VERSION",
     "FEATURE_NAMES",
+    "REAL_SAMPLE_DTYPES",
     "FeatureRecord",
     "extract_features",
 ]
 
 #: Version of the feature definitions in this module.
 #:
-#: Bump it when a definition changes in a way that moves numbers for the same
-#: input (for example switching ``std`` to ``ddof=1``).
+#: ``1.1`` is ``1.0`` with a narrower accepted input domain and defined results
+#: at the extremes; the eight formulas themselves are unchanged.
+#:
+#: What moved, stated precisely because "unchanged for ordinary inputs" is easy
+#: to over-read:
+#:
+#: * complex windows are rejected instead of being cast (``1.0`` silently kept
+#:   the real part and warned);
+#: * ``timedelta64`` windows are rejected instead of being read as ``g``;
+#: * integer windows outside ``|value| <= 2**53`` are rejected instead of being
+#:   rounded into ``float64``;
+#: * very large finite windows return finite numbers instead of ``NaN``/``Inf``
+#:   (``1e100`` used to return a ``NaN`` excess kurtosis, ``1e200`` an ``inf``
+#:   RMS), and windows whose spread exceeds ``float64`` raise;
+#: * no window that ``1.0`` returned finite numbers for changed formula, but
+#:   bit-identity is not guaranteed: of 400 ordinary windows compared against
+#:   ``1.0`` on NumPy 2.3.5, one differed by one ulp of ``kurtosis_excess``
+#:   (``-0.18370102779317943`` -> ``-0.18370102779317987``); the same sweep was
+#:   bit-identical on NumPy 2.5.4. Treat ``1.0``/``1.1`` values as equal within
+#:   floating-point rounding, not as identical bytes.
 #:
 #: Scope, stated because it is easy to over-read: this constant is **not** a
 #: field of :class:`FeatureRecord` and currently has no persistence path. It is
@@ -63,7 +104,42 @@ __all__ = [
 #: would add a column to ``feature_windows``, which is a schema decision still
 #: open in issue #57 -- do not assume a stored row can be traced by itself until
 #: that issue closes.
-FEATURES_VERSION: Final[str] = "1.0"
+FEATURES_VERSION: Final[str] = "1.1"
+
+#: dtypes a vibration window may carry, in the order they are documented.
+#:
+#: Deliberately a whitelist: ``np.number`` also covers ``timedelta64`` and
+#: ``datetime64``, so a generic "is it a number" test accepts a window of time
+#: deltas and reports its day counts as ``g``. ``float16`` is included because
+#: every one of its values is a ``float64`` value, so the widening is lossless.
+#: ``longdouble`` is not: on the platforms where it is wider than ``float64``
+#: the conversion drops digits silently.
+REAL_SAMPLE_DTYPES: Final[tuple[np.dtype, ...]] = tuple(
+    np.dtype(name)
+    for name in (
+        "float16",
+        "float32",
+        "float64",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+    )
+)
+
+#: Magnitude every integer sample is exact at; the bound the fast path uses.
+#:
+#: ``float64`` represents every integer up to ``2**53`` exactly. Past it the
+#: spacing exceeds one, so ``[2**53, 2**53 + 1]`` becomes two identical values
+#: and the window's real spread disappears before any moment is formed. Some
+#: larger integers (``2**53 + 2``) are still exact, so this constant is the
+#: guaranteed range, not the acceptance limit: windows that reach past it are
+#: checked value by value in :func:`_require_exact_integers`.
+MAX_EXACT_INTEGER: Final[int] = 2**53
 
 #: Feature names in reporting order.
 FEATURE_NAMES: Final[tuple[str, ...]] = (
@@ -169,10 +245,12 @@ def extract_features(
 
     Raises:
         ValueError: if ``vibration`` is not a non-empty one-dimensional finite
-            **real** array, or ``sample_rate_hz`` is not an integer in
-            ``1..MAX_SAMPLE_RATE_HZ``, or ``window_start_seq`` is negative, or a
-            feature of a finite window cannot be represented as a finite
-            ``float64`` (see :func:`_restore_scale`).
+            **real** array, or its dtype is outside :data:`REAL_SAMPLE_DTYPES`,
+            or it carries integers beyond :data:`MAX_EXACT_INTEGER`, or
+            ``sample_rate_hz`` is not an integer in ``1..MAX_SAMPLE_RATE_HZ``, or
+            ``window_start_seq`` is negative, or a feature of a finite window
+            cannot be represented as a finite ``float64`` (see
+            :func:`_restore_scale`).
     """
     samples = _as_signal(vibration)
     rate = _as_sample_rate(sample_rate_hz)
@@ -209,10 +287,11 @@ def _rescale(samples: NDArray[np.float64]) -> tuple[NDArray[np.float64], float]:
 
     Dividing by ``2**k`` is exact for every finite ``float64`` input except
     where a sample is pushed into the subnormal range, so ordinary windows keep
-    their numbers bit for bit. The factor is chosen so that the largest rescaled
-    magnitude lies in ``(1, 2]``: second moments then stay below ``4`` and fourth
-    moments below ``16``, which is what keeps large-but-finite samples from
-    overflowing the moment computation.
+    their numbers in practice. The factor is chosen so that the largest rescaled
+    magnitude lies in ``(1, 2]``: second moments then stay below ``4``, and a
+    mean-centred value is bounded by ``4`` in absolute value, so ``centered**4``
+    stays below ``256`` -- a coarse but safe bound, which is what keeps
+    large-but-finite samples from overflowing the moment computation.
 
     Args:
         samples: Validated finite, real one-dimensional window.
@@ -322,7 +401,9 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         A one-dimensional ``float64`` array holding the window.
 
     Raises:
-        ValueError: if it is not a non-empty one-dimensional finite real array.
+        ValueError: if it is not a non-empty one-dimensional finite real array
+            whose dtype is in :data:`REAL_SAMPLE_DTYPES` and whose integer
+            values fit :data:`MAX_EXACT_INTEGER`.
     """
     if not isinstance(vibration, np.ndarray):
         raise ValueError(
@@ -338,13 +419,62 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         # ``astype(float64)`` would only warn and drop the imaginary part, so the
         # record would describe a signal nobody passed in.
         raise ValueError(f"vibration must be real-valued, got dtype {vibration.dtype}")
-    if not np.issubdtype(vibration.dtype, np.number):
-        raise ValueError(f"vibration must be numeric, got dtype {vibration.dtype}")
+    if vibration.dtype not in REAL_SAMPLE_DTYPES:
+        # Named whitelist, not ``np.issubdtype(dtype, np.number)``: NumPy counts
+        # ``timedelta64`` as a number, so the generic test would read a window of
+        # time deltas as a vibration and report its day counts as ``g``.
+        raise ValueError(
+            "vibration must be a real numeric dtype among "
+            + "/".join(str(dtype) for dtype in REAL_SAMPLE_DTYPES)
+            + f", got dtype {vibration.dtype}"
+        )
+    if vibration.dtype.kind in "iu":
+        _require_exact_integers(vibration)
     samples = np.asarray(vibration, dtype=np.float64)
     if not bool(np.all(np.isfinite(samples))):
         index = int(np.argmax(~np.isfinite(samples)))
         raise ValueError(f"vibration is not finite at local index {index}")
     return samples
+
+
+def _require_exact_integers(vibration: NDArray[np.integer]) -> None:
+    """Reject integer windows that ``float64`` cannot hold exactly.
+
+    ``float64`` represents every integer up to ``2**53`` exactly, and above that
+    only some: the spacing doubles, so ``2**53 + 1`` has no ``float64`` value of
+    its own while ``2**53 + 2`` does. ``[2**64 - 1, 2**64 - 2]`` collapses to one
+    ``float64``, so ``std`` and ``ptp`` come back as ``0.0`` for a window that
+    really changed; losing that difference before the moments are formed is not
+    something the stable moment code can undo.
+
+    The common path costs one comparison: every value inside
+    ``|value| <= MAX_EXACT_INTEGER`` is exact by construction. Only a window that
+    reaches past that bound is checked value by value, which is why a value such
+    as ``2**53 + 2`` is still accepted instead of being refused by a blanket
+    range rule.
+
+    Args:
+        vibration: One-dimensional integer window.
+
+    Raises:
+        ValueError: if any sample has no exact ``float64`` representation.
+    """
+    smallest = int(vibration.min())
+    largest = int(vibration.max())
+    if max(abs(smallest), abs(largest)) <= MAX_EXACT_INTEGER:
+        return
+    # ``tolist`` gives Python ints and ``int(float(v))`` is exact, so this
+    # round-trip is the definition of "representable" rather than an estimate.
+    # The loop only runs for windows past 2**53, which ordinary vibration is not.
+    for value in vibration.tolist():
+        if int(float(value)) != value:
+            raise ValueError(
+                f"vibration integers must be exactly representable as float64; "
+                f"{value} of dtype {vibration.dtype} is not (every |value| <= "
+                f"{MAX_EXACT_INTEGER} is, above that only multiples of the "
+                "widened spacing are); rescale the window before extracting "
+                "features"
+            )
 
 
 def _as_sample_rate(sample_rate_hz: object) -> int:
