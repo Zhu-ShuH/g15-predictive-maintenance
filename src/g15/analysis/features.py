@@ -22,13 +22,25 @@ Contract decisions that callers must know:
 * **Every division is guarded.** Zero variance, an all-zero window and a
   one-sample window return ``0.0`` for the affected feature rather than
   ``NaN``/``Inf``, so the consumer may store any window it can produce.
+* **Real inputs only.** A complex window is rejected instead of being cast to
+  ``float64``: that cast raises a warning and silently drops the imaginary part,
+  so the returned features would describe data the caller never passed. The
+  consumer reads ``float64`` shards, so this narrows the public entry point only.
+* **Moments are formed on a rescaled window.** The window is divided by a power
+  of two before the moments are computed. That division is exact in binary
+  floating point for ordinary magnitudes, so feature numbers do not move, while
+  the largest rescaled magnitude stays in ``(1, 2]`` and ``centered**4`` can no
+  longer overflow for large-but-finite samples (``1e100`` used to return a
+  ``NaN`` excess kurtosis, ``1e200`` an ``inf`` RMS). Features are scaled back
+  before they are returned; a feature that still cannot be represented as a
+  finite ``float64`` makes the extraction raise instead of returning ``Inf``.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -157,32 +169,146 @@ def extract_features(
 
     Raises:
         ValueError: if ``vibration`` is not a non-empty one-dimensional finite
-            array, or ``sample_rate_hz`` is not an integer in
-            ``1..MAX_SAMPLE_RATE_HZ``, or ``window_start_seq`` is negative.
+            **real** array, or ``sample_rate_hz`` is not an integer in
+            ``1..MAX_SAMPLE_RATE_HZ``, or ``window_start_seq`` is negative, or a
+            feature of a finite window cannot be represented as a finite
+            ``float64`` (see :func:`_restore_scale`).
     """
     samples = _as_signal(vibration)
     rate = _as_sample_rate(sample_rate_hz)
     start = _as_window_start(window_start_seq)
 
     count = int(samples.size)
-    mean = float(samples.mean())
-    centered = samples - mean
-    variance = float(np.mean(centered**2))
-    rms = float(np.sqrt(np.mean(samples**2)))
-    peak = float(np.max(np.abs(samples)))
+    scaled, factor = _rescale(samples)
+    centered, variance_scaled, rms_scaled, peak_scaled = _scaled_moments(scaled)
+    restored = _restore_scale(
+        factor=factor,
+        mean=float(scaled.mean()),
+        variance=variance_scaled,
+        rms=rms_scaled,
+        ptp=float(scaled.max() - scaled.min()),
+    )
 
     return FeatureRecord(
-        mean=mean,
-        std=math.sqrt(variance),
-        rms=rms,
-        ptp=float(samples.max() - samples.min()),
-        kurtosis_excess=_excess_kurtosis(centered, variance),
-        crest_factor=peak / rms if rms > 0.0 else 0.0,
+        mean=restored.mean,
+        std=restored.std,
+        rms=restored.rms,
+        ptp=restored.ptp,
+        kurtosis_excess=_excess_kurtosis(centered, variance_scaled),
+        crest_factor=peak_scaled / rms_scaled if rms_scaled > 0.0 else 0.0,
         dominant_freq_hz=_dominant_frequency(centered, rate),
         zero_crossing_rate=_zero_crossing_rate(centered, count),
         sample_count=count,
         sample_rate_hz=rate,
         window_start_seq=start,
+    )
+
+
+def _rescale(samples: NDArray[np.float64]) -> tuple[NDArray[np.float64], float]:
+    """Divide the window by a power of two and return it with that factor.
+
+    Dividing by ``2**k`` is exact for every finite ``float64`` input except
+    where a sample is pushed into the subnormal range, so ordinary windows keep
+    their numbers bit for bit. The factor is chosen so that the largest rescaled
+    magnitude lies in ``(1, 2]``: second moments then stay below ``4`` and fourth
+    moments below ``16``, which is what keeps large-but-finite samples from
+    overflowing the moment computation.
+
+    Args:
+        samples: Validated finite, real one-dimensional window.
+
+    Returns:
+        A pair ``(scaled, factor)`` with ``samples == scaled * factor`` to
+        within the exactness of the division. An all-zero window is returned
+        untouched with a factor of ``1.0``.
+    """
+    peak = float(np.max(np.abs(samples)))
+    if peak == 0.0:
+        return samples, 1.0
+    # ``frexp`` splits ``peak`` into ``m * 2**exponent`` with ``0.5 <= m < 1``,
+    # so ``2**(exponent - 1) <= peak < 2**exponent`` and ``ldexp`` cannot
+    # overflow for a finite ``peak``.
+    factor = math.ldexp(1.0, math.frexp(peak)[1] - 1)
+    return samples / factor, factor
+
+
+def _scaled_moments(
+    scaled: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], float, float, float]:
+    """Return the mean-centred window and the moments needed by the record.
+
+    Args:
+        scaled: Window after :func:`_rescale`, so every magnitude is ``<= 2``.
+
+    Returns:
+        ``(centered, variance, rms, peak)`` where ``centered`` has its mean
+        removed, ``variance`` is the population variance, ``rms`` the root mean
+        square and ``peak`` the largest absolute sample of the rescaled window.
+    """
+    centered = scaled - float(scaled.mean())
+    return (
+        centered,
+        float(np.mean(centered**2)),
+        float(np.sqrt(np.mean(scaled**2))),
+        float(np.max(np.abs(scaled))),
+    )
+
+
+class _Moments(NamedTuple):
+    """Shape features of one window, restored to ``g``."""
+
+    mean: float
+    std: float
+    rms: float
+    ptp: float
+
+
+def _restore_scale(
+    *,
+    factor: float,
+    mean: float,
+    variance: float,
+    rms: float,
+    ptp: float,
+) -> _Moments:
+    """Scale the rescaled moments back to ``g`` and refuse non-finite results.
+
+    Args:
+        factor: Power of two the window was divided by.
+        mean: Mean of the rescaled window.
+        variance: Population variance of the rescaled window.
+        rms: Root mean square of the rescaled window.
+        ptp: Peak-to-peak amplitude of the rescaled window.
+
+    Returns:
+        The ``mean``, ``std``, ``rms`` and ``ptp`` of the window in ``g``.
+
+    Raises:
+        ValueError: if a scaled-back feature is ``inf``. The window is finite but
+            its spread exceeds the ``float64`` range (for example +/-``1.7e308``
+            gives a peak-to-peak amplitude of ``3.4e308``); reporting ``inf``
+            would let the score and the alarm state machine consume a number
+            that is not a measurement.
+    """
+    restored = {
+        "mean": mean * factor,
+        "std": math.sqrt(variance) * factor,
+        "rms": rms * factor,
+        "ptp": ptp * factor,
+    }
+    overflowed = [name for name, value in restored.items() if not math.isfinite(value)]
+    if overflowed:
+        raise ValueError(
+            "vibration is finite but its "
+            + "/".join(overflowed)
+            + " exceeds the float64 range even after rescaling by "
+            + f"{factor:.3e}; rescale the window before extracting features"
+        )
+    return _Moments(
+        mean=restored["mean"],
+        std=restored["std"],
+        rms=restored["rms"],
+        ptp=restored["ptp"],
     )
 
 
@@ -196,7 +322,7 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         A one-dimensional ``float64`` array holding the window.
 
     Raises:
-        ValueError: if it is not a non-empty one-dimensional finite array.
+        ValueError: if it is not a non-empty one-dimensional finite real array.
     """
     if not isinstance(vibration, np.ndarray):
         raise ValueError(
@@ -208,6 +334,10 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         )
     if vibration.size == 0:
         raise ValueError("vibration window must not be empty")
+    if np.iscomplexobj(vibration):
+        # ``astype(float64)`` would only warn and drop the imaginary part, so the
+        # record would describe a signal nobody passed in.
+        raise ValueError(f"vibration must be real-valued, got dtype {vibration.dtype}")
     if not np.issubdtype(vibration.dtype, np.number):
         raise ValueError(f"vibration must be numeric, got dtype {vibration.dtype}")
     samples = np.asarray(vibration, dtype=np.float64)

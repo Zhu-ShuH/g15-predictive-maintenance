@@ -249,3 +249,112 @@ def test_feature_record_can_be_built_directly_for_scoring_tests() -> None:
         window_start_seq=0,
     )
     assert record.as_mapping()["rms"] == 0.5025
+
+
+def test_complex_window_is_rejected() -> None:
+    """Issue #66: casting complex to float64 only warned and dropped ``imag``.
+
+    Accepting the window computed ``mean=2.0`` for ``[1+2j, 3+4j]``, which
+    describes a signal nobody passed in, so the entry point must refuse it.
+    """
+    with pytest.raises(ValueError, match="must be real-valued"):
+        extract_features(np.array([1 + 2j, 3 + 4j]), 100, window_start_seq=0)
+
+
+def test_complex_window_is_rejected_before_any_number_is_returned() -> None:
+    """The rejection must not depend on the window being otherwise well formed."""
+    clean = np.array([1.0, -1.0, 1.0, -1.0], dtype=np.complex128)
+    with pytest.raises(ValueError, match="complex128"):
+        extract_features(clean, 100)
+
+
+@pytest.mark.parametrize("magnitude", [1e100, 1e150, 1e200, 1e300])
+def test_large_finite_window_returns_finite_features(magnitude: float) -> None:
+    """Issue #66: ``[1e100, -1e100]`` used to return a ``NaN`` excess kurtosis.
+
+    The window is rescaled by a power of two before the moments are formed, so
+    every feature stays finite and the shape features keep their exact values:
+    two symmetric points have ``ptp = 2m``, ``std = rms = m`` and excess
+    kurtosis ``-2`` at any magnitude.
+    """
+    record = extract_features(np.array([magnitude, -magnitude]), 100)
+
+    assert record.mean == pytest.approx(0.0)
+    assert record.std == pytest.approx(magnitude)
+    assert record.rms == pytest.approx(magnitude)
+    assert record.ptp == pytest.approx(2.0 * magnitude)
+    assert record.crest_factor == pytest.approx(1.0)
+    assert record.kurtosis_excess == pytest.approx(-2.0)
+    for value in record.as_mapping().values():
+        assert math.isfinite(value)
+
+
+@pytest.mark.parametrize("exponent", [-300, -150, -3, 0, 3, 150, 300])
+def test_features_are_finite_across_signal_magnitudes(exponent: int) -> None:
+    """A pure sine keeps its shape and finite numbers at any scale.
+
+    25 Hz sampled at 100 Hz puts every fourth sample on a peak, so ``ptp`` is
+    exactly ``2 * scale``; the values of a sampled sine (``rms = 1/sqrt(2)``,
+    excess kurtosis ``-1``) must survive the rescaling unchanged.
+    """
+    scale = 10.0**exponent
+    record = extract_features(_sine(25.0, 100, 100) * scale, 100)
+
+    assert record.dominant_freq_hz == pytest.approx(25.0)
+    assert record.ptp == pytest.approx(2.0 * scale, rel=1e-12)
+    assert record.rms == pytest.approx(scale / math.sqrt(2.0), rel=1e-12)
+    assert record.kurtosis_excess == pytest.approx(-1.0, rel=1e-9)
+    for value in record.as_mapping().values():
+        assert math.isfinite(value)
+
+
+def test_window_whose_spread_exceeds_float64_is_rejected() -> None:
+    """``+/-1.7e308`` is finite but its peak-to-peak is ``3.4e308``.
+
+    Returning ``inf`` would hand the score and the alarm state machine a number
+    that is not a measurement, so the field name is reported instead.
+    """
+    with pytest.raises(ValueError, match="ptp exceeds the float64 range"):
+        extract_features(np.array([1.7e308, -1.7e308]), 100)
+
+
+def test_rescaled_path_does_not_modify_the_input() -> None:
+    """The power-of-two division must happen on a copy, like the ``float64`` cast."""
+    samples = np.array([1e100, -1e100, 3e100], dtype=np.float64)
+    original = samples.copy()
+    extract_features(samples, 100)
+
+    assert samples.dtype == np.float64
+    np.testing.assert_array_equal(samples, original)
+
+
+def test_tiny_window_keeps_its_moments_instead_of_underflowing_to_zero() -> None:
+    """The rescaling also fixes the other end: ``1e-300`` squared underflowed.
+
+    ``std``, ``rms`` and ``crest_factor`` used to be ``0.0`` here even though the
+    window has spread; the rescaled computation reports the real values.
+    """
+    samples = np.array([1e-300, -1e-300, 3e-300])
+    record = extract_features(samples, 100)
+
+    assert record.std > 0.0
+    assert record.rms > 0.0
+    assert record.crest_factor > 0.0
+    assert math.isfinite(record.kurtosis_excess)
+
+
+def test_window_inside_the_rescale_range_is_not_rescaled() -> None:
+    """``max|sample|`` in ``(1, 2]`` yields factor 1, so no bit may move.
+
+    Ordinary ``g`` windows land here. Pinning the exact values guards against a
+    later change that rescales unconditionally and shifts the last bit of every
+    stored feature.
+    """
+    samples = np.array([1.5, -0.5, 0.25])
+    record = extract_features(samples, 100)
+    centered = samples - samples.mean()
+
+    assert record.mean == float(samples.mean())
+    assert record.std == math.sqrt(float(np.mean(centered**2)))
+    assert record.rms == math.sqrt(float(np.mean(samples**2)))
+    assert record.ptp == float(samples.max() - samples.min())
