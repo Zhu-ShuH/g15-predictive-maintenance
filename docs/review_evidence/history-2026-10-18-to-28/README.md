@@ -42,3 +42,9 @@ artifact-index.json 为每份原始证据保存原始字节 SHA-256、发布字�
 未上传私有规划笔记、API 审计快照、源码副本、候选测试源码、虚拟环境、运行临时目录、凭据、包清单、ACL 或完整环境导出。已在远端存在的下载 CI 日志不重复上传；本地执行和远端 CI 不混计。collection 文件仅为收集清单。
 
 历史记录可能包含当时在规划库路径运行的日志。这是历史留档；本次没有在规划库运行测试，也没有复制测试运行目录。归档不表示接口冻结、功能合入、独立评审完成、双 Linux、真实 kill-9、正式性能或检出率验收通过。
+
+## 摘要核验与旧索引兼容
+
+本目录 `artifact-index.json` 顶层是数组，`published_sha256` / `published_bytes` 对应发布后 Git blob 字节，`original_sha256` / `original_bytes` 对应本地原始证据。校验请通过 Git blob 取得原始 bytes 后计算 SHA-256（如 Python `subprocess.check_output(["git", "show", "<commit>:<仓库内路径>"])`），避免 Windows `core.autocrlf` 将工作树换行转成 CRLF 后造成误报；文本终端或重定向不能替代原始字节读取。
+
+[PR #75](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/75) 使用含 `artifacts` 数组的对象，旧字段 `sha256` / `bytes` / `source_sha256` 分别等价于本目录的 `published_sha256` / `published_bytes` / `original_sha256`。读取两套归档时先按顶层类型取数组，再映射字段；既有证据与索引不重写。后续归档沿用本目录数组及明确字段名。
