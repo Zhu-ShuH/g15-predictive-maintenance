@@ -650,6 +650,118 @@ def test_a_broken_seq_does_not_stop_later_shards(run_dir: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# The summary fields describe one set of shards
+#
+# ``rows_sum``, ``scalar_value_count``, ``verified_part_count``, ``shard_shape``
+# and the ``first_seq``/``last_seq`` boundary all have to come from the verified
+# shards.  A shard that lost a row keeps a readable ``seq``, so reading the shape
+# or the boundary from the full list quietly puts its numbers back into a
+# summary that already excluded its rows.
+# --------------------------------------------------------------------------- #
+
+
+def _drop_last_row(run_dir: Path, part_id: int) -> None:
+    """Shorten one shard's ``vibration`` by one row and refresh its digest."""
+    path = run_dir / "raw" / f"part-{part_id:06d}.npz"
+    with np.load(path, allow_pickle=False) as archive:
+        arrays = {name: np.asarray(archive[name]) for name in archive.files}
+    arrays["vibration"] = arrays["vibration"][:-1]
+    np.savez(path, **arrays)
+    payload = _read_manifest_payload(run_dir)
+    payload["parts"][part_id]["sha256"] = _sha256(path)
+    _rewrite_manifest(run_dir, payload)
+
+
+@pytest.mark.parametrize("part_id", [0, 1, 2, 3])
+def test_the_summary_only_counts_verified_shards(run_dir: Path, part_id: int) -> None:
+    """A rejected shard must not reappear through ``shard_shape`` or the bounds."""
+    _drop_last_row(run_dir, part_id)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "shard.length_mismatch" in result.failures
+    assert result.verified_part_count == 3
+    assert result.rows_sum == 768
+    assert result.scalar_value_count == 1536
+
+    # Three shards of 256 rows remain, whichever one was dropped.
+    assert result.shard_shape == "3x256"
+
+    # The boundary is the first and last *verified* sample.  When the last shard
+    # is the damaged one, its final seq (1023) must not be reported as the end;
+    # when the first shard is, the run no longer starts at 0 in this summary.
+    expected_first = 256 if part_id == 0 else 0
+    expected_last = 767 if part_id == 3 else 1023
+    assert result.first_seq == expected_first
+    assert result.last_seq == expected_last
+
+
+def test_every_summary_field_agrees_on_the_verified_set(run_dir: Path) -> None:
+    """``to_dict`` must not contradict itself about how many rows were checked."""
+    _drop_last_row(run_dir, 1)
+
+    payload = verify_run(run_dir).to_dict()
+
+    assert payload["verified_part_count"] == 3
+    assert payload["rows_sum"] == 768
+    assert payload["scalar_value_count"] == 768 * 2
+    assert payload["shard_shape"] == "3x256"
+    # The declared totals still describe the manifest, not the verified subset.
+    assert payload["part_count"] == 4
+    assert payload["rows_expected_sum"] == 1024
+    assert payload["total_points"] == 1024
+
+
+def test_a_rejected_middle_shard_leaves_a_hole_in_the_boundary(run_dir: Path) -> None:
+    """The span may be wider than ``rows_sum``; that is the hole, not a bug."""
+    _drop_last_row(run_dir, 1)
+
+    result = verify_run(run_dir)
+
+    assert result.first_seq == 0
+    assert result.last_seq == 1023
+    assert result.last_seq - result.first_seq + 1 == 1024
+    # 1024 is the span; 768 is what was actually verified.  Reporting the span
+    # as the row count is exactly the mistake this test guards against.
+    assert result.rows_sum == 768
+    assert result.shard_shape == "3x256"
+
+
+def test_a_run_where_every_shard_is_rejected_has_no_boundary(run_dir: Path) -> None:
+    """With nothing verified the shape and the bounds must all be empty."""
+    for part_id in range(4):
+        _drop_last_row(run_dir, part_id)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert result.verified_part_count == 0
+    assert result.rows_sum == 0
+    assert result.scalar_value_count == 0
+    assert result.shard_shape == ""
+    assert result.first_seq is None
+    assert result.last_seq is None
+
+
+def test_a_rejected_shard_still_feeds_the_cross_shard_check(run_dir: Path) -> None:
+    """Excluding a shard from the totals must not silence a real seq gap.
+
+    The damaged shard keeps a readable ``seq``; if the chain check skipped it,
+    a gap sitting right at that boundary would disappear from ``failures``.
+    """
+    seq = np.arange(256, 512, dtype=np.int64) + 5
+    _rewrite_shard(run_dir, "raw/part-000001.npz", seq=seq)
+    _drop_last_row(run_dir, 1)
+
+    result = verify_run(run_dir)
+
+    assert result.passed is False
+    assert "seq.cross_shard_gap" in result.failures
+    assert result.verified_part_count == 3
+
+
+# --------------------------------------------------------------------------- #
 # The container itself can be wrong
 # --------------------------------------------------------------------------- #
 

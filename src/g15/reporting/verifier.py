@@ -197,6 +197,12 @@ class VerificationResult:
     still reports what the manifest declared.  A caller that wants the run's
     nominal size must read ``total_points``, not ``rows_sum``.
 
+    ``shard_shape`` and the ``first_seq``/``last_seq`` boundary pair are drawn
+    from the same verified set as ``rows_sum``, so the summary never mixes a
+    damaged shard back into the totals.  The boundary pair is not a span:
+    ``last_seq - first_seq + 1`` may exceed ``rows_sum`` when a shard in the
+    middle was rejected, because the span still contains the hole.
+
     Attributes:
         run_id: Run identifier from the manifest.
         schema_version: Manifest schema version.
@@ -208,8 +214,8 @@ class VerificationResult:
         verified_part_count: Number of shards whose content was fully read.
         scalar_value_count: ``2 * rows_sum``, one vibration and one temperature
             value per verified sample.
-        first_seq: First ``seq`` actually read, or ``None``.
-        last_seq: Last ``seq`` actually read, or ``None``.
+        first_seq: First ``seq`` of the verified shards, or ``None``.
+        last_seq: Last ``seq`` of the verified shards, or ``None``.
         shard_shape: Compact description of the verified row pattern.
         shards: Per-shard results in ``part_id`` order.
         failures: Every failure code found, in reporting order.
@@ -580,12 +586,14 @@ def _shard_shape(shards: tuple[ShardCheck, ...]) -> str:
     """Describe the verified row pattern compactly.
 
     Args:
-        shards: Per-shard results in ``part_id`` order.
+        shards: The verified shards, in ``part_id`` order.  Pass the same set
+            that backs ``rows_sum``; a damaged shard still has a readable
+            ``seq`` column and would otherwise re-enter the shape string.
 
     Returns:
         A string such as ``10x102400`` or ``9x102400+78400``, built by run-length
-        encoding the observed row counts.  Unverified shards are skipped, so an
-        empty string means nothing was read.
+        encoding the observed row counts.  An empty string means no shard was
+        verified.
     """
     groups: list[tuple[int, int]] = []
     for shard in shards:
@@ -600,17 +608,18 @@ def _shard_shape(shards: tuple[ShardCheck, ...]) -> str:
     )
 
 
-def _cross_shard_failures(
-    shards: tuple[ShardCheck, ...],
-) -> tuple[list[str], int | None]:
+def _cross_shard_failures(shards: tuple[ShardCheck, ...]) -> list[str]:
     """Check that ``seq`` continues across shard boundaries.
+
+    Runs over every readable shard, including ones rejected by the content
+    checks: a shard that lost a row still shows where the chain broke, and
+    hiding that would be the opposite of what this module is for.
 
     Args:
         shards: Per-shard results in ``part_id`` order.
 
     Returns:
-        A pair ``(failures, last_seq)`` where ``last_seq`` is the final observed
-        ``seq`` or ``None`` when no shard was read.
+        The failure codes found along the chain.
     """
     failures: list[str] = []
     expected_next: int | None = None
@@ -627,7 +636,7 @@ def _cross_shard_failures(
         elif shard.first_seq != expected_next:
             failures.append(_SEQ_CROSS)
         expected_next = shard.last_seq + 1
-    return failures, (expected_next - 1 if expected_next is not None else None)
+    return failures
 
 
 def verify_run(
@@ -680,7 +689,10 @@ def verify_run(
     ):
         failures.append(_EXPECTED)
 
-    cross_failures, last_seq = _cross_shard_failures(shards)
+    # The chain check stays on every readable shard: a damaged shard is still
+    # evidence of a gap, and dropping it here would hide the discontinuity.  Its
+    # ``last_seq`` is deliberately not used for the summary -- see below.
+    cross_failures = _cross_shard_failures(shards)
     failures.extend(cross_failures)
     for shard in shards:
         failures.extend(shard.failures)
@@ -697,7 +709,11 @@ def verify_run(
         and _DTYPE not in shard.failures
     )
     rows_sum = sum(shard.observed_rows or 0 for shard in verified)
+    # Every aggregate below describes the same verified set.  Reading the
+    # boundary from ``shards`` instead would let a rejected shard contribute its
+    # ``seq`` to a summary that already excluded its rows.
     first_seq = verified[0].first_seq if verified else None
+    last_seq = verified[-1].last_seq if verified else None
 
     elapsed = time.perf_counter() - started
     passed = not failures
@@ -714,7 +730,7 @@ def verify_run(
         scalar_value_count=rows_sum * 2,
         first_seq=first_seq,
         last_seq=last_seq,
-        shard_shape=_shard_shape(shards),
+        shard_shape=_shard_shape(verified),
         shards=shards,
         failures=tuple(failures),
         elapsed_seconds=elapsed,
