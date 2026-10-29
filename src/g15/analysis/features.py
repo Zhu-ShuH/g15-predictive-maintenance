@@ -116,6 +116,10 @@ FEATURES_VERSION: Final[str] = "1.1"
 #: every one of its values is a ``float64`` value, so the widening is lossless.
 #: ``longdouble`` is not: on the platforms where it is wider than ``float64``
 #: the conversion drops digits silently.
+#:
+#: Membership is tested after ``newbyteorder("=")``, so ``">f8"`` counts as
+#: ``float64``: byte order is a storage detail, and the widening conversion is
+#: exact for it. Only the *type* is restricted here, never the encoding.
 REAL_SAMPLE_DTYPES: Final[tuple[np.dtype, ...]] = tuple(
     np.dtype(name)
     for name in (
@@ -423,10 +427,16 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         # ``astype(float64)`` would only warn and drop the imaginary part, so the
         # record would describe a signal nobody passed in.
         raise ValueError(f"vibration must be real-valued, got dtype {vibration.dtype}")
-    if vibration.dtype not in REAL_SAMPLE_DTYPES:
+    if vibration.dtype.newbyteorder("=") not in REAL_SAMPLE_DTYPES:
         # Named whitelist, not ``np.issubdtype(dtype, np.number)``: NumPy counts
         # ``timedelta64`` as a number, so the generic test would read a window of
         # time deltas as a vibration and report its day counts as ``g``.
+        #
+        # The dtype is compared in *native* byte order first: ``np.dtype(">f8")``
+        # is a different object from ``np.dtype("float64")``, yet it is the same
+        # signal, and ``astype`` widens it exactly. Without this
+        # ``newbyteorder("=")`` a big-endian shard -- which ``1.0`` accepted --
+        # would be refused as an unsupported type.
         raise ValueError(
             "vibration must be a real numeric dtype among "
             + "/".join(str(dtype) for dtype in REAL_SAMPLE_DTYPES)

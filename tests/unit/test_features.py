@@ -296,6 +296,42 @@ def test_ordinary_real_dtypes_are_accepted(dtype: str) -> None:
     assert record.ptp == pytest.approx(2.0)
 
 
+@pytest.mark.parametrize("dtype", [">f8", ">f4", ">i4", ">i8", ">u4"])
+def test_non_native_byte_order_is_the_same_signal(dtype: str) -> None:
+    """Byte order is storage, not type: ``>f8`` must read like ``float64``.
+
+    The whitelist compares exact dtype objects and ``np.dtype(">f8")`` is not
+    ``np.dtype("float64")`` to NumPy, even though ``astype`` widens it exactly.
+    Comparing before ``newbyteorder("=")`` therefore refused a big-endian shard
+    that ``1.0`` read without complaint -- a narrowing this issue never
+    authorised, and one that says "unsupported type" about a supported type.
+    """
+    window = np.array([1, 2, 3], dtype=dtype)
+    native = np.array([1, 2, 3], dtype=dtype.lstrip(">"))
+
+    record = extract_features(window, 100)
+
+    assert record.as_mapping() == extract_features(native, 100).as_mapping()
+    assert record.mean == pytest.approx(2.0)
+    assert record.ptp == pytest.approx(2.0)
+
+
+def test_non_native_byte_order_does_not_admit_time_like_dtypes() -> None:
+    """Normalising the byte order must not widen the whitelist by accident.
+
+    ``">m8[D]"`` normalises to ``timedelta64[D]``, which is still not a
+    vibration sample; only the encoding is forgiven, not the type.
+    """
+    with pytest.raises(ValueError, match="real numeric dtype"):
+        extract_features(np.array([1, 2], dtype=">m8[D]"), 100)
+
+
+def test_non_native_byte_order_keeps_the_exact_integer_rule() -> None:
+    """The precision check reads Python ints, so it is byte-order independent."""
+    with pytest.raises(ValueError, match="exactly representable"):
+        extract_features(np.array([2**64 - 1, 2**64 - 2], dtype=">u8"), 100)
+
+
 def test_features_version_marks_the_narrowed_input_domain() -> None:
     """``1.1`` is ``1.0`` with a narrower domain and defined extreme results.
 
