@@ -1,0 +1,22 @@
+{
+  "observer": "A",
+  "record_date": "20261028",
+  "candidate_commit": "dfd5fd7984831f88f394f978be84db5d1117e98f",
+  "binding": "recorded candidate context",
+  "scope_note": "534 passed / 8 skipped. consumer_cases bind PR76. verifier_cases diagnose PR72 head 80e9f8960c94f5060ac0ab5f7703f3e61e26341f; not PR76 consumer behavior.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "pytest-full.log",
+      "summary": [
+        "534 passed, 8 skipped in 8.49s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "pytest-full.log",
+    "probe_results.json"
+  ]
+}

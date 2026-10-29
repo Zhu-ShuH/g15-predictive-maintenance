@@ -1,0 +1,64 @@
+[
+  {
+    "label": "pr26_mixed_integer_string",
+    "exit": 2,
+    "seconds": 0.25,
+    "tail": [
+      "",
+      "error: unknown field(s): 123, aaa; allowed fields are ['fault_generation', 'scenario', 'schema_version', 'signals']"
+    ]
+  },
+  {
+    "label": "pr26_mixed_bool_string",
+    "exit": 2,
+    "seconds": 0.25,
+    "tail": [
+      "",
+      "error: unknown field(s): True, aaa; allowed fields are ['fault_generation', 'scenario', 'schema_version', 'signals']"
+    ]
+  },
+  {
+    "label": "pr26_wrong_unit",
+    "exit": 2,
+    "seconds": 0.26,
+    "tail": [
+      "",
+      "error: signals.vibration.unit: must be one of ['g'], got 'm/s2'"
+    ]
+  },
+  {
+    "label": "pr26_overflow",
+    "exit": 2,
+    "seconds": 0.25,
+    "tail": [
+      "",
+      "error: signals.vibration.baseline: must be finite and representable as a float, got an integer outside the float range"
+    ]
+  },
+  {
+    "label": "pr27_pytest",
+    "exit": 0,
+    "seconds": 1.13,
+    "tail": [
+      "....................                                                     [100%]",
+      "20 passed in 0.31s",
+      ""
+    ]
+  },
+  {
+    "label": "pr27_probe",
+    "exit": 0,
+    "seconds": 0.52,
+    "tail": [
+      "  },",
+      "  {",
+      "    \"probe\": \"short_burst\",",
+      "    \"duration\": 2,",
+      "    \"events\": 1,",
+      "    \"max_delta\": 0.0",
+      "  }",
+      "]",
+      ""
+    ]
+  }
+]

@@ -1,0 +1,14 @@
+.....s.........................................ssssss................... [ 12%]
+........................................................................ [ 25%]
+........................................................................ [ 37%]
+.....................s.................................................. [ 50%]
+........................................................................ [ 62%]
+........................................................................ [ 75%]
+..........................s............................................. [ 87%]
+.......................................................................  [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\fault_injection\test_pipeline_faults.py:162: kill -9 是 POSIX 信号，Windows 没有等价语义；这一类证据按 docs/acceptance.md §4 必须在 Linux 上留证，Windows 上不伪造。
+SKIPPED [6] tests\performance\test_simulation_benchmark.py:69: performance benchmark is opt-in; set G15_RUN_BENCHMARK=1 to measure (a shared CI runner is not a valid measurement host)
+SKIPPED [1] tests\unit\test_doc_references.py:94: Symlink creation unavailable on this OS/account
+SKIPPED [1] tests\unit\test_serialization.py:912: this platform cannot create symlinks without elevation
+566 passed, 9 skipped in 12.65s

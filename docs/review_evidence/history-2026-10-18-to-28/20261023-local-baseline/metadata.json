@@ -1,0 +1,21 @@
+{
+  "observer": "A",
+  "record_date": "20261023",
+  "candidate_commit": "2c1475938e2f90d9741d055f2b47e71174583bd2",
+  "binding": "local HEAD context, working-tree state not attested",
+  "scope_note": "Local baseline HEAD only; clean working-tree equivalence not attested.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "local_baseline-pytest.log",
+      "summary": [
+        "82 passed, 6 skipped in 0.75s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "local_baseline-pytest.log"
+  ]
+}

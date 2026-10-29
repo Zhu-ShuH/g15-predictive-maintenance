@@ -1,0 +1,6 @@
+ssssss.................................................................. [ 81%]
+................                                                         [100%]
+=========================== short test summary info ===========================
+SKIPPED [6] tests\performance\test_simulation_benchmark.py:69: performance benchmark is opt-in; set G15_RUN_BENCHMARK=1 to measure (a shared CI runner is not a valid measurement host)
+82 passed, 6 skipped in 0.75s
+

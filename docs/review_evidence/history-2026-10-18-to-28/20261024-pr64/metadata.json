@@ -1,0 +1,51 @@
+{
+  "observer": "A",
+  "record_date": "20261024",
+  "candidate_commit": "8b47fe307ffeacffd7381e917afa1daed53b6e2b",
+  "binding": "recorded candidate context",
+  "scope_note": "",
+  "environment_records": [
+    {
+      "environment": {
+        "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+        "numpy": "2.4.6",
+        "platform": "Windows-11-10.0.22631-SP0"
+      }
+    }
+  ],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "full_pytest.log",
+      "summary": [
+        "519 passed, 8 skipped in 9.99s"
+      ]
+    },
+    {
+      "artifact": "consumer_pytest.log",
+      "summary": [
+        "35 passed in 3.12s"
+      ]
+    },
+    {
+      "artifact": "black.log",
+      "summary": [
+        "44 files would be left unchanged."
+      ]
+    },
+    {
+      "artifact": "pylint.log",
+      "summary": [
+        "Your code has been rated at 9.91/10"
+      ]
+    }
+  ],
+  "artifacts": [
+    "full_pytest.log",
+    "consumer_pytest.log",
+    "black.log",
+    "pylint.log",
+    "probe_results.json"
+  ]
+}

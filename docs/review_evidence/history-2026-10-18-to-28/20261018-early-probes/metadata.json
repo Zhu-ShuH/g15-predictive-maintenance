@@ -1,0 +1,23 @@
+{
+  "observer": "A",
+  "record_date": "20261018",
+  "candidate_commit": null,
+  "binding": "commit binding unavailable",
+  "scope_note": "Separate early diagnostic snapshots; any embedded head applies only to its own artifact. Do not infer a common tested SHA.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [],
+  "artifacts": [
+    "approval_probe_27.json",
+    "approval_probe_29.json",
+    "approval_probe_30.json",
+    "review2426_pr26_probe.json",
+    "review2426_pr30_upstream_probe.json",
+    "t25_current_c4_probe_29.json",
+    "t25_current_c4_probe_30.json",
+    "t25_pr29_probe.json",
+    "t25_migration_probe.json",
+    "t25_overlap_probe.json"
+  ]
+}

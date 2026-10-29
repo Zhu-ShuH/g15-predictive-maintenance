@@ -1,0 +1,26 @@
+{
+  "head": "2c20de33d0cf0d56ae45559db4ad008d3a585a10",
+  "results": {
+    "real_C3_C1_cross_shard": {
+      "passed": true,
+      "changed_points": 40,
+      "event_count": 1,
+      "parts": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "scenario_id": "bearing_001"
+    },
+    "missing_injector_no_output": true,
+    "bad_units_no_output": true,
+    "hand_calculated_rounding_and_lower_bounds": true,
+    "overflow_no_output": true,
+    "short_tail": [
+      16,
+      16,
+      3
+    ]
+  }
+}

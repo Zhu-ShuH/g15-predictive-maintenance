@@ -1,0 +1,27 @@
+{
+  "observer": "A",
+  "record_date": "20261020",
+  "candidate_commit": "48936ecc420aa9ad6ccdedc0d6abea8c4a5427e1",
+  "binding": "recorded candidate context",
+  "scope_note": "",
+  "environment_records": [
+    {
+      "python": "3.12.15 | packaged by Anaconda, Inc. | (main, Oct  1 2026, 20:14:50) [MSC v.1942 64 bit (AMD64)]",
+      "numpy": "2.5.4"
+    }
+  ],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "pytest47.log",
+      "summary": [
+        "55 passed in 0.51s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "pytest47.log",
+    "probe47_result.json"
+  ]
+}

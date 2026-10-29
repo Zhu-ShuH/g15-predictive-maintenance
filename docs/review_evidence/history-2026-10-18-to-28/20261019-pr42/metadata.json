@@ -1,0 +1,14 @@
+{
+  "observer": "A",
+  "record_date": "20261019",
+  "candidate_commit": "39a90758770c5a9f77fac3dc11b07af8fe714b2a",
+  "binding": "recorded candidate context",
+  "scope_note": "",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [],
+  "artifacts": [
+    "probe42_result.json"
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "head": "a84ca883d7110fd63c2eddbd2debad49515d7977",
+  "all_match": true,
+  "files": [
+    {
+      "path": "configs/acceptance_burst_seed20261016.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_burst_seed42.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_degradation_seed20261016.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_degradation_seed42.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_healthy_seed20261016.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_healthy_seed42.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_spike_seed20261016.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_spike_seed42.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_step_seed20261016.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/acceptance_step_seed42.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/benchmark_1m.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/consumer.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/default.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/degradation.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/healthy.yaml",
+      "match": true
+    },
+    {
+      "path": "configs/sudden_fault.yaml",
+      "match": true
+    },
+    {
+      "path": "src/g15/__main__.py",
+      "match": true
+    },
+    {
+      "path": "src/g15/cli.py",
+      "match": true
+    },
+    {
+      "path": "src/g15/config.py",
+      "match": true
+    },
+    {
+      "path": "tests/unit/test_config.py",
+      "match": true
+    }
+  ]
+}

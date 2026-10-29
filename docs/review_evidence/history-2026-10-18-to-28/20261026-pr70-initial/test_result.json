@@ -1,0 +1,16 @@
+{
+  "command": [
+    "<LOCAL_PATH>",
+    "-m",
+    "pytest",
+    "-q",
+    "-rs",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "<LOCAL_PATH>"
+  ],
+  "exit_code": 0,
+  "environment": "<LOCAL_PATH>;<LOCAL_PATH>",
+  "windows": "Windows-10-10.0.22631-SP0"
+}

@@ -1,0 +1,58 @@
+{
+  "observer": "A",
+  "record_date": "20261021",
+  "candidate_commit": "b80caa6b6107a75c2b2ba1d5e1e224f2baf98abe",
+  "binding": "recorded candidate context",
+  "scope_note": "",
+  "environment_records": [
+    {
+      "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+      "numpy": "2.4.6",
+      "pyyaml": "6.0.3",
+      "platform": "Windows-11-10.0.22631-SP0"
+    },
+    {
+      "environment": {
+        "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+        "numpy": "2.4.6",
+        "pyyaml": "6.0.3",
+        "platform": "Windows-11-10.0.22631-SP0"
+      }
+    }
+  ],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "pytest55.log",
+      "summary": [
+        "371 passed, 8 skipped in 5.77s"
+      ]
+    },
+    {
+      "artifact": "black55.log",
+      "summary": [
+        "40 files would be left unchanged."
+      ]
+    },
+    {
+      "artifact": "pylint55.log",
+      "summary": [
+        "Your code has been rated at 9.97/10"
+      ]
+    },
+    {
+      "artifact": "local_verification.json",
+      "summary": [
+        "    \"result\": \"371 passed, 8 skipped\","
+      ]
+    }
+  ],
+  "artifacts": [
+    "pytest55.log",
+    "black55.log",
+    "pylint55.log",
+    "joint_probe.json",
+    "local_verification.json"
+  ]
+}

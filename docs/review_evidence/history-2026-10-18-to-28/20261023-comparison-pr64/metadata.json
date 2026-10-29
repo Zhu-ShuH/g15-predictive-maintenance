@@ -1,0 +1,22 @@
+{
+  "observer": "A",
+  "record_date": "20261023",
+  "candidate_commit": "e1593ff707925cf4ebee2758a332be6996783d25",
+  "binding": "recorded candidate context",
+  "scope_note": "SHA from comparison metadata; diagnostic results are scoped to this historical comparison.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "candidate_pr64-pytest.log",
+      "summary": [
+        "507 passed, 8 skipped in 6.07s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "candidate_pr64-pytest.log",
+    "boundary_results.json"
+  ]
+}

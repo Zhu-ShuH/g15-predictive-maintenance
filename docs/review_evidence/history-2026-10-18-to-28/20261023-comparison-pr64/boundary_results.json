@@ -1,0 +1,122 @@
+{
+  "unaligned_nonfinal_shards": {
+    "summary": {
+      "run_id": "20261023T073412Z-healthy_001-869046",
+      "device_id": "DEV-002",
+      "windows_written": 5,
+      "alarms_written": 0,
+      "shards_processed": 6,
+      "shards_skipped": 0,
+      "windows_dropped": 192
+    },
+    "windows": [
+      [
+        0,
+        64
+      ],
+      [
+        100,
+        164
+      ],
+      [
+        200,
+        264
+      ],
+      [
+        300,
+        364
+      ],
+      [
+        400,
+        464
+      ]
+    ],
+    "global_complete_windows": 8,
+    "observed_windows": 5,
+    "observed_dropped_samples": 192
+  },
+  "changed_version_replay": {
+    "first_pass": {
+      "run_id": "20261023T074032Z-healthy_001-72b0f4",
+      "device_id": "DEV-002",
+      "windows_written": 8,
+      "alarms_written": 0,
+      "shards_processed": 4,
+      "shards_skipped": 0,
+      "windows_dropped": 0
+    },
+    "supplied_version": "probe-new-version",
+    "stored_run_version": "heuristic-v1",
+    "original_version": "heuristic-v1",
+    "summary": {
+      "run_id": "20261023T074032Z-healthy_001-72b0f4",
+      "device_id": "DEV-002",
+      "windows_written": 0,
+      "alarms_written": 0,
+      "shards_processed": 0,
+      "shards_skipped": 4,
+      "windows_dropped": 0
+    },
+    "raised": false
+  },
+  "reset_audit_overwritten": {
+    "before": {
+      "previous_state": {
+        "active_level": null,
+        "alarm_windows": 0,
+        "consecutive_breaches": 2,
+        "last_window_start_seq": 64,
+        "normal_windows": 0,
+        "recovered_at_seq": null,
+        "rule_id": "rule",
+        "scoring_version": "v1"
+      },
+      "reason": "rule_change",
+      "reset_at_utc": "2026-10-23T07:34:12.525895Z"
+    },
+    "after": null
+  },
+  "legacy_reset": {
+    "raised": true,
+    "type": "StateCompatibilityError",
+    "message": "state_json has no state_schema_version; it was written before the field existed, so the rule set that produced it cannot be established. Start a new streak with AlarmState() if the old streak is to be dropped"
+  },
+  "feature_numeric_boundaries": {
+    "complex": {
+      "returned": {
+        "mean": 2.0,
+        "std": 1.0,
+        "rms": 2.23606797749979,
+        "ptp": 2.0,
+        "kurtosis_excess": -2.0,
+        "crest_factor": 1.3416407864998738,
+        "dominant_freq_hz": 50.0,
+        "zero_crossing_rate": 1.0,
+        "sample_count": 2,
+        "sample_rate_hz": 100,
+        "window_start_seq": 0
+      },
+      "warnings": [
+        "Casting complex values to real discards the imaginary part"
+      ]
+    },
+    "large_finite": {
+      "returned": {
+        "mean": 0.0,
+        "std": 1e+100,
+        "rms": 1e+100,
+        "ptp": 2e+100,
+        "kurtosis_excess": "nan",
+        "crest_factor": 1.0,
+        "dominant_freq_hz": 50.0,
+        "zero_crossing_rate": 1.0,
+        "sample_count": 2,
+        "sample_rate_hz": 100,
+        "window_start_seq": 0
+      },
+      "warnings": [
+        "overflow encountered in power"
+      ]
+    }
+  }
+}

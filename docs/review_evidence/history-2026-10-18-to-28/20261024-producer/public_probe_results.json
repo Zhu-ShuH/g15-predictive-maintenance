@@ -1,0 +1,57 @@
+{
+  "environment": {
+    "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+    "numpy": "2.4.6",
+    "platform": "Windows-11-10.0.22631-SP0",
+    "source_import_verified": true
+  },
+  "source_head": "82bafa437e6b35f56f9c034ce1cc5402ceb3e7a2",
+  "warning": {
+    "first": {
+      "run_id": "20261024T144725Z-healthy_001-3f8b7e",
+      "device_id": "DEV-002",
+      "windows_written": 1,
+      "alarms_written": 0,
+      "shards_processed": 1,
+      "shards_skipped": 0,
+      "windows_dropped": 3240
+    },
+    "repeat": {
+      "run_id": "20261024T144725Z-healthy_001-3f8b7e",
+      "device_id": "DEV-002",
+      "windows_written": 0,
+      "alarms_written": 0,
+      "shards_processed": 0,
+      "shards_skipped": 1,
+      "windows_dropped": 0
+    },
+    "first_warns": true,
+    "repeat_warns": false
+  },
+  "oversized_last_public_api": {
+    "manifest_rows": [
+      128,
+      256
+    ],
+    "summary": {
+      "run_id": "20261024T144726Z-healthy_001-fcef22",
+      "device_id": "DEV-002",
+      "windows_written": 6,
+      "alarms_written": 0,
+      "shards_processed": 2,
+      "shards_skipped": 0,
+      "windows_dropped": 0
+    },
+    "limitation_reproduced": true
+  },
+  "coverage_arithmetic": {
+    "benchmark_total": 1000000,
+    "window": 256,
+    "covered_end_exclusive": 999936,
+    "dropped_samples": 64,
+    "fixed_acceptance_total": 65536,
+    "fixed_acceptance_remainder": 0,
+    "controlled_events_end_max": 18432,
+    "denominator_unchanged": true
+  }
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "probe": "short_burst",
+    "duration": 1,
+    "events": 1,
+    "max_delta": 0.0
+  },
+  {
+    "probe": "short_burst",
+    "duration": 2,
+    "events": 1,
+    "max_delta": 0.0
+  }
+]

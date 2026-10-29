@@ -1,0 +1,12 @@
+[
+  {
+    "probe": "invalid_part_id",
+    "error": "ManifestError",
+    "destination_changed": true
+  },
+  {
+    "probe": "outside_run_dir",
+    "error": "ChunkIOError",
+    "destination_created": true
+  }
+]

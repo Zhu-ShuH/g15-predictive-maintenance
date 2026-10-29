@@ -1,0 +1,32 @@
+{
+  "observer": "A",
+  "record_date": "20261024",
+  "candidate_commit": "82bafa437e6b35f56f9c034ce1cc5402ceb3e7a2",
+  "binding": "recorded candidate context",
+  "scope_note": "Public fixture counts only; performance_timing_measured=false and new_holdout=false.",
+  "environment_records": [
+    {
+      "environment": {
+        "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+        "numpy": "2.4.6",
+        "platform": "Windows-11-10.0.22631-SP0",
+        "source_import_verified": true
+      }
+    }
+  ],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "producer_pytest.log",
+      "summary": [
+        "39 passed in 1.72s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "producer_pytest.log",
+    "public_probe_results.json",
+    "benchmark_public_probe.json"
+  ]
+}

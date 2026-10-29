@@ -1,0 +1,127 @@
+{
+  "head": "48936ecc420aa9ad6ccdedc0d6abea8c4a5427e1",
+  "module": "<SOURCE_ROOT>\\src\\g15\\simulation\\engine.py",
+  "python": "3.12.15 | packaged by Anaconda, Inc. | (main, Oct  1 2026, 20:14:50) [MSC v.1942 64 bit (AMD64)]",
+  "numpy": "2.5.4",
+  "cases": [
+    {
+      "name": "1GHz exact",
+      "args": [
+        0,
+        5,
+        0,
+        1000000000
+      ],
+      "expected": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "actual": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "passed": true
+    },
+    {
+      "name": "illegal rate nonempty",
+      "args": [
+        0,
+        1,
+        0,
+        1000000001
+      ],
+      "passed": true,
+      "exception": "sample_rate_hz must be at most 1000000000, got 1000000001: a sub-nanosecond period cannot be represented by int64 nanoseconds and would repeat or wrap the timestamps"
+    },
+    {
+      "name": "illegal rate empty",
+      "args": [
+        0,
+        0,
+        9223372036854775808,
+        1000000001
+      ],
+      "passed": true,
+      "exception": "sample_rate_hz must be at most 1000000000, got 1000000001: a sub-nanosecond period cannot be represented by int64 nanoseconds and would repeat or wrap the timestamps"
+    },
+    {
+      "name": "illegal rate nonempty",
+      "args": [
+        0,
+        1,
+        0,
+        9223372034
+      ],
+      "passed": true,
+      "exception": "sample_rate_hz must be at most 1000000000, got 9223372034: a sub-nanosecond period cannot be represented by int64 nanoseconds and would repeat or wrap the timestamps"
+    },
+    {
+      "name": "illegal rate empty",
+      "args": [
+        0,
+        0,
+        9223372036854775808,
+        9223372034
+      ],
+      "passed": true,
+      "exception": "sample_rate_hz must be at most 1000000000, got 9223372034: a sub-nanosecond period cannot be represented by int64 nanoseconds and would repeat or wrap the timestamps"
+    },
+    {
+      "name": "legal rate empty skips unused start bound",
+      "args": [
+        0,
+        0,
+        9223372036854775808,
+        100
+      ],
+      "expected": [],
+      "actual": [],
+      "passed": true
+    },
+    {
+      "name": "42 half-up must reject MAX+1",
+      "args": [
+        1,
+        1,
+        9223372036688109141,
+        6
+      ],
+      "passed": true,
+      "exception": "timestamps for seq [1, 2) do not fit in int64 nanoseconds (first value 9223372036854775808, last value 9223372036854775808)"
+    },
+    {
+      "name": "42 invalid start lower bound",
+      "args": [
+        0,
+        2,
+        -9223372036854775809,
+        1
+      ],
+      "passed": true,
+      "exception": "start_time_utc_ns=-9223372036854775809 is outside the int64 nanosecond range"
+    },
+    {
+      "name": "exact upper bound remains legal",
+      "args": [
+        1,
+        1,
+        9223372036711918664,
+        7
+      ],
+      "expected": [
+        9223372036854775807
+      ],
+      "actual": [
+        9223372036854775807
+      ],
+      "passed": true
+    }
+  ],
+  "all_passed": true
+}

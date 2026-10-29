@@ -1,0 +1,26 @@
+************* Module g15.config
+src\g15\config.py:1:0: C0302: Too many lines in module (1102/1000) (too-many-lines)
+************* Module g15.storage.__init__
+src\g15\storage\__init__.py:1:0: R0801: Similar lines in 2 files
+==g15.simulation.degradation:[62:71]
+==g15.simulation.noise:[93:108]
+    try:
+        result = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{path} must be a finite number, got {value!r}") from exc
+    if not math.isfinite(result):
+        raise ValueError(f"{path} must be finite, got {value!r}")
+    return result
+
+
+def _stream_tag(stream: str) -> int:
+    """Return a stable 32-bit tag for a stream name.
+
+    Uses CRC-32 rather than :func:`hash` so the tag does not change between
+    interpreter runs or platforms.
+    """ (duplicate-code)
+
+------------------------------------------------------------------
+Your code has been rated at 9.97/10 (previous run: 9.97/10, +0.00)
+
+

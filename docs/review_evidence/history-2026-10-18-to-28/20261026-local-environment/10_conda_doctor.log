@@ -1,0 +1,24 @@
+conda.exe : WARNING conda.plugins.subcommands.doctor:execute(93): Error running health check: altered-files ('gbk' code
+c can't encode character '\u2705' in position 0: illegal multibyte sequence)
+At line:53 char:1
++ & $conda doctor -n pp03 2>&1 | Out-File "$out\10_conda_doctor.log" -E ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARNING conda.p...ibyte sequence):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+WARNING conda.plugins.subcommands.doctor:execute(93): Error running health check: consistency ('gbk' codec can't encode
+ character '\u2705' in position 0: illegal multibyte sequence)
+WARNING conda.plugins.subcommands.doctor:execute(93): Error running health check: environment-txt ('gbk' codec can't en
+code character '\u2705' in position 0: illegal multibyte sequence)
+WARNING conda.plugins.subcommands.doctor:execute(93): Error running health check: external-packages ('gbk' codec can't 
+encode character '\u274c' in position 0: illegal multibyte sequence)
+WARNING conda.plugins.subcommands.doctor:execute(93): Error running health check: file-locking ('gbk' codec can't encod
+e character '\u2705' in position 0: illegal multibyte sequence)
+WARNING conda.plugins.subcommands.doctor:execute(93): Error running health check: missing-files ('gbk' codec can't enco
+de character '\u2705' in position 0: illegal multibyte sequence)
+WARNING conda.plugins.subcommands.doctor:execute(93): Error running health check: pinned ('gbk' codec can't encode char
+acter '\u2705' in position 0: illegal multibyte sequence)
+Environment Health Report for: <LOCAL_PATH>
+
+Skipping base protection: not running on base environment.
+

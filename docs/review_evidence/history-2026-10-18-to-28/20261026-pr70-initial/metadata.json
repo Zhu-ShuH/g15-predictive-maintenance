@@ -1,0 +1,52 @@
+{
+  "observer": "A",
+  "record_date": "20261026",
+  "candidate_commit": "d6fe35112ca91207d7ca9c1f82f0746885264604",
+  "binding": "recorded candidate context",
+  "scope_note": "Initial 1 failed / 565 passed / 9 skipped and later 566 passed / 9 skipped retained. Environment/dependency correction is not a source fix.",
+  "environment_records": [
+    {
+      "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+      "numpy": "2.3.5"
+    },
+    {
+      "environment": "<LOCAL_PATH>;<LOCAL_PATH>"
+    }
+  ],
+  "command_records": [
+    [
+      "<LOCAL_PATH>",
+      "-m",
+      "pytest",
+      "-q",
+      "-rs",
+      "-p",
+      "no:cacheprovider",
+      "--basetemp",
+      "<LOCAL_PATH>"
+    ]
+  ],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "full_pytest_initial_environment.log",
+      "summary": [
+        "1 failed, 565 passed, 9 skipped in 16.93s"
+      ]
+    },
+    {
+      "artifact": "full_pytest.log",
+      "summary": [
+        "566 passed, 9 skipped in 12.65s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "full_pytest_initial_environment.log",
+    "full_pytest.log",
+    "probe_results.json",
+    "extra_probe_results.json",
+    "test_environment.txt",
+    "test_result.json"
+  ]
+}

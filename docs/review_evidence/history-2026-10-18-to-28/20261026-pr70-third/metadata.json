@@ -1,0 +1,22 @@
+{
+  "observer": "A",
+  "record_date": "20261026",
+  "candidate_commit": "0fbcc87f0d336af9ab1f02e35343f79e8d0e76d8",
+  "binding": "recorded candidate context",
+  "scope_note": "",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "full_pytest.log",
+      "summary": [
+        "580 passed, 9 skipped in 23.51s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "full_pytest.log",
+    "probe_results.json"
+  ]
+}

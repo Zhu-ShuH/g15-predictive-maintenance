@@ -1,0 +1,53 @@
+{
+  "head": "39a90758770c5a9f77fac3dc11b07af8fe714b2a",
+  "cases": [
+    {
+      "case": "rounded_upper_overflow",
+      "args": [
+        1,
+        1,
+        9223372036688109141,
+        6
+      ],
+      "result": [
+        -9223372036854775808
+      ],
+      "exception": null
+    },
+    {
+      "case": "exact_upper",
+      "args": [
+        1,
+        1,
+        9223372036688109140,
+        6
+      ],
+      "result": [
+        9223372036854775807
+      ],
+      "exception": null
+    },
+    {
+      "case": "below_lower",
+      "args": [
+        0,
+        2,
+        -9223372036854775809,
+        1
+      ],
+      "exception": "OverflowError",
+      "message": "int too big to convert"
+    },
+    {
+      "case": "empty",
+      "args": [
+        0,
+        0,
+        0,
+        100
+      ],
+      "result": [],
+      "exception": null
+    }
+  ]
+}

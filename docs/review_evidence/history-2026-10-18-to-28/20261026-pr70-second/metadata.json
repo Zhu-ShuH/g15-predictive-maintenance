@@ -1,0 +1,22 @@
+{
+  "observer": "A",
+  "record_date": "20261026",
+  "candidate_commit": "80b95d8c726daa6c95ac26aca5a64e1724399433",
+  "binding": "recorded candidate context",
+  "scope_note": "main_shortburst subsection is a separate main-source probe; do not bind it to candidate head.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "full_pytest.log",
+      "summary": [
+        "578 passed, 9 skipped in 21.48s"
+      ]
+    }
+  ],
+  "artifacts": [
+    "full_pytest.log",
+    "probe_results.json"
+  ]
+}

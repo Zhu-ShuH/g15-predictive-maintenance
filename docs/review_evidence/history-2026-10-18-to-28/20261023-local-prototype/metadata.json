@@ -1,0 +1,44 @@
+{
+  "observer": "A",
+  "record_date": "20261023",
+  "candidate_commit": null,
+  "binding": "commit binding unavailable",
+  "scope_note": "Local prototype, no exact tested commit binding recovered. Functional acceptance exit 5 is retained. Remote comparison heads do not bind this local execution.",
+  "environment_records": [
+    {
+      "environment": {
+        "python": "3.14.6 | packaged by Anaconda, Inc. | (main, Jul  9 2026, 14:29:05) [MSC v.1942 64 bit (AMD64)]",
+        "platform": "Windows-11-10.0.22631-SP0",
+        "numpy": "2.4.6",
+        "scipy": "1.18.0",
+        "pyarrow": "23.0.1",
+        "pydantic": "2.13.4",
+        "PyYAML": "6.0.3",
+        "plotly": "6.7.0",
+        "pytest": "9.0.3"
+      }
+    }
+  ],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "tests.log",
+      "summary": [
+        "68 passed in 16.79s"
+      ]
+    },
+    {
+      "artifact": "verification.json",
+      "summary": [
+        "      \"tail\": \"....................................................................     [100%]\\n68 passed in 16.79s\\n\\n\""
+      ]
+    }
+  ],
+  "artifacts": [
+    "tests.log",
+    "preflight.log",
+    "functional_acceptance.log",
+    "verification.json"
+  ]
+}

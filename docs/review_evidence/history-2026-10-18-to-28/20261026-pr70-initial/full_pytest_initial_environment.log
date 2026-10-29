@@ -1,0 +1,55 @@
+.....s.........................................ssssss................... [ 12%]
+........................................................................ [ 25%]
+..................................................F..................... [ 37%]
+.....................s.................................................. [ 50%]
+........................................................................ [ 62%]
+........................................................................ [ 75%]
+..........................s............................................. [ 87%]
+.......................................................................  [100%]
+================================== FAILURES ===================================
+______________________ test_module_entrypoint_exit_codes ______________________
+
+tmp_path = WindowsPath('<LOCAL_PATH>')
+
+    def test_module_entrypoint_exit_codes(tmp_path: Path) -> None:
+        """``python -m g15 validate`` must behave like ``main`` in a real process."""
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(ROOT / "src")
+    
+        ok = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "g15",
+                "validate",
+                "--config",
+                str(CONFIGS / "default.yaml"),
+            ],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+>       assert ok.returncode == 0, ok.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<frozen runpy>", line 198, in _run_module_as_main
+E           File "<frozen runpy>", line 88, in _run_code
+E           File "<SOURCE_ROOT>\src\g15\__main__.py", line 3, in <module>
+E             from .cli import main
+E           File "<SOURCE_ROOT>\src\g15\cli.py", line 24, in <module>
+E             from .config import ConfigError, load_config
+E           File "<SOURCE_ROOT>\src\g15\config.py", line 31, in <module>
+E             import yaml
+E         ModuleNotFoundError: No module named 'yaml'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['<LOCAL_PATH>', '-m', 'g15', 'validate', '--config', '<SOURCE_ROOT>\src\g15\config.py", line 31, in <module>\n    import yaml\nModuleNotFoundError: No module named \'yaml\'\n').returncode
+
+tests\unit\test_config.py:995: AssertionError
+=========================== short test summary info ===========================
+SKIPPED [1] tests\fault_injection\test_pipeline_faults.py:162: kill -9 是 POSIX 信号，Windows 没有等价语义；这一类证据按 docs/acceptance.md §4 必须在 Linux 上留证，Windows 上不伪造。
+SKIPPED [6] tests\performance\test_simulation_benchmark.py:69: performance benchmark is opt-in; set G15_RUN_BENCHMARK=1 to measure (a shared CI runner is not a valid measurement host)
+SKIPPED [1] tests\unit\test_doc_references.py:94: Symlink creation unavailable on this OS/account
+SKIPPED [1] tests\unit\test_serialization.py:912: this platform cannot create symlinks without elevation
+1 failed, 565 passed, 9 skipped in 16.93s

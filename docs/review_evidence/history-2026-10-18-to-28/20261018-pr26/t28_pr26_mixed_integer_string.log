@@ -1,0 +1,2 @@
+
+error: unknown field(s): 123, aaa; allowed fields are ['fault_generation', 'scenario', 'schema_version', 'signals']

@@ -1,0 +1,40 @@
+{
+  "observer": "A",
+  "record_date": "20261018",
+  "candidate_commit": "a84ca883d7110fd63c2eddbd2debad49515d7977",
+  "binding": "recorded candidate context",
+  "scope_note": "Invalid configuration exits are expected rejection cases.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "t28_pr26_pytest.log",
+      "summary": [
+        "175 passed, 6 skipped in 2.52s"
+      ]
+    },
+    {
+      "artifact": "t28_pr26_black_verified.log",
+      "summary": [
+        "35 files would be left unchanged."
+      ]
+    },
+    {
+      "artifact": "t28_pr26_pylint_verified.log",
+      "summary": [
+        "Your code has been rated at 9.97/10 (previous run: 9.94/10, +0.03)"
+      ]
+    }
+  ],
+  "artifacts": [
+    "t28_pr26_pytest.log",
+    "t28_pr26_black_verified.log",
+    "t28_pr26_pylint_verified.log",
+    "t28_pr26_mixed_integer_string.log",
+    "t28_pr26_mixed_bool_string.log",
+    "t28_pr26_wrong_unit.log",
+    "t28_pr26_overflow.log",
+    "t28_source_verification.json"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "observer": "A",
+  "record_date": "20261020",
+  "candidate_commit": "b2feacfb312f77af4d8f7fb33c9512032ee72608",
+  "binding": "recorded candidate context",
+  "scope_note": "Black CLI hung and was terminated; a serial library check reported 30 files unchanged. No successful Black CLI log is claimed.",
+  "environment_records": [],
+  "command_records": [],
+  "limitations": "Only originally recorded environment/commands/results are available. Missing fields are unknown, not reconstructed. Skips and expected rejection exits remain in logs. Artifact-specific source fields override group context.",
+  "result_extracts": [
+    {
+      "artifact": "pytest43.log",
+      "summary": [
+        "126 passed, 1 skipped in 1.20s"
+      ]
+    },
+    {
+      "artifact": "pylint43.log",
+      "summary": [
+        "Your code has been rated at 9.97/10 (previous run: 9.97/10, +0.00)"
+      ]
+    }
+  ],
+  "artifacts": [
+    "pytest43.log",
+    "pylint43.log",
+    "probe43_result.json"
+  ]
+}

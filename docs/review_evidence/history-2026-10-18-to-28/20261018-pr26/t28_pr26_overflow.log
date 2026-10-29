@@ -1,0 +1,2 @@
+
+error: signals.vibration.baseline: must be finite and representable as a float, got an integer outside the float range

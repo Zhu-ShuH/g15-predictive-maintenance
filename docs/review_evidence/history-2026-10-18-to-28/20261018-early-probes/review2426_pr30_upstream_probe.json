@@ -1,0 +1,37 @@
+[
+  {
+    "probe": "invalid_units_accepted",
+    "units": {
+      "vibration": "m/s2",
+      "temperature": "K"
+    }
+  },
+  {
+    "probe": "invalid_units_accepted",
+    "units": {
+      "vibration": "",
+      "temperature": ""
+    }
+  },
+  {
+    "probe": "numeric_unit_coerced",
+    "units": {
+      "vibration": "123",
+      "temperature": "456"
+    }
+  },
+  {
+    "probe": "invalid_time_accepted",
+    "value": "hello"
+  },
+  {
+    "probe": "manifest_part_filename_mismatch_accepted",
+    "part_id": 0,
+    "path": "raw/part-000005.npz"
+  },
+  {
+    "probe": "invalid_zip",
+    "error": "BadZipFile",
+    "is_contract_error": false
+  }
+]
