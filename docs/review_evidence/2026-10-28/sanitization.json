@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "transformations": [
+    "Replace known local candidate/review/dependency roots with <candidate>, <review-root>, or <baseline-dependencies>",
+    "Parse and format JSON without changing numeric values, exception classes, failure codes or verdicts",
+    "Retain existing capture-time encoding damage; do not reconstruct unreadable text"
+  ],
+  "checks": {
+    "files_with_path_redactions": 5,
+    "path_replacements": 21,
+    "existing_replacement_characters": {
+      "pr70-144f7ae/pytest.log": 32
+    }
+  }
+}

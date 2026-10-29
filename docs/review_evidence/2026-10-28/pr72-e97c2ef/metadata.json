@@ -1,0 +1,23 @@
+{
+  "id": "pr72-e97c2ef",
+  "pr": 72,
+  "head": "e97c2efaf3853090d7e584e1ffc7cbc519ea6ef0",
+  "date": "2026-10-27",
+  "full_suite": null,
+  "skip_reasons": [],
+  "review_url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72#pullrequestreview-5669551972",
+  "notes": "仅做增量诊断，未重跑全量pytest。精确verifier blob5091e32546de8461d07ee67cb0d099455a5b7cdb加载到前轮固定未变依赖上；R1-R3六例修复，零维temperature/seq仍抛IndexError。g15路径标记<baseline-dependencies>反映真实加载方式。",
+  "observer": "A",
+  "environment": {
+    "os": "Windows",
+    "python": "3.11.9",
+    "numpy": "2.3.5",
+    "pytest": "8.4.2"
+  },
+  "pytest_command": null,
+  "black_pylint_in_this_record": "not rerun by A; CI evidence is a separate source",
+  "artifacts": [
+    "previous-cases.json",
+    "scalar-failures.json"
+  ]
+}

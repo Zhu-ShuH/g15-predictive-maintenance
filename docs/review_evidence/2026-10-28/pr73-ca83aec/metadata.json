@@ -1,0 +1,32 @@
+{
+  "id": "pr73-ca83aec",
+  "pr": 73,
+  "head": "ca83aec31d64d1ec8dd7c4fad7f000ee56e4b713",
+  "date": "2026-10-28",
+  "full_suite": {
+    "passed": 537,
+    "skipped": 8,
+    "exit_code": 0,
+    "elapsed_seconds": 6.36
+  },
+  "skip_reasons": [
+    "6 performance opt-in",
+    "2 symlink permissions"
+  ],
+  "review_url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5677021053",
+  "notes": "极大/极小数与复数、timedelta/整数精度边界；400组普通窗口差分399组相等，1组峭度末位变化。ordinary-difference.json为该组诊断输入，seed42是诊断生成器，不是新保留验收集。",
+  "observer": "A",
+  "environment": {
+    "os": "Windows",
+    "python": "3.11.9",
+    "numpy": "2.3.5",
+    "pytest": "8.4.2"
+  },
+  "pytest_command": "python -m pytest -q -ra -p no:cacheprovider --basetemp <external-temp>",
+  "black_pylint_in_this_record": "not rerun by A; CI evidence is a separate source",
+  "artifacts": [
+    "pytest.log",
+    "diagnostics.json",
+    "ordinary-difference.json"
+  ]
+}

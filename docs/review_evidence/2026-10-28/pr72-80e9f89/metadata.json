@@ -1,0 +1,32 @@
+{
+  "id": "pr72-80e9f89",
+  "pr": 72,
+  "head": "80e9f8960c94f5060ac0ab5f7703f3e61e26341f",
+  "date": "2026-10-28",
+  "full_suite": {
+    "passed": 569,
+    "skipped": 9,
+    "exit_code": 0,
+    "elapsed_seconds": 10.79
+  },
+  "skip_reasons": [
+    "6 performance opt-in",
+    "3 symlink permissions"
+  ],
+  "review_url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72#pullrequestreview-5670400729",
+  "notes": "原六反例及四字段0/2维共8例、首片坏维度叠加后续坏摘要的独立诊断。作者机器自报的3条配置失败未在A环境复现；本归档不替作者机器确认失败根因。",
+  "observer": "A",
+  "environment": {
+    "os": "Windows",
+    "python": "3.11.9",
+    "numpy": "2.3.5",
+    "pytest": "8.4.2"
+  },
+  "pytest_command": "python -m pytest -q -ra -p no:cacheprovider --basetemp <external-temp>",
+  "black_pylint_in_this_record": "not rerun by A; CI evidence is a separate source",
+  "artifacts": [
+    "pytest.log",
+    "previous-cases.json",
+    "dimension-cases.json"
+  ]
+}

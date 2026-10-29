@@ -1,0 +1,30 @@
+[
+  {
+    "case": "zero_window",
+    "pass": 1,
+    "exit": 0,
+    "stdout": "Consumed 20261027T142900Z-drop_test_100_100-1182df: device=DEV-DROP, shards_processed=1, shards_skipped=0, windows_written=0, windows_dropped=100, alarms_written=0\ndatabase: <review-root>\\diagnostic71\\zero_window\\runs\\20261027T142900Z-drop_test_100_100-1182df\\artifacts\\results.sqlite\n",
+    "stderr": "warning: 100 sample(s) dropped (incomplete final window under incomplete_window=drop)\n"
+  },
+  {
+    "case": "zero_window",
+    "pass": 2,
+    "exit": 0,
+    "stdout": "Consumed 20261027T142900Z-drop_test_100_100-1182df: device=DEV-DROP, shards_processed=0, shards_skipped=1, windows_written=0, windows_dropped=0, alarms_written=0\ndatabase: <review-root>\\diagnostic71\\zero_window\\runs\\20261027T142900Z-drop_test_100_100-1182df\\artifacts\\results.sqlite\n",
+    "stderr": ""
+  },
+  {
+    "case": "partial_drop",
+    "pass": 1,
+    "exit": 0,
+    "stdout": "Consumed 20261027T142901Z-drop_test_10240_10240-a9d0e0: device=DEV-DROP, shards_processed=1, shards_skipped=0, windows_written=1, windows_dropped=3240, alarms_written=0\ndatabase: <review-root>\\diagnostic71\\partial_drop\\runs\\20261027T142901Z-drop_test_10240_10240-a9d0e0\\artifacts\\results.sqlite\n",
+    "stderr": "warning: 3240 sample(s) dropped (incomplete final window under incomplete_window=drop)\n"
+  },
+  {
+    "case": "partial_drop",
+    "pass": 2,
+    "exit": 0,
+    "stdout": "Consumed 20261027T142901Z-drop_test_10240_10240-a9d0e0: device=DEV-DROP, shards_processed=0, shards_skipped=1, windows_written=0, windows_dropped=0, alarms_written=0\ndatabase: <review-root>\\diagnostic71\\partial_drop\\runs\\20261027T142901Z-drop_test_10240_10240-a9d0e0\\artifacts\\results.sqlite\n",
+    "stderr": ""
+  }
+]

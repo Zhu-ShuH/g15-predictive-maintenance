@@ -1,0 +1,132 @@
+{
+  "partial_error": "shard 1 (raw/part-000001.npz) is not trustworthy: part-000001.npz: sha256 is 872ca432b030f8d30be9feff92128544dad697765bbb6dc7cc467c68a590e005, manifest records dafad39b4e4e074ed8ace053b2050cc0f8825e21b2cb84748a747b77029fbf61",
+  "partial": {
+    "verifiable": false,
+    "passed": null,
+    "total_points": 65536,
+    "processed_points": 10240,
+    "analysed_points": 10240,
+    "dropped_points": 0,
+    "rejected_points": 55296,
+    "pending_parts": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "digest_mismatch_parts": [],
+    "fault_events": 0,
+    "detected_events": 0,
+    "missed_events": 0,
+    "false_alarm_count": 0,
+    "redundant_alarm_count": 0,
+    "unmatched_alarm_count": 0,
+    "alarm_count": 0,
+    "verdict_reasons": [
+      "the database holds processed rows for only part of run '20261026T100657Z-acceptance_healthy_seed42-5809af': manifest part(s) [1, 2, 3, 4, 5, 6] carry no processed_chunks row, so the consumer never finished this run; a partially consumed run cannot be reported as a whole pass"
+    ]
+  },
+  "repaired": {
+    "verifiable": true,
+    "passed": true,
+    "total_points": 65536,
+    "processed_points": 65536,
+    "analysed_points": 65536,
+    "dropped_points": 0,
+    "rejected_points": 0,
+    "pending_parts": [],
+    "digest_mismatch_parts": [],
+    "fault_events": 0,
+    "detected_events": 0,
+    "missed_events": 0,
+    "false_alarm_count": 0,
+    "redundant_alarm_count": 0,
+    "unmatched_alarm_count": 0,
+    "alarm_count": 0,
+    "verdict_reasons": []
+  },
+  "missing_truth": {
+    "verifiable": false,
+    "passed": null,
+    "total_points": 65536,
+    "processed_points": 65536,
+    "analysed_points": 65536,
+    "dropped_points": 0,
+    "rejected_points": 0,
+    "pending_parts": [],
+    "digest_mismatch_parts": [],
+    "fault_events": null,
+    "detected_events": null,
+    "missed_events": null,
+    "false_alarm_count": null,
+    "redundant_alarm_count": null,
+    "unmatched_alarm_count": null,
+    "alarm_count": 1,
+    "verdict_reasons": [
+      "the run carries no private_truth/faults.json and its log does not declare zero injected events; a missing truth file cannot be read as 'no event injected', so the detection rate is unknown"
+    ]
+  },
+  "mismatched_digest": {
+    "verifiable": false,
+    "passed": null,
+    "total_points": 65536,
+    "processed_points": 55296,
+    "analysed_points": 55296,
+    "dropped_points": 0,
+    "rejected_points": 10240,
+    "pending_parts": [],
+    "digest_mismatch_parts": [
+      3
+    ],
+    "fault_events": 1,
+    "detected_events": 1,
+    "missed_events": 0,
+    "false_alarm_count": 0,
+    "redundant_alarm_count": 0,
+    "unmatched_alarm_count": 0,
+    "alarm_count": 1,
+    "verdict_reasons": [
+      "the database recorded a different digest for manifest part(s) [3] of run '20261026T100657Z-acceptance_spike_seed42-504f72'; those rows were consumed from bytes the manifest does not describe, so they cannot be scored as this run.  Every metric below counts only the shards whose digest still matches; the rows excluded from that scope are reported as raw_/excluded_ counts rather than dropped from the report silently"
+    ]
+  },
+  "r7_part3": {
+    "verifiable": false,
+    "passed": null,
+    "processed_points": 55296,
+    "analysed_points": 55296,
+    "dropped_points": 0,
+    "rejected_points": 10240,
+    "raw_feature_windows": 256,
+    "excluded_feature_windows": 40,
+    "feature_windows": 216,
+    "raw_alarm_count": 1,
+    "excluded_alarm_count": 0,
+    "alarm_count": 1,
+    "detected_events": 1,
+    "detection_rate": 1.0,
+    "digest_mismatch_parts": [
+      3
+    ]
+  },
+  "r7_fault_part1": {
+    "verifiable": false,
+    "passed": null,
+    "processed_points": 55296,
+    "analysed_points": 55296,
+    "dropped_points": 0,
+    "rejected_points": 10240,
+    "raw_feature_windows": 256,
+    "excluded_feature_windows": 40,
+    "feature_windows": 216,
+    "raw_alarm_count": 1,
+    "excluded_alarm_count": 1,
+    "alarm_count": 0,
+    "detected_events": 0,
+    "detection_rate": 0.0,
+    "digest_mismatch_parts": [
+      1
+    ]
+  }
+}

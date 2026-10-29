@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "observer": "A",
+  "artifacts": [
+    {
+      "path": "pr70-144f7ae/pytest.log",
+      "sha256": "c756f13bb056067f9849417897733397b7b8a96919e7727eb5ca1b7497a347ae",
+      "bytes": 1482,
+      "source_sha256": "c756f13bb056067f9849417897733397b7b8a96919e7727eb5ca1b7497a347ae",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr70-144f7ae/diagnostics.json",
+      "sha256": "7c9a60b38da63ed376fad7cb312254f7603d8c875e4ef88fb0c36dd50c15da55",
+      "bytes": 4101,
+      "source_sha256": "985eda793aaeb2431e185b47e84fc80f8df3d11767a83e1b56a801c8171b5234",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr71-6c146109/pytest.log",
+      "sha256": "bb59a3005d6dec3a3ba3fc1778533b9e1be36625594738f168c0fed129f15b9d",
+      "bytes": 1152,
+      "source_sha256": "bb59a3005d6dec3a3ba3fc1778533b9e1be36625594738f168c0fed129f15b9d",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr71-6c146109/cli-diagnostics.json",
+      "sha256": "2608029b7f7327bccb4cd7eb804e6446eacbecb7d9af342c5612821c147d8f64",
+      "bytes": 1771,
+      "source_sha256": "3472cd5c1c2c7ed0dde9600f438e3540d7943e61276029db3eba65ccc3bd6a50",
+      "path_replacements": 4,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr72-abc6dfa4/pytest.log",
+      "sha256": "4a003281cdd359e02ea33289cc930075aa66afae4c2e2cce135e1e7e5e8ae7f6",
+      "bytes": 1246,
+      "source_sha256": "4a003281cdd359e02ea33289cc930075aa66afae4c2e2cce135e1e7e5e8ae7f6",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr72-abc6dfa4/diagnostics.json",
+      "sha256": "1513ad7e7750fa5234f7dd3b8e323e26aef294e0457a7b5970f18a0a9ca0c7f0",
+      "bytes": 6827,
+      "source_sha256": "0533760b72a5b735b1aa7f5543e91bc4d10aa44d2ef5331e735d797d8e79baa5",
+      "path_replacements": 14,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr72-e97c2ef/previous-cases.json",
+      "sha256": "e793bcfd70813d85c1ca97566439a21dc69df7ff916f271ad804e1d7507c3092",
+      "bytes": 5624,
+      "source_sha256": "a818d582270fac2860df1f6539e6403368bb6d578d52c32726feb59203d7cde8",
+      "path_replacements": 1,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr72-e97c2ef/scalar-failures.json",
+      "sha256": "a0130a6fdda7c017e71923f88842119ab4fdacfc193956bf21172f7925e3369b",
+      "bytes": 215,
+      "source_sha256": "460bfa3532f2662e8cdea9f134b4a9e69e243cdb59c0f25a03a35ea01812a71e",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr72-80e9f89/pytest.log",
+      "sha256": "60427778742c7542b790aa0328caa1d5779b0fd64d7e81b08baf502b510949cf",
+      "bytes": 1327,
+      "source_sha256": "60427778742c7542b790aa0328caa1d5779b0fd64d7e81b08baf502b510949cf",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr72-80e9f89/previous-cases.json",
+      "sha256": "10801dd52ad6f2bb346ded11dc675842dcc20825ae740d3f6450bc5c0be6557e",
+      "bytes": 5612,
+      "source_sha256": "8fdcf60efc092cc7e294e39fbadfd312236ed9309a8019c8176099148c2040a2",
+      "path_replacements": 1,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr72-80e9f89/dimension-cases.json",
+      "sha256": "f95a2ee01c91a23bf74124ee5cd03626581e374314c4a27844d2879af121e79a",
+      "bytes": 2125,
+      "source_sha256": "a20fa6f39a68bf2f1a3edf4964b98882e57c7a4d2c7a3f1082d6ab192381d1f3",
+      "path_replacements": 1,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr73-ca83aec/pytest.log",
+      "sha256": "21d50312182b100f099276c35c3b0be8056061f28a1687cca85552d8c6a8025c",
+      "bytes": 1151,
+      "source_sha256": "21d50312182b100f099276c35c3b0be8056061f28a1687cca85552d8c6a8025c",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr73-ca83aec/diagnostics.json",
+      "sha256": "3559d230729fe36f33a646147bb9a972319a96684f3d6b21b3ffb2c2669c9162",
+      "bytes": 3142,
+      "source_sha256": "fdd26b3c159113f554ff611f747362e058ff0646aead139b2eba0e3e1dcb0073",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    },
+    {
+      "path": "pr73-ca83aec/ordinary-difference.json",
+      "sha256": "a4b017689c9255b3d00a5ab270f08398d3b9ac7bbc06657e342cf55fbc9b49f4",
+      "bytes": 29218,
+      "source_sha256": "2b12b45f06cbaac3e105c31319220f284841b5e1f603851d067582b16a06d05f",
+      "path_replacements": 0,
+      "transformation": "UTF-8 encoding; JSON formatted where applicable; known local roots replaced by stable markers"
+    }
+  ]
+}
