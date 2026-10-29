@@ -86,8 +86,10 @@ __all__ = [
 #: * complex windows are rejected instead of being cast (``1.0`` silently kept
 #:   the real part and warned);
 #: * ``timedelta64`` windows are rejected instead of being read as ``g``;
-#: * integer windows outside ``|value| <= 2**53`` are rejected instead of being
-#:   rounded into ``float64``;
+#: * integer samples that ``float64`` cannot hold exactly are rejected instead of
+#:   being rounded (every ``|value| <= 2**53`` is exact; past that only the
+#:   values on the widened spacing are, so the rule is "not representable", not
+#:   "greater than ``2**53``");
 #: * very large finite windows return finite numbers instead of ``NaN``/``Inf``
 #:   (``1e100`` used to return a ``NaN`` excess kurtosis, ``1e200`` an ``inf``
 #:   RMS), and windows whose spread exceeds ``float64`` raise;
@@ -246,11 +248,12 @@ def extract_features(
     Raises:
         ValueError: if ``vibration`` is not a non-empty one-dimensional finite
             **real** array, or its dtype is outside :data:`REAL_SAMPLE_DTYPES`,
-            or it carries integers beyond :data:`MAX_EXACT_INTEGER`, or
-            ``sample_rate_hz`` is not an integer in ``1..MAX_SAMPLE_RATE_HZ``, or
-            ``window_start_seq`` is negative, or a feature of a finite window
-            cannot be represented as a finite ``float64`` (see
-            :func:`_restore_scale`).
+            or it carries an integer sample with no exact ``float64`` value
+            (not "beyond ``MAX_EXACT_INTEGER``": values such as ``2**53 + 2``
+            are accepted), or ``sample_rate_hz`` is not an integer in
+            ``1..MAX_SAMPLE_RATE_HZ``, or ``window_start_seq`` is negative, or a
+            feature of a finite window cannot be represented as a finite
+            ``float64`` (see :func:`_restore_scale`).
     """
     samples = _as_signal(vibration)
     rate = _as_sample_rate(sample_rate_hz)
@@ -403,7 +406,8 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
     Raises:
         ValueError: if it is not a non-empty one-dimensional finite real array
             whose dtype is in :data:`REAL_SAMPLE_DTYPES` and whose integer
-            values fit :data:`MAX_EXACT_INTEGER`.
+            samples all have an exact ``float64`` value (not "fit
+            ``MAX_EXACT_INTEGER``": see :func:`_require_exact_integers`).
     """
     if not isinstance(vibration, np.ndarray):
         raise ValueError(
