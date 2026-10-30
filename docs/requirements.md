@@ -1,51 +1,57 @@
 # G15 软件需求与验收追踪
 
-> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
+> Issue [#2](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/2)；负责人 A；状态核对日期：2026-10-30。实现快照为 main `b3daf15ee8d53d7515f32b13b57de149f6767561`。本次更新追踪关系，不改变验收标准、公共接口、规则或 seed，不关闭接口评审任务。
 
-> Issue #2；负责人 A；2026-10-18；待评审草稿。需求来源为现有课程要求摘录、组长确认和 docs/interface.md；原始教师材料不随公开仓库提交。没有真实会议记录或验收通过记录。
+## 1. 来源、范围与判定方法
 
-## 1. 已确认的交付约束
+需求来自课程要求摘录、A 于 2026-10-16 确认的小组默认方案及 [验收规范](acceptance.md)。原始教师材料不随公开仓库提交；NPZ、SQLite、Ubuntu 24.04 LTS/RHEL 9 是小组工程选择，不能写成教师逐项指定。答辩日期未定，D1–D14 保留为相对排期模板。
 
-GitHub 公开仓库；现场从仓库新克隆运行；覆盖可行性、需求、设计、实现、测试、部署、运维与复盘。至少两种 Linux，允许虚拟机，无指定发行版；小组选择 Ubuntu 24.04 LTS 与 RHEL 9。截止日未定，D1–D14 仅为相对模板。
+正式环境为 Conda `pp03` / Python 3.12，安装步骤见 [environment](environment.md)；Python 3.11 为额外兼容 CI。公开 GitHub 仓库、现场新克隆运行、双 Linux 分别留证等约束保持不变。
 
-## 2. 用户故事与需求追踪
+本页区分三类证据：**主线实现**说明已进入上述提交；**候选交付**说明仍在 PR 中；**正式验收**须按同一集成版本及规定环境实际执行。测试文件存在、单次 Windows 结果或 CI 绿均不能独自证明整项需求通过。
 
-| ID | 用户故事与可验收结果 | 负责人/任务 | 独立检查与证据 |
+## 2. 用户故事、实现证据与剩余缺口
+
+| ID | 用户故事与可验收结果 | 主线实现与可核对入口 | 尚待完成 / 负责人 |
 |---|---|---|---|
-| R01 | 作为演示者，我能运行正常、缓慢退化、突发故障三种预设 | C3/B1/C1；#4/#5/#6 | 三套配置分别生成真实测量；趋势、噪声与故障区间检查 |
-| R02 | 作为操作员，我只改 YAML 就能改变退化率和故障率 | C3/B1/C1；#4/#5/#6 | 配置 A/B 对比；源码版本不变；无效概率被拒绝 |
-| R03 | 作为测试者，我能用相同配置、seed、代码与依赖复现测量 | B1/C1；#5/#6 | 两次运行数组逐点比较；run_id 与报告时间可不同 |
-| R04 | 作为评审者，我能检查 1,000,000 点仿真 <60 秒的原始证据 | B1/C4/C5/C6；#5/#11/#9/#10 | 记录采样数、双信号标量数、完整 Manifest、计时范围、硬件和系统 |
-| R05 | 作为下游开发者，我能用独立进程读取公开文件，不调用仿真内部实现 | C4/C2/C3；#3/#11/#8/#4 | 分开 simulate 与 consume；篡改哈希、缺字段、未完成清单被拒收 |
-| R06 | 作为维护人员，我能看到特征、0–100 健康分和可解释告警 | B2/C2；#7/#8 | 人工小数组参考值、边界、规则版本、黄红阈值与恢复状态检查 |
-| R07 | 作为评审者，我能独立核对受控事件是否全部检出 | C5；#9 | 真值与预测一对一匹配，报告 TP/FN/FP、延迟和允许窗口；检测阶段不读真值 |
-| R08 | 作为组长，我能获取可追溯的闭环联调报告 | C5；#9 | JSON/Markdown 含版本、seed、点数、各阶段耗时、检出及错误；未知数据为 null |
-| R09 | 作为运维人员，我能重复消费或中断重启且不重不漏 | C2/B2/C5；#8/#7/#9 | 同一 run 重放两次行数不变；中断与不中断的窗口、告警、状态一致 |
-| R10 | 作为第一次接手的人，我能在两种 Linux 新克隆安装运行 | C6/A；#10 | 两系统同一提交分别 setup/demo/verify/benchmark，保留命令、退出码与报告 |
+| R01 | 演示者能运行正常、缓慢退化、突发故障三类预设 | 配置 [#26](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/26)、仿真 [#15](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/15)、故障 [#27](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/27)、生产 [#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)；见 `test_config.py`、`test_faults.py`、`test_producer.py` | C3/B1（承接原 C5）完成 CLI 与三场景完整链报告；已有 Python 模块不等于演示链验收完成 |
+| R02 | 操作员只改 YAML 即可改变退化率和故障参数，无效输入被拒绝 | `config.py`、`configs/` 与配置/仿真/故障单测；采样率上界修复 [#47](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/47)、[#55](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/55) | C3/B1/C1/C5 在最终集成版本留下配置 A/B、源码未变、输出变化及非法配置命令记录 |
+| R03 | 测试者能按配置、seed、源码和依赖版本复现测量 | 仿真确定性及噪声黄金值 [#15](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/15)、[#33](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/33)；共享类型/RNG [#31](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/31) | A/C6 的依赖锁定 [#28](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/28) 与跨环境复现；run_id/报告时间不作为测量数组相等条件 |
+| R04 | 评审者可核对完整 1,000,000 点生产严格小于 60 秒 | 真实生产入口及 Windows 三次原始证据 [#53](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/53)、[ADR-0001](adr/0001-simulation-model-and-determinism.md) | C6 执行双 Linux 各三次并补进程外内存与计时范围证据，B1（承接原 C5）汇总；不重列已交 Windows 证据；[#51](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/51) 的口径补充仍 open |
+| R05 | 下游在独立进程读公开文件，不依赖仿真内存状态 | 序列化 [#29](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29)、生产 [#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)、消费 [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64)；`test_serialization.py`/`test_consumer.py` | C3 的消费 CLI [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71) 仍为候选；simulate 与 consume 分进程命令须在集成后留证 |
+| R06 | 维护人员看到特征、0–100 健康分与可解释告警 | 分析 [#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54)、消费/SQLite [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64)；`test_features.py`、`test_health.py`、`test_alarms.py` | B2 的数值边界修复 [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) 已提交整改候选 `e4814b65769fa6da45ca070daac89af02d03d0e9`，A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，C4已于[5701409871](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5701409871)复审APPROVED，仍待C2相关审查与集成；契约 [#57](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/57) 与报告展示待闭环 |
+| R07 | 评审者能独立核对受控事件检出、漏报、误报和延迟 | 验收规范与 [ADR-0006](adr/0006-independent-validation-protocol.md) 已有审阅方案；主线 reporting 仍为空模块 | 验证/报告候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70) 未合入；[#56](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56) 的独立数据方案/规则冻结与正式执行未完成 |
+| R08 | 项目负责人获取可追溯 JSON/Markdown 闭环报告 | 主线已有 Manifest 和 SQLite 上游；`docs/test_report.md` 仍占位 | 当前 #9 报告实现由 B1 接手，候选为 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)；集成后由相关实现/验证角色留版本、点数、耗时及错误证据 |
+| R09 | 运维人员重复消费或中断重启后不重不漏 | [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) 提供消费、存储、状态恢复与幂等单测；[ADR-0005](adr/0005-analysis-persistence-contract.md) 记录契约提案 | C2/C6/C5 补真实 Linux `kill -9` 与不中断对照；不能把单元回滚当进程强杀或断电测试 |
+| R10 | 首次接手者在两种 Linux 同一版本新克隆安装运行 | [environment](environment.md) 有环境约定；[#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) 仅修复 shell 文件可执行位 | C6/A 完成 [#10](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/10)、#28；当前 setup/demo/verify/benchmark 仍为失败退出的占位脚本 |
+
+表内测试文件均位于 `tests/unit/`，只标识可检查入口，不声称本次重新运行。
 
 ## 3. 非功能需求与统计口径
 
-| ID | 要求 | 来源/判定 |
+| ID | 保持的要求 | 当前证据边界与补齐方式 |
 |---|---|---|
-| N01 | 1,000,000 点仿真耗时 <60 秒 | 课程指标；暂按一次采样一个点，双信号标量数另报；生成、序列化、哈希及完整 Manifest 落盘都计入小组加严测试；组长已确认，详见 docs/acceptance.md |
-| N02 | 预设受控注入事件全部被下游检出 | 课程指标；匹配窗口测试前固定；分母为有效注入事件数；零事件不返回 100%；同时报告误报和检测延迟 |
-| N03 | 同配置/seed/版本可复现，单位与时钟明确 | 基于起始 UTC 与绝对序号；不依赖当前机器时间产生测量 |
-| N04 | 配置外置，非法输入失败且退出码可区分 | 合法配置 0；配置错误 2；I/O/Schema 3；验收失败 4；未知错误 5，均为待实现目标 |
-| N05 | 运行阶段无需网络或在线 AI | 小组交付约束；安装联网、运行离线；C6 准备并验证备用依赖包 |
-| N06 | 断点恢复不重复，错误可诊断 | 数据与游标/告警状态同事务；JSON 行日志含 run_id、阶段和错误原因；不把 kill -9 测试说成断电测试 |
-| N07 | 至少 15 条单元测试、20 个可执行用例、3 类故障注入 | 课程流程要求；全员自测、C5 汇总；数量不替代覆盖和真实结果 |
-| N08 | 两种 Linux 以同一版本各自安装运行留证 | 用户要求；虚拟机认可；当前尚无通过证据 |
+| N01 | 1,000,000 个采样时刻；生成、序列化、哈希和 complete Manifest 发布合计严格 <60 秒；双信号共 2,000,000 标量另报 | 沿用 acceptance §2，双 Linux 各三次；#53 的 Windows 结果不替代 Linux，不把内核计时或事后校验混进生产窗口 |
+| N02 | 预设受控集事件召回 100%，同时报告误报和延迟；零事件召回为 null | 保持 acceptance §3；开发已查看数据与独立保留验证分开，#56 未冻结前不选/跑新保留 seed |
+| N03 | 配置/seed/版本可追溯；UTC、绝对序号和单位明确 | 保留仿真确定性；最终记录源码、配置/规则摘要与依赖，不以当前机器时钟生成测量 |
+| N04 | 参数/配置 2，I/O/Schema 3，实际验收失败 4，未知错误 5，成功 0 | 沿用 interface §10；主线 validate 的 0/2 已实现，未知/占位分支使用 5；cli.py 现只有 EXIT_OK/EXIT_INVALID/EXIT_UNEXPECTED，3/4 常量尚未定义。#71 候选定义 consume 的 3，验收失败 4 随后续 verify/验收入口接线补齐；#70 提供报告能力，不等于 CLI 已接线 |
+| N05 | 安装可联网，业务运行不依赖网络或在线 AI | C6 实测现场网络、运行离线与备用依赖；尚未完成的离线安装准备保持待办 |
+| N06 | 数据、告警状态、分片游标同事务；重复/恢复可诊断 | #64 已有实现与回归；真实强杀、日志和重启后内容一致性仍需实测，不宣称断电零损失 |
+| N07 | 至少 15 单测、20 个可执行用例、3 类故障注入证据 | 测试存在及数量不替代执行结果；三类为业务故障、文件损坏、Linux 强杀恢复，不能用三种波形替代三类可靠性证据 |
+| N08 | Ubuntu 24.04 LTS 与 RHEL 9 同一集成提交分别安装运行留证 | CI 的 Python 3.11/3.12 矩阵不等于两种 Linux；当前不声明此项已通过 |
 
-截至 main `2c14759`，pytest 已收集 88 个用例：仿真内核 81、包导入 1、局部基准 6；6 个基准默认跳过。收集数量不等于通过数，也不改变 N07 的最低要求；完整验收由 C5 汇总真实运行证据。
+旧文中 main `2c14759` 的“收集 88 个用例”只适用于早期快照，不作为当前统计。本次不引入新的通过总数；每次结果须绑定自己的源码 SHA、环境、命令、退出码与跳过原因。A 的历史实测归档见 [#75](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/75)、[#78](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/78)，两者已分别经B1/C4人工审阅合入（#75：`5e98a68aa857241d36211a288d6fc804b8331ffb`；#78：`93fcf287c90750dc8331bee55245ab63bfc1d156`），是历史归档而非正式验收报告。
 
-## 4. 验收场景
+## 4. 未合入候选与变更控制
 
-正常场景检查误报；缓慢退化检查评分变化；受控 spike/step/burst 检查真值与告警独立匹配；数据损坏检查 SHA/Schema 拒收；消费进程中断检查重放与事务；百万点检查完整生产耗时；双 Linux 检查从空环境安装和运行。C5 将这些场景映射到实际测试 ID，不能把本表当作已通过报告。
+| 候选 | 已交付的对象 | 保留的条件 |
+|---|---|---|
+| [#67](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/67) | 持久化、校验分层与 CLI 接线的接口正文 | 成员实际审阅与 §13 兼容证据；本页不提前冻结候选 |
+| [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70) | 独立验证器与闭环报告 | B2提出场景类型依赖名称的风险，A独立复证并请求修改；A已裁定采用受审清单精确id/未知不可验证方案C，等B1按裁定提交新head与回归，其他集成与独立验收条件保留 |
+| [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71) | consume CLI 接线 | C2 对公开签名/异常集合的本人确认等门禁 |
+| [#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 原始分片独立校验 | R5 已获 A 与 B2 本人复审 APPROVED（B2：5684239091）；C4已COMMENTED三块通过但正文范围/历史数字待作者补，C3与相关接口条件仍保留；七项检查不核绝对时间公式 |
+| [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) | 特征数值稳定性修复 | `e4814b65769fa6da45ca070daac89af02d03d0e9` 已提交类型、整数精度、FEATURES_VERSION 1.1、大端字节序与兼容说明整改；A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，C4已于[5701409871](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5701409871)复审APPROVED，仍待C2意见；未合入不当作主线已解决。部分掩码与全掩码float静默丢弃属 `1.0` 既有行为；全掩码整数在1.1出现MaskError翻转，统一跟踪于 [#82](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/82) |
 
-## 5. 决定、待评审项与变更控制
+#76 多片末片上界预检已获A/B1/C4固定head审阅并合入主线`b3daf15ee8d53d7515f32b13b57de149f6767561`；超界在业务写入前拒收、等长允许，单片不反推。#67接口现状同步仍须审查，不把代码集成当作接口冻结。
 
-2026-10-16，组长明确授权采用默认验收方案，由小组制定标准。百万点按采样次数；完整生产计时 <60 秒；独立文件接口；受控测试 100% 事件召回并统计误报。数值与匹配细则见 docs/acceptance.md，不再列为等待教师答复的阻塞。
-
-环境依据课程指南采用 Conda pp03 + Python 3.12；指南第七章 3.10 与创建命令冲突，小组选择创建命令中的 3.12。执行步骤见 docs/environment.md。
-
-#17 已收到 B1/C4 关于公共类型与 RNG 的真实意见，仍待最终措辞、兼容测试与迁移；故障重叠、告警状态字段和错误码继续按受影响成员评审；C5 固定测试配置及规则版本并执行；C6 双 Linux 验证；现场网络检查与离线依赖实测；答辩日期公布。没有真实会议或测试时不能填“已通过”。Issue #2 不包含代码迁移；共享类型见 #17。
+公共接口按 [interface §13](interface.md#13-接口变更流程) 处理；最终成绩按 [acceptance](acceptance.md) 执行。A 汇总实际意见和缺口，模块负责人补实物，不能互相代签。#17 的共享类型迁移已经由 #31 合入，不能继续列为未实施；#2/#57 仍保留当前持久化等接口收口任务。

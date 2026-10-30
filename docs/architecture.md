@@ -1,10 +1,12 @@
-# G15 系统架构与接口评审草案
+# G15 系统架构与集成状态
 
-> **2026-10-16 组长决定**：采用小组默认验收口径，不再等待教师逐项答复。标准见 `docs/acceptance.md`；正式开发和演示环境为 Conda `pp03` + Python 3.12，步骤见 `docs/environment.md`。Python 3.11 保留兼容性 CI。公共 API、状态字段仍需真实评审，所有验收成绩仍须实测。
+> Issue [#2](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/2)；负责人 A；2026-10-30。实现快照：main `b3daf15ee8d53d7515f32b13b57de149f6767561`。本页描述现有实现和目标链路，公共契约仍以 [interface](interface.md) 及其实际评审记录为准。
 
-> Issue #2；负责人 A；2026-10-18；待团队评审。以下为目标结构；PR #15 已合并（main `2c14759`），其余主链尚未联通。
+## 1. 当前主线与目标边界
 
-## 1. 组件与数据流
+配置、仿真、故障注入、Schema/NPZ/Manifest、生产入口、分析、消费及 SQLite 已合入主线。共享 `SimulationChunk` 已由 [#31](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/31) 迁到 `common/types.py`，不再处于“等待迁移”状态。
+
+上述模块可通过 Python 入口组合；**命令行和报告闭环尚未全部集成**。当前 `cli.py` 只实现 validate；simulate、consume、report、verify、benchmark、doctor 仍走占位分支。主线 `reporting/builder.py`、`metrics.py` 为空；shell 脚本虽已补可执行位，内容仍失败退出。不能直接按下图的完整目标链宣称演示可运行。
 
 ```mermaid
 flowchart LR
@@ -12,65 +14,66 @@ flowchart LR
     CFG --> SIM[退化与噪声 B1]
     SIM --> FAULT[故障注入 C1]
     FAULT --> PROD[生产入口 C4]
-    PROD --> RAW[公开 NPZ + Manifest]
+    PROD --> RAW[公开 NPZ 与 Manifest]
     PROD --> TRUTH[独立故障真值]
     RAW --> CONS[消费者 C2]
     CC[消费配置与评分规则] --> CONS
-    CONS --> ANALYSIS[特征/健康分/告警 B2]
+    CONS --> ANALYSIS[特征 健康分 告警 B2]
     ANALYSIS --> DB[SQLite 结果与恢复状态]
-    DB --> REPORT[报告 C5]
-    TRUTH --> VERIFY[独立验证器 C5]
-    DB --> VERIFY
-    VERIFY --> REPORT
+    DB -. 待报告集成 .-> REPORT[JSON 与 Markdown 报告]
+    TRUTH -. 仅供独立验证 .-> VERIFY[事件匹配与验证]
+    DB -. 待验证集成 .-> VERIFY
+    VERIFY -.-> REPORT
 ```
 
-消费者只读取公开测量、Manifest 和消费规则；真值只用于独立验证。分目录是代码层隔离，不等于操作系统权限隔离。生产与消费通过独立 CLI 运行，算法函数不读文件或访问数据库。
+实线表达已合入模块之间的数据职责，不代替本次执行记录；虚线部分为尚待集成的验证/报告路径。真值分目录属于代码访问约定，不是操作系统权限隔离。consumer/analysis 不能用真值决定预测结果。
 
-## 2. 文件与持久化
+## 2. 模块、证据与接线状态
 
-一次 run 对应一台设备，四个等长数组为 seq:int64、timestamp_ns:int64、vibration:float64、temperature:float64。Manifest 包含运行/设备/Schema、单位、采样率、点数和全部分片的路径、行数、SHA；只有 complete 可消费。分片先临时写入，再原子更名，最后发布完整 Manifest。
-
-运行目录按 docs/interface.md：raw/、private_truth/、artifacts/results.sqlite、reports/、logs/、evidence/。SQLite 四张核心表为 runs、processed_chunks、feature_windows、alarms；alarm_states 为待评审状态表。结果、状态与分片完成标记同事务，重启后从已提交游标继续。源数据及运行数据库不入库，仓库保留可重建的小 fixture。
-
-## 3. 模块边界
-
-| 模块 | 负责人 | 输入 → 输出 | 禁止 |
+| 模块 | 主责 | 主线实物 / 证据 | 当前限制 |
 |---|---|---|---|
-| config/CLI | C3 | 两类 YAML → 分离的不可变配置；参数 → 模块入口 | CLI 写业务公式或把故障配置交消费者 |
-| simulation | B1/C1 | 场景/绝对序号/seed → 测量及独立真值 | 计算健康分或读 SQLite |
-| schema/serialization/producer | C4 | 公共对象 → NPZ/Manifest/run_dir | 自改算法、未经评审增加字段 |
-| analysis | B2 | 连续测量窗口/规则/显式状态 → 特征、评分、告警、下一状态 | 读取真值或处理文件 I/O |
-| consumer/storage | C2 | 公开文件/规则 → 事务性结果与恢复游标 | 忽略同分片内容变化、只存内存状态 |
-| reporting/verify | C5 | 结果与独立真值 → 匹配统计、报告 | 用真值修改消费者预测 |
-| scripts/env | C6 | 同一代码版本 → 可复现安装与运行证据 | 吞掉失败退出码、假造环境日志 |
+| config / CLI | C3 | `config.py` 与 validate，[#26](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/26)、[#55](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/55) | consume 接线为 [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71) 候选，其余占位命令不能当业务成功 |
+| simulation | B1 / C1 | engine/degradation/noise/faults，[#15](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/15)、[#27](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/27)、[#42](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/42)、[#47](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/47) | 仿真只产测量/真值，不计算健康分、不读取 SQLite |
+| schema / serialization / producer | C4 | [#29](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29)、[#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)、[#43](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/43)、[#48](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/48) | Manifest/四数组/完整发布语义按契约，不自行增加字段或改计时范围 |
+| analysis | B2 | 特征、健康评分、告警，[#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54) | [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) 数值边界整改已提交 `e4814b65769fa6da45ca070daac89af02d03d0e9`，A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，C4已于[5701409871](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5701409871)复审APPROVED，仍待C2意见与集成；不提前写为主线已解决。`np.ma.MaskedArray` 掩码被静默丢弃是 `1.0` 既有行为，不属本单范围，另立 [#82](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/82) 跟踪。`load_health_rules(path)` 实际读取规则 YAML，是 interface §6 文件 I/O 分层约束的已知例外；不读取运行数据或真值 |
+| consumer / storage | C2 | 公开文件消费、窗口结果、恢复状态与事务，[#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) | [#76](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/76) 末片上界预检已集成；真实强杀与公共契约仍待收口 |
+| reporting / verify | 原分工 C5；#9/#51 当前相关实现由 B1 接手 | 候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)、[#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 主线模块仍空；#70场景类型依赖名称的判定问题已由B2提出、A复证并请求修改，待B1方案/修复；原始分片校验不等于真值匹配、检出率或完整时间轴验证 |
+| scripts / environment | C6；A 协调依赖与验收 | [#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) 修正执行位；[environment](environment.md) | setup/demo/verify/benchmark 仍是占位；[#10](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/10)、[#28](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/28) 保留 |
 
-## 4. 部署图
+## 3. 文件交换与持久化责任
+
+一次 run 对应一台设备。公开分片包含等长一维 `seq:int64`、`timestamp_ns:int64`、`vibration:float64`、`temperature:float64`，单位为 g/degC；生产原子发布 NPZ、独立真值和最终 complete Manifest。序号、时间、单位、路径、行数与摘要的具体约束见 [interface](interface.md)，本页不另定义一套公共规则。
+
+消费者从公开分片和消费规则形成窗口，调用 analysis，将窗口、健康分、告警、恢复状态及 processed 标记按分片事务提交。当前实现有 runs、processed_chunks、feature_windows、alarms、alarm_states；“实现已有表”不等于对应公共持久化字段已经完成全部评审。候选 [ADR-0005](adr/0005-analysis-persistence-contract.md) 已入库但仍为提案，接口正文 [#67](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/67) 未合并。
+
+逐片事务不承诺整个 run 出错时全回滚。特别是短尾 `error` 可能在较早分片已提交后报错；#76 已合入的实现保证的是新增末片上界预检在业务写入前拒收，不能将两类失败混为“五表始终零写入”。单片运行没有可供反推的名义分片长度，不添加新的 Manifest/config 字段。
+
+恢复从已提交 processed 标记及持久状态继续，同分片内容改变应拒绝重放。单元测试、进程强杀、断电是不同证据层级；没有实测的层级保持未验证。源数据、虚拟环境、运行库与大型报告原始目录不提交到仓库。
+
+## 4. 双系统目标部署
 
 ```mermaid
 flowchart TB
-    GH[公开 GitHub 仓库 + 固定提交/发布版本]
-    GH --> U[Ubuntu 24.04 LTS 虚拟机]
-    GH --> R[RHEL 9 虚拟机]
-    U --> UV[Conda pp03 + Python 3.12]
-    R --> RV[Conda pp03 + Python 3.12]
-    UV --> UR[本地文件 + SQLite + 日志/报告]
-    RV --> RR[本地文件 + SQLite + 日志/报告]
+    GH[公开仓库 固定集成提交]
+    GH --> U[Ubuntu 24.04 LTS]
+    GH --> R[RHEL 9]
+    U --> UV[Conda pp03 Python 3.12]
+    R --> RV[Conda pp03 Python 3.12]
+    UV --> UR[本地 NPZ SQLite 日志 报告]
+    RV --> RR[本地 NPZ SQLite 日志 报告]
 ```
 
-两台虚拟机各自从空目录克隆；不能以 CI 的两个 Python 版本替代两种 Linux。C6 先确认 RHEL 软件仓库与解释器；安装联网、运行离线。依赖当前未锁定，双环境验证后由 A 的独立依赖任务定稿。
+这是目标部署图。两个系统须各自全新克隆、安装、运行；CI 的两个 Python 版本不能替代两个 Linux。安装可联网，业务运行不依赖在线服务。C6 需确认 RHEL 软件源、解释器、离线备用包并记录真实失败；依赖锁定和两系统证据完成前不标部署通过。
 
-## 5. 评审议题与建议（不是会议纪要）
+## 5. 决策、候选与下一步
 
-| 议题 | A 的建议 | 推动负责人 / 任务 | 需要反馈者 | 当前结论与待决项 / 证据 |
-|---|---|---|---|---|
-| NPZ + Manifest | 按 ADR-0002；CSV 仅导出 | A；C4 实现 #3，C2 接入 #8 | C3/C4/C2/C5 | #29 实现评审中，单位与损坏文件等意见待修；不能把 PR 已提交写成契约已通过 |
-| SimulationChunk 位置 | 唯一定义放 common/types.py，engine 同对象重导出 | A / #17 | B1/C4/C3/C1 | #17 已立项且 B1/C4 已反馈；迁移未实施。C4 运行时 import 后续需按范围改为 common |
-| RNG 与 seed | 保留可选 rng，拟统一不消费状态；固定块与子流寻址 | A / #17 | B1/C1/C3/C4 | B1 倾向兼容参数不消费；C4 原文为可声明不消费，最终措辞须记录差别并复审 |
-| 负值 | 不静默钳位；单位固定 g/degC，非有限值拒绝 | A 协调；B1 生成、C3 配置、B2 算法 | B1/B2/C3 | B1 已实现并测试有限负值不钳位；B2/C3 的边界反馈与整体契约仍待确认 |
-| 跨片事件与告警状态 | 半开区间；真值按 event_id 去重；状态同事务 | A 协调 #6/#7/#8/#9/#11 | C1/B2/C2/C4/C5 | #27 当前实现加性叠加；短 burst 尚待修。告警状态与 C5 独立评估仍待真实反馈，不视为已冻结 |
+| 议题 | 已有实物 / 决定 | 后续责任与证据 |
+|---|---|---|
+| 共享类型、RNG、空块 | #31/#37 已合入，见 [ADR-0003](adr/0003-shared-types-and-randomness.md) | 后续变更仍按 §13；不继续等待已完成的 #17 首次迁移 |
+| 采样率和时间戳边界 | #42/#47/#50/#55 已合入 | B1/C3 保持配置与内核一致；#72 原始校验当前未核绝对时间公式 |
+| 生产失败与末片等号 | #48 修生产失败发布，#68 将上界契约改为含等号 | C2 的末片上界预检 #76 已合入；A在#67同步实际现状并重新送审，接口条件不由代码集成代替 |
+| 分析持久化 | #54/#64 实现已入主线，#61 ADR 提案已入库 | A/B2/C2/C4 等完成 #57/#67 的真实意见、兼容与接口同步 |
+| 独立验证 | #62 提交 [ADR-0006](adr/0006-independent-validation-protocol.md) | #56 的保留数据方案、规则/标准冻结、实际首次执行仍待交付；不先跑新 seed |
+| 完整生产性能 | #53 留 Windows 完整生产证据 | 双 Linux、RSS/CLI 口径与 #51 补充继续留证，不将 Windows 结果升级为最终验收 |
 
-已收到 [C4 2026-10-18 的逐项意见](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/17#issuecomment-6247508474)及 [B1 同日完整回复](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/17#issuecomment-6247619901)。这是线上反馈，未虚构会议或全员批准；本表负责人负责推动闭环，不替尚未反馈者签字。#17 定稿及迁移后继续回填结论，Issue #2 尚未完成。ADR-0001 由 PR #15 占用，本 Issue 使用 0002–0004 避免编号冲突。
-
-## 6. 集成次序
-
-先确认共享对象与小 fixture，然后 #3/#4 配置和序列化、#5 仿真；#11 先跑无故障生产再接 #6；#7 算法和 #8 消费接成闭环；最后 #9 验证/报告和 #10 双系统部署。各模块可以先用独立手算样例开发，不能用临时假成功结果替代最终验收。
+集成顺序为：收敛候选及真实 Review → 按 §13 同步受影响接口 → 接 CLI/报告与脚本 → 固定集成版本 → 双 Linux 兼容、故障恢复与验收证据。可并行准备文档和测试方案，不能用临时成功结果、合并 ADR 或文档状态更新替代这些门禁。
