@@ -1,6 +1,6 @@
 # G15 软件需求与验收追踪
 
-> Issue [#2](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/2)；负责人 A；状态核对日期：2026-10-28。实现快照为 main `75b119454a1ac075620bdcc74826730fa7b4ac02`。本次更新追踪关系，不改变验收标准、公共接口、规则或 seed，不关闭接口评审任务。
+> Issue [#2](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/2)；负责人 A；状态核对日期：2026-10-30。实现快照为 main `b3daf15ee8d53d7515f32b13b57de149f6767561`。本次更新追踪关系，不改变验收标准、公共接口、规则或 seed，不关闭接口评审任务。
 
 ## 1. 来源、范围与判定方法
 
@@ -19,7 +19,7 @@
 | R03 | 测试者能按配置、seed、源码和依赖版本复现测量 | 仿真确定性及噪声黄金值 [#15](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/15)、[#33](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/33)；共享类型/RNG [#31](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/31) | A/C6 的依赖锁定 [#28](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/28) 与跨环境复现；run_id/报告时间不作为测量数组相等条件 |
 | R04 | 评审者可核对完整 1,000,000 点生产严格小于 60 秒 | 真实生产入口及 Windows 三次原始证据 [#53](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/53)、[ADR-0001](adr/0001-simulation-model-and-determinism.md) | C6 执行双 Linux 各三次并补进程外内存与计时范围证据，B1（承接原 C5）汇总；不重列已交 Windows 证据；[#51](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/51) 的口径补充仍 open |
 | R05 | 下游在独立进程读公开文件，不依赖仿真内存状态 | 序列化 [#29](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29)、生产 [#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)、消费 [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64)；`test_serialization.py`/`test_consumer.py` | C3 的消费 CLI [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71) 仍为候选；simulate 与 consume 分进程命令须在集成后留证 |
-| R06 | 维护人员看到特征、0–100 健康分与可解释告警 | 分析 [#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54)、消费/SQLite [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64)；`test_features.py`、`test_health.py`、`test_alarms.py` | B2 的数值边界修复 [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) 已提交整改候选 `e4814b65769fa6da45ca070daac89af02d03d0e9`，A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，仍待 C4/C2 相关审查与集成；契约 [#57](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/57) 与报告展示待闭环 |
+| R06 | 维护人员看到特征、0–100 健康分与可解释告警 | 分析 [#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54)、消费/SQLite [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64)；`test_features.py`、`test_health.py`、`test_alarms.py` | B2 的数值边界修复 [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) 已提交整改候选 `e4814b65769fa6da45ca070daac89af02d03d0e9`，A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，C4已于[5701409871](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5701409871)复审APPROVED，仍待C2相关审查与集成；契约 [#57](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/57) 与报告展示待闭环 |
 | R07 | 评审者能独立核对受控事件检出、漏报、误报和延迟 | 验收规范与 [ADR-0006](adr/0006-independent-validation-protocol.md) 已有审阅方案；主线 reporting 仍为空模块 | 验证/报告候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70) 未合入；[#56](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56) 的独立数据方案/规则冻结与正式执行未完成 |
 | R08 | 项目负责人获取可追溯 JSON/Markdown 闭环报告 | 主线已有 Manifest 和 SQLite 上游；`docs/test_report.md` 仍占位 | 当前 #9 报告实现由 B1 接手，候选为 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)；集成后由相关实现/验证角色留版本、点数、耗时及错误证据 |
 | R09 | 运维人员重复消费或中断重启后不重不漏 | [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) 提供消费、存储、状态恢复与幂等单测；[ADR-0005](adr/0005-analysis-persistence-contract.md) 记录契约提案 | C2/C6/C5 补真实 Linux `kill -9` 与不中断对照；不能把单元回滚当进程强杀或断电测试 |
@@ -40,17 +40,18 @@
 | N07 | 至少 15 单测、20 个可执行用例、3 类故障注入证据 | 测试存在及数量不替代执行结果；三类为业务故障、文件损坏、Linux 强杀恢复，不能用三种波形替代三类可靠性证据 |
 | N08 | Ubuntu 24.04 LTS 与 RHEL 9 同一集成提交分别安装运行留证 | CI 的 Python 3.11/3.12 矩阵不等于两种 Linux；当前不声明此项已通过 |
 
-旧文中 main `2c14759` 的“收集 88 个用例”只适用于早期快照，不作为当前统计。本次不引入新的通过总数；每次结果须绑定自己的源码 SHA、环境、命令、退出码与跳过原因。A 的历史实测归档见 [#75](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/75)、[#78](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/78)，两者在本快照仍待审合入，且不是正式验收报告。
+旧文中 main `2c14759` 的“收集 88 个用例”只适用于早期快照，不作为当前统计。本次不引入新的通过总数；每次结果须绑定自己的源码 SHA、环境、命令、退出码与跳过原因。A 的历史实测归档见 [#75](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/75)、[#78](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/78)，两者已分别经B1/C4人工审阅合入（#75：`5e98a68aa857241d36211a288d6fc804b8331ffb`；#78：`93fcf287c90750dc8331bee55245ab63bfc1d156`），是历史归档而非正式验收报告。
 
 ## 4. 未合入候选与变更控制
 
 | 候选 | 已交付的对象 | 保留的条件 |
 |---|---|---|
 | [#67](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/67) | 持久化、校验分层与 CLI 接线的接口正文 | 成员实际审阅与 §13 兼容证据；本页不提前冻结候选 |
-| [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70) | 独立验证器与闭环报告 | B2提出场景类型依赖名称的风险，A独立复证并请求修改；B1须提交判据来源/未知类型方案及回归，其他集成与独立验收条件保留 |
+| [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70) | 独立验证器与闭环报告 | B2提出场景类型依赖名称的风险，A独立复证并请求修改；A已裁定采用受审清单精确id/未知不可验证方案C，等B1按裁定提交新head与回归，其他集成与独立验收条件保留 |
 | [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71) | consume CLI 接线 | C2 对公开签名/异常集合的本人确认等门禁 |
-| [#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 原始分片独立校验 | R5 已获 A 与 B2 本人复审 APPROVED（B2：5684239091）；C4/C3 与相关接口条件仍保留；七项检查不核绝对时间公式 |
-| [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) | 特征数值稳定性修复 | `e4814b65769fa6da45ca070daac89af02d03d0e9` 已提交类型、整数精度、FEATURES_VERSION 1.1、大端字节序与兼容说明整改；A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，仍待 C4/C2 意见；未合入不当作主线已解决。掩码静默丢弃属 `1.0` 既有行为，另立 [#82](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/82) |
-| [#76](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/76) | 多片末片上界预检 | 评审/集成前置；当前主线尚无此预检，不用文档更新替代代码合入 |
+| [#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 原始分片独立校验 | R5 已获 A 与 B2 本人复审 APPROVED（B2：5684239091）；C4已COMMENTED三块通过但正文范围/历史数字待作者补，C3与相关接口条件仍保留；七项检查不核绝对时间公式 |
+| [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) | 特征数值稳定性修复 | `e4814b65769fa6da45ca070daac89af02d03d0e9` 已提交类型、整数精度、FEATURES_VERSION 1.1、大端字节序与兼容说明整改；A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，C4已于[5701409871](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5701409871)复审APPROVED，仍待C2意见；未合入不当作主线已解决。部分掩码与全掩码float静默丢弃属 `1.0` 既有行为；全掩码整数在1.1出现MaskError翻转，统一跟踪于 [#82](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/82) |
+
+#76 多片末片上界预检已获A/B1/C4固定head审阅并合入主线`b3daf15ee8d53d7515f32b13b57de149f6767561`；超界在业务写入前拒收、等长允许，单片不反推。#67接口现状同步仍须审查，不把代码集成当作接口冻结。
 
 公共接口按 [interface §13](interface.md#13-接口变更流程) 处理；最终成绩按 [acceptance](acceptance.md) 执行。A 汇总实际意见和缺口，模块负责人补实物，不能互相代签。#17 的共享类型迁移已经由 #31 合入，不能继续列为未实施；#2/#57 仍保留当前持久化等接口收口任务。
