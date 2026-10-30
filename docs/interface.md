@@ -268,6 +268,16 @@ Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留�
 
 `reports/summary.json` 最少包括：`run_id`、`schema_version`、`scoring_version`、`total_points`（采样次数）、`scalar_value_count`、`processed_points`、`rejected_points`、`feature_windows`、`alarm_count`、`health_score_min/max`、`elapsed_seconds`、`fault_events`、`detected_events`、`false_alarm_count`、`detection_rate`、`errors`。`reports/summary.md` 要有相同口径及运行环境。未知指标用 `null`，不得捏造 `0` 或 `100%`。
 
+上面的清单是「最少包括」，不是全部。判定层另有固定字段，一并属于 `reports/summary.json` 的公开结构：`scenario_kind`、`scenario_kind_source`、`scenario_kind_scope`、`verifiable`、`passed`、`verdict_reasons`、`detection_lag_windows`、`detection_lag_source`。这些是报告层字段，不是 §5 的输入契约，增加它们不构成公共输入字段变更。
+
+三条约束写死在这里：
+
+1. `scenario_kind` 只能来自证据。run 目录的 `private_truth/faults.json` 至少有 1 个注入事件时取 `fault`，来源记 `fault_events`；没有事件时只按 `docs/acceptance.md` §3 受审验收配置的**精确 id** 匹配（`acceptance_healthy_*` → `normal`，`acceptance_degradation_*` → `degradation`），来源记 `acceptance_manifest`。两条都不命中时 `scenario_kind` 必须是 `null`，不得按 id 子串、前缀或「没有事件就算正常」之类的默认值推断场景类型。
+2. `scenario_kind = null` ⇒ `verifiable = false` ⇒ `passed = null`，并在 `verdict_reasons` 里写明无法确定场景类型的原因。反过来，`passed` 只有在 `verifiable = true` 时才出现布尔值。
+3. `detection_lag_windows` 报本次匹配实际使用的时延窗口数，`detection_lag_source` 报它的取值出处（当前为 `metrics.MAX_DETECTION_LAG_WINDOWS_DEFAULT`）。报告不得只写数字而不交代来源。
+
+字段是新增的，但 `report_schema_version` 保持 `"1.0"` 不升版：既有消费方按「未知键忽略」读报告，不会因为多出这几个键而失败；等 §5.4 的键集本身发生破坏性调整时再升版。
+
 ## 6. Python 模块公开接口契约
 
 接口以函数签名与行为约定为准。实现可用 `dataclass`/`TypedDict` 描述类型；下面是约定接口，不代表代码已经存在。
