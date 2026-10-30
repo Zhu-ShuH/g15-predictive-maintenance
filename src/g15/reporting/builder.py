@@ -24,6 +24,7 @@ from typing import Any, Mapping, Sequence
 
 from g15.pipeline.consumer import ConsumptionError, load_manifest_from_run_dir
 from g15.reporting.metrics import (
+    MAX_DETECTION_LAG_WINDOWS_DEFAULT,
     SCENARIO_DEGRADATION,
     SCENARIO_FAULT,
     SCENARIO_NORMAL,
@@ -36,7 +37,13 @@ from g15.reporting.metrics import (
     match_alarms,
 )
 
-__all__ = ["REPORT_DIRECTORY", "ReportError", "build_report", "build_report_data"]
+__all__ = [
+    "ACCEPTANCE_SCENARIO_KINDS",
+    "REPORT_DIRECTORY",
+    "ReportError",
+    "build_report",
+    "build_report_data",
+]
 
 #: Directory holding the two report files (``docs/interface.md`` section 11).
 REPORT_DIRECTORY: str = "reports"
@@ -504,26 +511,65 @@ def _gather(run_dir: Path, database_path: Path) -> _RunFacts:
     )
 
 
-def _scenario_kind(scenario_id: str, has_events: bool) -> str:
-    """Classify a run into one of the three scenario kinds.
+#: Scenario kinds of the acceptance profiles of `docs/acceptance.md` section 3
+#: ("固定用例轮廓" and the pass-condition table under it).  Only an exact id on
+#: this list may be judged without an event in the truth file: the manifest has
+#: no kind field and the run log declares none, so a name that is not here
+#: cannot be classified at all.  The lookup is exact on purpose -- a substring
+#: match would read ``healthy_degradation_like`` as a degradation run.
+#:
+#: Line numbers in the document drift; the section and the ids are what the
+#: review fixed.  ``tests/unit/test_report_scenario_kinds.py`` keeps this list
+#: and the committed `configs/acceptance_*.yaml` in step in both directions.
+ACCEPTANCE_SCENARIO_KINDS: Mapping[str, str] = {
+    "acceptance_healthy_seed42": SCENARIO_NORMAL,
+    "acceptance_healthy_seed20261016": SCENARIO_NORMAL,
+    "acceptance_degradation_seed42": SCENARIO_DEGRADATION,
+    "acceptance_degradation_seed20261016": SCENARIO_DEGRADATION,
+}
 
-    The kind decides which acceptance criterion applies, so it is derived from
-    the run itself: injected events mean a fault scenario, otherwise the
-    scenario id names the profile (``acceptance_degradation_*`` is a
-    degradation run, everything else without events is a normal run).
+#: Report value of ``scenario_kind_source`` when the truth file decided it.
+KIND_SOURCE_FAULT_EVENTS: str = "fault_events"
+
+#: Report value of ``scenario_kind_source`` when the reviewed list decided it.
+KIND_SOURCE_ACCEPTANCE_LIST: str = "acceptance_manifest"
+
+#: Report value of ``scenario_kind_scope`` for the truth-file branch.
+KIND_SCOPE_FAULT_EVENTS: str = (
+    "private_truth/faults.json carries at least one injected event"
+)
+
+#: Report value of ``scenario_kind_scope`` for the reviewed-list branch.
+KIND_SCOPE_ACCEPTANCE_LIST: str = (
+    "docs/acceptance.md section 3 acceptance profiles, exact id match"
+)
+
+
+def _scenario_kind(scenario_id: str, has_events: bool) -> str | None:
+    """Classify a run into one of the three scenario kinds, or give up.
+
+    The kind decides which acceptance criterion applies, so it may only be
+    stated when the run carries the evidence for it.  Injected events are such
+    evidence: they are read from the truth file and decide ``fault`` on their
+    own.  Without events the run directory says nothing about the kind -- the
+    manifest has no field for it and the log declares none -- so the only
+    remaining source is the reviewed list of acceptance profile ids.  A run
+    outside that list is not classifiable; answering ``normal`` for it would
+    turn "the run does not say" into "no alarm was expected", which is the
+    wrong verdict (review of Issue #9, R8).
 
     Args:
         scenario_id: Scenario identifier from the manifest.
         has_events: Whether the run's truth file carries injected events.
 
     Returns:
-        ``normal``, ``degradation`` or ``fault``.
+        ``fault`` for a run with injected events, the listed kind for a
+        reviewed acceptance profile id, or ``None`` when the run does not
+        say which kind it is.
     """
     if has_events:
         return SCENARIO_FAULT
-    if SCENARIO_DEGRADATION in scenario_id.lower():
-        return SCENARIO_DEGRADATION
-    return SCENARIO_NORMAL
+    return ACCEPTANCE_SCENARIO_KINDS.get(scenario_id)
 
 
 def _read_truth(
@@ -615,14 +661,16 @@ def _counts(result: MatchResult) -> dict[str, Any]:
 def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
     """Compute the report payload for one run.
 
-    The report never decides "passed" from incomplete evidence.  Four facts
+    The report never decides "passed" from incomplete evidence.  Five facts
     are required before any verdict is produced: the run must be consumed in
     the database it was handed, *every* manifest part must carry a matching
     ``processed_chunks`` row (a ``runs`` row alone only means the run was
     started there), the truth must be readable and belong to this run (R2),
-    and the analysis window width must come from the stored windows rather
-    than a default (R1).  When one of them is missing the payload is still
-    produced -- a diagnostic report is useful -- but ``verifiable`` is
+    the analysis window width must come from the stored windows rather than a
+    default (R1), and the scenario kind must be established from the run itself
+    or from the reviewed acceptance list (R8).  When one of them is missing the
+    payload is still produced -- a diagnostic report is useful -- but
+    ``verifiable`` is
     ``False``, ``passed`` is ``None``, and every metric that could not be
     established stays ``null``.
 
@@ -681,15 +729,37 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
 
     known_events: tuple[Any, ...] = events if events is not None else ()
     window_points = facts.window_points
+    # The lag actually handed to the matcher is the value the report states, so
+    # the two cannot drift apart when the default is retuned (review of #9, R8).
+    lag_windows = MAX_DETECTION_LAG_WINDOWS_DEFAULT
     result = (
-        match_alarms(known_events, facts.alarms, window_points=window_points)
+        match_alarms(
+            known_events,
+            facts.alarms,
+            window_points=window_points,
+            max_detection_lag_windows=lag_windows,
+        )
         if window_points is not None
         else None
     )
+    kind_source: str | None = None
+    kind_scope: str | None = None
     if events is None:
         kind = None
     else:
         kind = _scenario_kind(str(facts.manifest.scenario_id), bool(events))
+        if kind == SCENARIO_FAULT:
+            kind_source = KIND_SOURCE_FAULT_EVENTS
+            kind_scope = KIND_SCOPE_FAULT_EVENTS
+        elif kind is not None:
+            kind_source = KIND_SOURCE_ACCEPTANCE_LIST
+            kind_scope = KIND_SCOPE_ACCEPTANCE_LIST
+    if events is not None and kind is None:
+        blockers.append(
+            "无法从 run 目录确定场景类型：scenario_id "
+            f"{str(facts.manifest.scenario_id)!r} 不在受审验收清单内，且 "
+            "manifest 与日志均无类型声明；该 run 不套用任何一套场景判据"
+        )
 
     verdict: ScenarioVerdict | None = None
     if not blockers and result is not None and kind is not None:
@@ -710,6 +780,8 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
         "scenario_id": facts.manifest.scenario_id,
         "device_id": facts.manifest.device_id,
         "scenario_kind": kind,
+        "scenario_kind_source": kind_source,
+        "scenario_kind_scope": kind_scope,
         "verifiable": verdict is not None,
         "schema_version": facts.manifest.schema_version,
         "scoring_version": facts.scoring_version,
@@ -737,6 +809,8 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
         "errors": list(facts.errors),
         "passed": None if verdict is None else verdict.passed,
         "verdict_reasons": list(blockers),
+        "detection_lag_windows": lag_windows,
+        "detection_lag_source": "metrics.MAX_DETECTION_LAG_WINDOWS_DEFAULT",
         "events": [
             {
                 "event_id": match.event_id,
@@ -822,6 +896,8 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
     else:
         verdict_text = "**未通过**"
     kind_text = "null" if payload["scenario_kind"] is None else payload["scenario_kind"]
+    source_text = _format_optional(payload["scenario_kind_source"], "`{}`")
+    scope_text = _format_optional(payload["scenario_kind_scope"])
     lines = [
         f"# 验证报告：{payload['run_id']}",
         "",
@@ -832,6 +908,8 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
         "## 1. 结论",
         "",
         f"- 场景类型：`{kind_text}`",
+        f"- 类型来源：{source_text}",
+        f"- 类型适用范围：{scope_text}",
         f"- 可验证：**{'是' if payload['verifiable'] else '否'}**",
         f"- 判定：{verdict_text}",
     ]
@@ -855,6 +933,11 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
             "| 被丢弃的告警行（重复键/非法等级） | "
             f"{_format_optional(payload['dropped_alarm_count'])} |"
         ),
+        (
+            "| 匹配允许的最大检测时延（窗口数） | "
+            f"{payload['detection_lag_windows']} |"
+        ),
+        f"| 时延取值来源 | `{payload['detection_lag_source']}` |",
         "",
         "## 3. 运行口径",
         "",

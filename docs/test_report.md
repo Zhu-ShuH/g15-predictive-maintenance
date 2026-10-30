@@ -81,6 +81,22 @@
 
 退化场景各触发 1 条告警，按 §3 第 4 条**不计入**正常场景的 0 误报门槛；报告里仍单列为 `false_alarm_count=1`、`unmatched_alarm_count=1`，没有隐去。
 
+### 3.3 三场景闭环报告取证（2026-10-30，R8 改动后重跑）
+
+`docs/acceptance.md` §4 与 `docs/interface.md` §14 R08 要的是**报告产出**，不是让演示配置判「通过」。用仓库自带演示配置各跑一次真实链路（`produce_run_detailed` → `consume_run` → `build_report`），每个 run 都同时产出 `reports/summary.json` 与 `reports/summary.md`：
+
+| 配置 | `scenario_id` | 点数 | 窗口 | 告警 | `scenario_kind` | 类型来源 | `verifiable` | `passed` | `summary.md` |
+|---|---|---|---|---|---|---|---|---|---|
+| `healthy.yaml` | `healthy_001` | 200000 | 781 | 0 | `null` | `null` | `false` | `null` | 2703 B |
+| `degradation.yaml` | `degradation_001` | 1000000 | 3906 | 7 | `null` | `null` | `false` | `null` | 2735 B |
+| `sudden_fault.yaml` | `sudden_fault_001` | 1000000 | 3906 | 10 | `fault` | `fault_events` | `true` | `true` | 2773 B |
+
+三条的 `verdict_reasons` 对前两条写的是「无法从 run 目录确定场景类型：scenario_id 'healthy_001' / 'degradation_001' 不在受审验收清单内，且 manifest 与日志均无类型声明」。这是预期结果：它们不是 §3 的受审验收配置，报告层没有证据判它们「通过」，也不该拿 id 猜。`sudden_fault_001` 有注入事件，按事件证据判 `fault`，检出 1/1、误报 9、`detection_rate=1.0`。
+
+`benchmark_1m.yaml` 同样落 `scenario_kind=null`、`passed=null`（3906 窗口、9 条告警、`summary.md` 正常产出），它的验收口径是 §2 的百万点计时，不是事件检出。`bearing_001`（`default.yaml`）有 1 个注入事件，判 `fault`、检出 1/1、误报 9。
+
+演示 id **没有**写进 `ACCEPTANCE_SCENARIO_KINDS`。把「报告产出了」当成「演示配置通过验收」是两回事，混起来等于自欺。
+
 ## 4 三类独立故障注入证据（`docs/acceptance.md` §4）
 
 ### 4.1 业务故障（已完成）

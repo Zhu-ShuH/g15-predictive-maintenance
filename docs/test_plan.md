@@ -49,6 +49,17 @@
 
 三类波形 × 两个 seed = **6 个应检事件**，要求 TP=6、FN=0。N=1 连续触发窗只覆盖"能触发"，去抖/升级/恢复属 N>1 边界，本计划不冒称已覆盖。
 
+### 3.1 三场景闭环报告的取证口径
+
+`docs/acceptance.md` §4 要求「正常、退化、突发三场景生成 JSON + Markdown 闭环报告」，`docs/interface.md` §14 的 R08 同样只要「闭环联调报告」。这两条要的是**报告产出**，不是让演示配置去判「通过」。所以：
+
+- 三场景用仓库自带的演示配置 `healthy.yaml`（`healthy_001`）、`degradation.yaml`（`degradation_001`）、`sudden_fault.yaml`（`sudden_fault_001`）跑通「特征 → 健康分 → 告警 → SQLite → 报告」全链，取证物是每个 run 目录下的 `reports/summary.json` 与 `reports/summary.md`。
+- 这三个 id 不是 `docs/acceptance.md` §3 的受审验收配置，**不写进** `ACCEPTANCE_SCENARIO_KINDS`。它们的 `scenario_kind` 为 `null`、`verifiable=false`、`passed=null` 是预期结果，不是缺陷；「通过/不通过」只由 §3 那 10 个受审配置给出。
+- `benchmark_1m.yaml` 同理落 `passed=null`，它的验收口径是 §2 的百万点计时，不是事件检出。
+- 有注入事件的演示配置（`bearing_001`、`sudden_fault_001`）仍按事件证据判 `fault` 并给出结论，不因为 id 不认识就退回 `null`。
+
+把演示 id 塞进受审清单会让「报告产出了」被误读成「演示配置通过了验收」，所以明确拒绝这种做法。
+
 ## 4 匹配细则（`docs/acceptance.md` §3 的可执行化）
 
 1. 真值事件是半开区间 `[s, e)`，仅验证器读取。

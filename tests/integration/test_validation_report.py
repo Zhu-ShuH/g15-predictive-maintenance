@@ -681,3 +681,143 @@ def test_report_refuses_a_run_whose_recorded_digest_was_swapped(
         f"{payload['excluded_feature_windows']} |"
     ) in markdown
     assert "-10240" not in markdown
+
+
+def _renamed_profile(tmp_path: Path, kind: str, seed: str, new_id: str):
+    """Run a committed acceptance profile under a different ``scenario.id``.
+
+    Only the id changes: every other field, including the seed and the fault
+    schedule, stays byte-identical, so the data of the two runs is the same and
+    any change in the verdict can only come from the name (review of #9, R8).
+    """
+    source = (CONFIGS / f"acceptance_{kind}_{seed}.yaml").read_text(encoding="utf-8")
+    original_id = f"acceptance_{kind}_{seed}"
+    text = source.replace(f"id: {original_id}", f"id: {new_id}")
+    assert text != source, "the profile id must actually be renamed"
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    config_path = tmp_path / f"{new_id}.yaml"
+    config_path.write_text(text, encoding="utf-8")
+    summary = produce_run_detailed(load_config(config_path), tmp_path)
+    database = summary.run_dir / "artifacts" / "results.sqlite"
+    consume_run(summary.run_dir, database, load_consumer_config(CONSUMER_CONFIG))
+    return (summary.run_dir, database)
+
+
+@pytest.mark.parametrize(("kind", "seed"), DEGRADATION_PROFILES)
+def test_acceptance_profile_reports_where_its_kind_came_from(
+    tmp_path: Path, kind: str, seed: str
+) -> None:
+    """A reviewed acceptance id must say the reviewed list decided its kind."""
+    run_dir, database = run_profile(tmp_path, kind, seed)
+    payload = report_of(run_dir, database)
+
+    assert payload["scenario_kind"] == SCENARIO_DEGRADATION
+    assert payload["scenario_kind_source"] == "acceptance_manifest"
+    assert payload["scenario_kind_scope"] == (
+        "docs/acceptance.md section 3 acceptance profiles, exact id match"
+    )
+    assert payload["verifiable"] is True
+
+
+def test_a_renamed_degradation_run_is_unverifiable_not_merely_failed(
+    tmp_path: Path,
+) -> None:
+    """Renaming must not flip the verdict from pass to fail on the same data.
+
+    Before R8 the kind was guessed from a substring of the id, so a rename
+    turned the same run from a pass into a failure.  Now the rename makes the
+    run unclassifiable: ``kind`` is null, ``passed`` is null, and the alarm
+    count stays exactly what the data produced.
+    """
+    renamed_dir, renamed_db = _renamed_profile(
+        tmp_path / "renamed", "degradation", "seed42", "acc_deg_42"
+    )
+    payload = report_of(renamed_dir, renamed_db)
+
+    assert payload["scenario_kind"] is None
+    assert payload["scenario_kind_source"] is None
+    assert payload["scenario_kind_scope"] is None
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    assert any("受审验收清单" in reason for reason in payload["verdict_reasons"])
+    # The data is untouched: the alarm the trend raised is still counted.
+    assert payload["alarm_count"] >= 1
+    assert payload["detection_rate"] is None
+
+
+def test_a_renamed_healthy_run_is_not_promoted_to_a_degradation_pass(
+    tmp_path: Path,
+) -> None:
+    """A healthy run named like a degradation profile must not switch criteria.
+
+    ``healthy_degradation_like`` contains the degradation substring, so the old
+    substring rule judged it as a degradation run and passed it.  The verdict
+    must not exist at all, and the alarm count must stay zero.
+    """
+    run_dir, database = _renamed_profile(
+        tmp_path, "healthy", "seed42", "healthy_degradation_like"
+    )
+    payload = report_of(run_dir, database)
+
+    assert payload["scenario_kind"] != SCENARIO_DEGRADATION
+    assert payload["scenario_kind"] is None
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    assert payload["alarm_count"] == 0
+    assert any("受审验收清单" in reason for reason in payload["verdict_reasons"])
+
+
+def test_a_fault_run_keeps_its_kind_whatever_its_id_says(tmp_path: Path) -> None:
+    """An injected event is evidence, so an unlisted id is still a fault run."""
+    run_dir, database = _renamed_profile(
+        tmp_path, "spike", "seed42", "sudden_fault_001"
+    )
+    payload = report_of(run_dir, database)
+
+    assert payload["scenario_kind"] == SCENARIO_FAULT
+    assert payload["scenario_kind_source"] == "fault_events"
+    assert payload["scenario_kind_scope"] == (
+        "private_truth/faults.json carries at least one injected event"
+    )
+    assert payload["verifiable"] is True
+    assert payload["passed"] is True
+    assert payload["detected_events"] == 1
+
+
+def test_the_reported_detection_lag_is_the_one_the_matcher_used(
+    tmp_path: Path,
+) -> None:
+    """The stated lag must be the value handed to the matcher, not a literal."""
+    from g15.reporting import metrics as _metrics  # noqa: PLC0415
+
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    payload = report_of(run_dir, database)
+
+    assert (
+        payload["detection_lag_windows"] == _metrics.MAX_DETECTION_LAG_WINDOWS_DEFAULT
+    )
+    assert payload["detection_lag_source"] == (
+        "metrics.MAX_DETECTION_LAG_WINDOWS_DEFAULT"
+    )
+    # The committed spike profile injects [16384, 16640) on W=256, so the
+    # allowed window is [16384, 16640 + 2*256) -- the 2 has to be the value
+    # the matcher was given, not a number typed into the payload.
+    event = payload["events"][0]
+    assert event["allowed_start"] == 16384
+    assert event["allowed_end_exclusive"] == 16640 + 2 * 256
+
+
+def test_markdown_states_the_null_verdict_reason(tmp_path: Path) -> None:
+    """``passed=null`` must be explained in the Markdown, not printed bare."""
+    run_dir, database = _renamed_profile(
+        tmp_path, "degradation", "seed42", "acc_deg_42"
+    )
+    markdown = (build_report(run_dir, database).parent / "summary.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "- 场景类型：`null`" in markdown
+    assert "- 类型来源：null" in markdown
+    assert "- 类型适用范围：null" in markdown
+    assert "不在受审验收清单内" in markdown
+    assert "| 匹配允许的最大检测时延（窗口数） | 2 |" in markdown
