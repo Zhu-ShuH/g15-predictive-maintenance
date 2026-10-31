@@ -78,6 +78,7 @@
 | 集成（含匹配规则） | `tests/integration/` | `python -m pytest -q tests/integration` |
 | 故障注入 | `tests/fault_injection/` | `python -m pytest -q tests/fault_injection` |
 | 性能（opt-in） | `tests/performance/` | `python -m pytest -q tests/performance` |
+| 压力（opt-in） | `tests/integration/test_stress_repeatability.py` | `G15_RUN_STRESS=1 python -m pytest -q tests/integration/test_stress_repeatability.py` |
 | Issue 验收 | 集成 + 故障注入 | `python -m pytest -q tests/integration tests/fault_injection` |
 
 集成与故障注入用例都跑真实链路（`load_config` → `produce_run_detailed` → `consume_run` → `build_report`），不手工拼 NPZ、不 fake 任何模块，因为报告的价值就在于描述管道**实际**存了什么。
@@ -98,17 +99,35 @@
 
 用例在 `tests/integration/test_run_verifier.py`（41 个测试函数，`--collect-only` 收集 58 项；其中符号链接用例在无权限平台 skip）。端到端用例 `test_the_acceptance_run_verifies_end_to_end` 走 `load_config` → `produce_run_detailed` → `verify_run`，不手工拼产物。
 
-### 5.2 压力测试（重复执行与重放，国标「压力测试」项）
+### 5.2 压力测试（重复执行、并发与中断恢复，国标「压力测试」项）
 
-国标要求测试覆盖单元、集成、性能、压力四类。前两类见 §5，性能见 `tests/performance/`（opt-in，只登记命令不代跑），本节补**压力**。本项目的压力面不是并发连接数，而是**同一份产物被反复生产、反复消费**：分片写盘、SQLite 事务、幂等重放、告警状态机在重复执行下会不会漂移或堆积。
+国标要求测试覆盖单元、集成、性能、压力四类。前两类见 §5，性能见 `tests/performance/`（opt-in），本节补**压力**。本项目的压力面不是并发连接数，而是**同一份产物被反复生产、反复消费，以及在多进程争用与中途被杀之后还能不能收敛到同一个结果**。
 
-| 场景 | 做法 | 判据 |
+用例在 `tests/integration/test_stress_repeatability.py`（4 个测试函数），与性能测试一样 opt-in：
+
+```bash
+G15_RUN_STRESS=1 python -m pytest -q -s tests/integration/test_stress_repeatability.py
+```
+
+不设环境变量时 4 条全部 skip，默认门禁不因压力轮变慢。
+
+| 用例 | 做法 | 判据 |
 |---|---|---|
-| 重复生产 | 同一配置连续跑 N 次，每次独立 run 目录 | 每次 `run_id` 不同，点数/分片数一致，报告结论一致 |
-| 重复消费（重放） | 同一 run 反复 `consume_run` 到同一个库 | 库内行数不增长，`feature_windows`/`alarms` 计数恒定 |
-| 全链路串跑 | 生产 → 消费 → 报告 → 校验 连续 N 轮 | 每轮 `passed` 与检出率一致，无跨轮状态污染 |
+| `test_repeated_production_lands_byte_identical_shards` | 同一配置连跑 3 次，每次独立 run 目录 | 3 次的 `(part_id, rows, sha256)` 逐项相同；分片内容确定，后面的重放比较才有意义 |
+| `test_repeated_consumption_adds_no_row` | 同一 run 首轮消费后再 `consume_run` 2 次到同一个库 | 后两轮 `windows_written=0`、`alarms_written=0`、`shards_processed=0`，`shards_skipped` 等于首轮分片数，四张表行数不变 |
+| `test_racing_consumers_never_duplicate_rows` | 3 个 spawn 子进程同时消费同一 run 同一库 | 不论谁先提交，库内容必须等于单进程跑一遍的结果；成功者写入的窗口总数等于单遍总数，不出现重复分片或半写窗口 |
+| `test_abruptly_stopped_consumption_replays_to_the_same_content` | 子进程消费 `benchmark_1m`（10 分片），首个分片事务提交后 kill，再正常重放 | 停在第 1 片之后、最后一片之前（`1 <= processed_chunks < 10`）；重放后 `runs`/`processed_chunks`/`feature_windows`/`alarms` 四表全量行与未中断的对照库逐行相同 |
 
-**不覆盖**：并发写入、多进程争用同一数据库、长时间浸泡（soak）。当前没有这些用例，不得在答辩中宣称已压测。探针脚本一次性使用，未入库（仓库不存 `runs/` 与临时脚本）。
+并发用例只看**不变量**：`consume_run` 没把并发消费写成受支持的能力，所以用例不要求 3 个进程都成功，只要求失败者不留半写状态、成功者合起来正好写满一遍。实测里失败方抛 `IntegrityError`（唯一键冲突）或 `DatabaseError`（SQLite 锁），是拒绝而不是脏写。
+
+被 kill 的子进程会留下未回滚的 WAL，紧接着 `connect` 可能报 `disk I/O error`。这是 SQLite 的恢复窗口，不是消费者缺陷，所以用例读取前用 `_retry_while_recovering` 重试到 60 s 超时为止，超时才判失败。
+
+**不覆盖**：
+
+- **Linux `kill -9`**：Windows 上 `Process.kill()` 是 `TerminateProcess`，没有 POSIX 信号语义。本节的中断恢复只是同属性的补充证据，`docs/acceptance.md` §4 要求的 `kill -9` 仍归 `tests/fault_injection/test_pipeline_faults.py` 并在 Linux 上跑（Issue #10）。
+- **长时间浸泡（soak）**：没有小时级连续运行用例。
+- **峰值 RSS 与 CLI 总墙钟**：分别归 C6 的进程外工具与 C3 的 `benchmark` 子命令，本节不测。
+- **更高并发度**：只固定 3 个消费者，没有扫并发梯度。
 
 ## 6 三类独立故障注入证据（`docs/acceptance.md` §4）
 
@@ -169,3 +188,4 @@ spike / step / burst 六个受控事件，见 §3。
 - **真实工业准确率**：本计划的"100%"只指 §3 那套预定义教学测试集上的事件召回率，不代表现场设备表现。
 - **去抖/升级/恢复（N>1）**：受控轮廓固定 N=1，不能用它冒充去抖已验证。
 - **C5 之外的模块单测**：各模块单测由各自负责人交付，本计划只统计真实跑过的总数（§5），不代写。
+- **压力测试的边界**：§5.2 的 4 条用例覆盖重复生产、重放幂等、3 进程争用、本平台中途终止后重放；没有 Linux `kill -9`（归 #10）、没有长时间浸泡、没有并发度梯度，也不把并发消费当成受支持能力。
