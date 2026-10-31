@@ -148,18 +148,50 @@
 
 9 条 skip 的构成：6 条性能 opt-in + 1 条 Linux `kill -9`（本机 Windows）+ 2 条符号链接权限用例。
 
+> 上表是 §2 那个基线 `75b11945` 上的输出，保留原样不改。`#70`/`#72` 合入后主线换了，本节新增的下表是另一轮实测，两组数字不混用。
+
+### 5.1 主线 `8eee3ca` 追加实测（#72 独立校验器，2026-10-31）
+
+`main = 8eee3ca2fbe403873d842670c8561d62ce20817e`（#70 + #72 均已合入），Windows 11 / Python 3.12.15 / NumPy 2.5.4，干净 worktree。
+
+| 命令 | 退出码 | 结果 |
+|---|---|---|
+| `pytest -q` | 0 | **667 passed, 10 skipped in 16.67s** |
+| `pytest -q tests/unit` | 0 | **541 passed, 2 skipped in 4.33s** |
+| `pytest -q tests/integration` | 0 | **117 passed, 1 skipped in 8.83s** |
+| `pytest -q tests/fault_injection` | 0 | **8 passed, 1 skipped in 3.57s** |
+| `pytest -q tests/integration tests/fault_injection`（Issue 验收） | 0 | **125 passed, 2 skipped in 10.13s** |
+| `pytest -q tests/integration/test_run_verifier.py` | 0 | **57 passed, 1 skipped in 1.81s** |
+| `black --check src tests` | 0 | **51 files would be left unchanged** |
+| `pylint src/g15 --fail-under=8.5` | 0 | **9.91/10** |
+
+10 条 skip 的构成：6 条性能 opt-in + 1 条 Linux `kill -9` + 3 条符号链接权限用例（`test_run_verifier.py`、`test_doc_references.py`、`test_serialization.py` 各一条）。
+
+**`verify_run` 真实探针**（每条都在真实产物上跑，脚本用完即删，未入库）：
+
+| 场景 | 结果 |
+|---|---|
+| `acceptance_spike_seed42` 正常 run | `passed=True`，`rows_sum=65536`、`part_count=7`、`verified_part_count=7`、`scalar_value_count=131072`、`shard_shape=6x10240+4096`、`first_seq=0`/`last_seq=65535`，耗时 **0.0116 s** |
+| 中间片翻转一个字节 | `passed=False`，`failures=["seq.cross_shard_gap","shard.hash_mismatch"]`，`verified_part_count=6/7` |
+| 删除第 3 片 | `passed=False`，`failures=["seq.cross_shard_gap","shard.missing"]` |
+| 删除 `private_truth/faults.json` 后校验 | `passed=True`，`failures=[]`——校验器不依赖真值 |
+| `timestamp_ns` 整列置 0 并重算摘要 | `passed=True`，`failures=[]`——**这就是已知缺口**，见 §7 第 7 条 |
+| `benchmark_1m` 百万点 run | `passed=True`，`rows_sum=1000000`、`part_count=10`、`scalar_value_count=2000000`、`shard_shape=9x102400+78400`；三次独立调用耗时 0.0721 / 0.0737 / 0.0710 s，中位数 **0.0721 s**、最大 **0.0737 s** |
+
+百万点那一行是 **`verify_run` 自己的耗时**，不是生产窗口，也不是 CLI 总墙钟。同一 run 的生产计时窗口是 0.160 s（本机单次，非验收口径）。CLI 总墙钟归 C3 的 `benchmark` 子命令、进程峰值 RSS 归 C6 的进程外工具，本报告不代填。
+
 ## 6 用例规模汇总（`docs/acceptance.md` §4 的 ≥15 单测 / ≥20 用例）
 
-| 目录 | 用例数 |
-|---|---|
-| `tests/unit/` | 521 |
-| `tests/integration/` | 53（其中我新增 22 条匹配规则 + 31 条端到端报告） |
-| `tests/fault_injection/` | 9（全部新增） |
-| `tests/performance/` | 6 |
-| `tests/test_package_import.py` | 1 |
-| **合计** | **590** |
+| 目录 | 基线 `75b11945` 收集数 | 主线 `8eee3ca` 收集数 |
+|---|---|---|
+| `tests/unit/` | 521 | **543** |
+| `tests/integration/` | 53（其中我新增 22 条匹配规则 + 31 条端到端报告） | **118**（`test_run_verifier.py` 58 项为 #72 新增） |
+| `tests/fault_injection/` | 9（全部新增） | **9** |
+| `tests/performance/` | 6 | **6** |
+| `tests/test_package_import.py` | 1 | **1** |
+| **合计** | **590** | **677** |
 
-单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5）。
+单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5 与 §5.1）。两列都是 `pytest --collect-only` 的收集数，不是"通过数"。
 
 ## 6.1 复审整改（A 的 R1–R7，2026-10-26）
 
@@ -185,6 +217,7 @@ A 在 `5646201287` 上给了六条 CHANGES_REQUESTED（R1–R6），第三轮 `5
 4. **真实工业准确率**：本报告的"100%"只指 §3 预定义教学测试集上的事件召回率。
 5. **去抖/升级/恢复（N>1）**：受控轮廓固定 N=1，未覆盖 N>1 边界。
 6. **规则内容指纹**：`scoring_version` 变更会被拒收，但同版本改规则内容或改尾窗策略目前不会自动检查（#57 遗留 P2，C2/A 侧收口）。
+7. **`verify_run` 不校验时间轴**：七项 checks 不含 `timestamp_ns` 的绝对时间公式（`start + seq / sample_rate`）。`timestamp_ns` 整列置 0 或倒序、摘要重算后仍 `passed=True`，已实测（§5.1）。原始分片完整性通过不等于时间轴核验，不得在答辩中说"产物全部核验通过"。
 
 ## 8 复现命令
 

@@ -82,6 +82,22 @@
 
 集成与故障注入用例都跑真实链路（`load_config` → `produce_run_detailed` → `consume_run` → `build_report`），不手工拼 NPZ、不 fake 任何模块，因为报告的价值就在于描述管道**实际**存了什么。
 
+### 5.1 生产结束后独立校验（`verify_run`，Issue #51 承接项）
+
+`docs/acceptance.md` §2 要求生产结束后单独核验一次产物：点数、dtype、连续 `seq`、SHA-256 与 `complete` 清单。入口是 `g15.reporting.verifier.verify_run(run_dir, *, expected_total_points=None) -> VerificationResult`，与消费链路完全解耦。
+
+| 项 | 口径 |
+|---|---|
+| 输入 | 只读 `run_dir`：`manifest.json` 与其列出的分片 |
+| 不读 / 不写 | 不打开 SQLite、不读 `private_truth/`、不写任何文件 |
+| 七项 checks | `manifest.complete`、`parts.contiguous`、`rows.sum`、`shard.dtype`、`shard.seq`、`shard.hash`、`seq.cross_shard` |
+| 失败分层 | 清单结构性损坏 → `VerificationError`（无法验证）；清单可读但分片内容损坏 → `passed=False`，`failures` 逐条给码，一次报全不早停 |
+| 耗时 | `VerificationResult.elapsed_seconds` 在本次调用内计时，与生产计时窗口不重叠 |
+
+**明确不覆盖**：`timestamp_ns` 的绝对时间公式（`start + seq / sample_rate`）不在七项 checks 内——整列置 0 或倒序并重算摘要后仍可能 `passed=True`。原始完整性通过不等于时间轴核验，也不等于检出率、误报或性能。
+
+用例在 `tests/integration/test_run_verifier.py`（41 个测试函数，`--collect-only` 收集 58 项；其中符号链接用例在无权限平台 skip）。端到端用例 `test_the_acceptance_run_verifies_end_to_end` 走 `load_config` → `produce_run_detailed` → `verify_run`，不手工拼产物。
+
 ## 6 三类独立故障注入证据（`docs/acceptance.md` §4）
 
 业务故障（三种波形）**不能**替代下面后两类可靠性测试。
