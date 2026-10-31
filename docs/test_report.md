@@ -180,11 +180,32 @@
 
 百万点那一行是 **`verify_run` 自己的耗时**，不是生产窗口，也不是 CLI 总墙钟。同一 run 的生产计时窗口是 0.160 s（本机单次，非验收口径）。CLI 总墙钟归 C3 的 `benchmark` 子命令、进程峰值 RSS 归 C6 的进程外工具，本报告不代填。
 
-### 5.2 压力测试实测（重复执行与重放，2026-10-31）
+### 5.2 压力测试实测（重复执行、并发与中断恢复，2026-10-31）
 
-口径见 `docs/test_plan.md` §5.2。同一台机、同一主线 `8eee3ca`，探针脚本一次性使用未入库。
+口径见 `docs/test_plan.md` §5.2。用例已入库为 `tests/integration/test_stress_repeatability.py`（4 个测试函数，`G15_RUN_STRESS=1` 才跑），不再是脚本。
 
-**A. 受控轮廓 `acceptance_spike_seed42` 连跑 10 轮**（每轮独立 run 目录 + 独立库）：
+**A. 自动化用例实跑（2026-10-31，Windows 11 / Python 3.12.15 / NumPy 2.5.4）**
+
+```bash
+G15_RUN_STRESS=1 python -m pytest -q -s tests/integration/test_stress_repeatability.py
+```
+
+连跑 4 轮，每轮 **4 passed**，无偶发失败：
+
+| 用例 | 实测 |
+|---|---|
+| `test_repeated_production_lands_byte_identical_shards` | 3 次生产的 `(part_id, rows, sha256)` 全等；3 次耗时 0.091 / 0.084 / 0.085 s（另几轮 0.092/0.093/0.080、0.095/0.083/0.086；有一轮首项 0.743 s，是冷启动抖动，只作记录不作判据） |
+| `test_repeated_consumption_adds_no_row` | 首轮写入 256 窗口 / 1 告警；后两轮 `windows_written=0`、`alarms_written=0`、`shards_processed=0`、`shards_skipped=7`，四表行数不变 |
+| `test_racing_consumers_never_duplicate_rows` | 3 个 spawn 消费者：典型结果是一个 `written/256` + 两个失败（`IntegrityError` 唯一键冲突或 `DatabaseError` 锁），也出现过两个成功（先跑完的写 256，后进来的写 0）；四轮最终库内容都等于单进程跑一遍的结果，无重复行 |
+| `test_abruptly_stopped_consumption_replays_to_the_same_content` | `benchmark_1m` 10 分片，第 1 片事务提交后 kill，停在 `processed_chunks=1/10`；重放写 3506 窗口 / 9 告警、处理 9 片跳过 1 片，最终 `runs 1 / chunks 10 / windows 3906 / alarms 9`，四表全量行与未中断对照库逐行相同 |
+
+**B. 默认门禁不受影响**：不设 `G15_RUN_STRESS` 时这 4 条全部 skip。本分支上实测 `pytest -q` = **667 passed, 14 skipped**（比主线多出的 4 条 skip 就是它们）；设了开关后全量是 **671 passed, 10 skipped**。
+
+**补充：一次性探针的历史数字（2026-10-31 早前，未入库）**
+
+下面三张表来自 PR #84 的探针，保留作对照；它们**不是**上面 4 条用例的输出，两条证据不能互相替代。
+
+**C1. 受控轮廓 `acceptance_spike_seed42` 连跑 10 轮**（每轮独立 run 目录 + 独立库）：
 
 | 阶段 | 中位数 | 最大 | 最小 |
 |---|---|---|---|
@@ -195,9 +216,9 @@
 
 10 轮全部 `passed=True`、`detection_rate=1.0`、`false_alarm_count=0`，无跨轮漂移。
 
-**B. 同一 run 连续重放 5 次到同一个库**：耗时 0.055 / 0.011 / 0.011 / 0.011 / 0.011 s（首轮建表后趋稳），`feature_windows` 恒为 **256**、`alarms` 恒为 **1**——重放幂等，行数不增长。
+**C2. 同一 run 连续重放 5 次到同一个库**：耗时 0.055 / 0.011 / 0.011 / 0.011 / 0.011 s（首轮建表后趋稳），`feature_windows` 恒为 **256**、`alarms` 恒为 **1**——重放幂等，行数不增长。
 
-**C. 百万点轮廓 `benchmark_1m` 串跑 3 轮**（生产 → 消费 → 报告 → 校验）：
+**C3. 百万点轮廓 `benchmark_1m` 串跑 3 轮**（生产 → 消费 → 报告 → 校验）：
 
 | 阶段 | 中位数 | 最大 |
 |---|---|---|
@@ -213,16 +234,16 @@
 
 ## 6 用例规模汇总（`docs/acceptance.md` §4 的 ≥15 单测 / ≥20 用例）
 
-| 目录 | 基线 `75b11945` 收集数 | 主线 `8eee3ca` 收集数 |
-|---|---|---|
-| `tests/unit/` | 521 | **543** |
-| `tests/integration/` | 53（其中我新增 22 条匹配规则 + 31 条端到端报告） | **118**（`test_run_verifier.py` 58 项为 #72 新增） |
-| `tests/fault_injection/` | 9（全部新增） | **9** |
-| `tests/performance/` | 6 | **6** |
-| `tests/test_package_import.py` | 1 | **1** |
-| **合计** | **590** | **677** |
+| 目录 | 基线 `75b11945` 收集数 | 主线 `8eee3ca` 收集数 | 本分支（含压力用例） |
+|---|---|---|---|
+| `tests/unit/` | 521 | **543** | **543** |
+| `tests/integration/` | 53（其中我新增 22 条匹配规则 + 31 条端到端报告） | **118**（`test_run_verifier.py` 58 项为 #72 新增） | **122**（`test_stress_repeatability.py` 4 条为 #51 新增） |
+| `tests/fault_injection/` | 9（全部新增） | **9** | **9** |
+| `tests/performance/` | 6 | **6** | **6** |
+| `tests/test_package_import.py` | 1 | **1** | **1** |
+| **合计** | **590** | **677** | **681** |
 
-单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5 与 §5.1）。两列都是 `pytest --collect-only` 的收集数，不是"通过数"。
+单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5 与 §5.1）。三列都是 `pytest --collect-only` 的收集数，不是"通过数"。压力用例默认 skip，所以本分支"跑过"的是 667 条，4 条压力用例要显式开 `G15_RUN_STRESS=1` 才计入。
 
 ## 6.1 复审整改（A 的 R1–R7，2026-10-26）
 
@@ -249,7 +270,7 @@ A 在 `5646201287` 上给了六条 CHANGES_REQUESTED（R1–R6），第三轮 `5
 5. **去抖/升级/恢复（N>1）**：受控轮廓固定 N=1，未覆盖 N>1 边界。
 6. **规则内容指纹**：`scoring_version` 变更会被拒收，但同版本改规则内容或改尾窗策略目前不会自动检查（#57 遗留 P2，C2/A 侧收口）。
 7. **`verify_run` 不校验时间轴**：七项 checks 不含 `timestamp_ns` 的绝对时间公式（`start + seq / sample_rate`）。`timestamp_ns` 整列置 0 或倒序、摘要重算后仍 `passed=True`，已实测（§5.1）。原始分片完整性通过不等于时间轴核验，不得在答辩中说"产物全部核验通过"。
-8. **压力测试只覆盖串行重复**：§5.2 测的是重复生产、重放幂等、串行全链路。**并发写入、多进程争用同一 SQLite、长时间浸泡均无用例**，不得称"已完成压力测试"就当成并发能力证明。
+8. **压力测试的边界**：§5.2 已覆盖重复生产、重放幂等、3 进程争用同一 SQLite、以及本平台上的中途终止后重放。仍**没有** Linux `kill -9` 用例（归 #10）、没有长时间浸泡、没有并发度梯度（只固定 3 个），也**不**把并发消费写成受支持能力——3 个消费者里通常只有 1 个成功，其余按唯一键冲突或锁超时被拒。不得拿这一节当"并发能力已验证"的证据。
 
 ## 8 复现命令
 
