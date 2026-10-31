@@ -338,7 +338,7 @@ build_report(run_dir: Path, database_path: Path) -> Path
 
 `consume_run(run_dir, database_path, config)` 返回的 `ConsumptionSummary` 包含 `run_id/device_id/windows_written/alarms_written/shards_processed/shards_skipped/windows_dropped`。`windows_dropped` 沿用既有名称，单位是被丢弃的**样本点数**，不是窗口数；改名会破坏既有调用接口，本次不改名；如需改名，按 §13 接口变更流程办理。重复消费已提交同 SHA 的片只跳过分析，不丢失已提交状态。
 
-SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。现有公开重置能力仍在 `ConsumptionRepository.reset_alarm_state`；consumer 级包装签名、审计返回与新增 CLI 子命令由 #65 另行提出，不在此臆造函数或扩大修改范围。
+SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。`consume` 薄接线已由 #71 合入主线；现有公开重置能力仍在 `ConsumptionRepository.reset_alarm_state`，consumer 级包装签名、审计返回与新增 CLI 子命令仍由 #65 后续提出，不把 `consume` 合入误写成显式重置已经交付。
 
 ## 7. 仿真模型规范
 
@@ -385,6 +385,13 @@ crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
 - `mean`：均值；`std`：标准差；`rms`：均方根；`ptp`：峰峰值；`kurtosis_excess`：超额峭度（正态基准 0）；`dominant_freq_hz`：主频（Hz）；按工作量可补 `crest_factor`、频带能量比例。
 - 零方差或零均值时，所有除法使用明确的边界处理，禁止产生 NaN/Inf 且继续入库。
 - `rfft` 单边幅值计算须正确处理 DC/Nyquist 频点（不应无条件乘 2）；主频搜索是否排除直流必须写在规则文档。
+
+**#73 拟议的 analysis `FEATURES_VERSION="1.1"` 接受域（待该候选合入后成为主线事实）**：
+
+- 采样输入只接受显式实数 dtype 白名单：`float16/float32/float64` 与 NumPy 标准有/无符号整数宽度；先把非原生字节序归一为本机字节序，因此大端和小端只改变存储编码，不改变类型判定。复数、`bool`、`datetime64`、`timedelta64`、`longdouble` 及对象等其他 dtype 明确抛 `ValueError`，不得先强转后静默丢信息。
+- 整数逐值判断能否精确表示为 `float64`；不能精确表示时抛 `ValueError` 并点名 dtype/值。`2**53` 不是一刀切上界：例如 `2**53+1` 不可精确表示而拒收，`2**53+2` 可精确表示而允许。
+- 计算二阶、四阶矩时可按 2 的幂定标以避免中间溢出/下溢；`mean/std/rms/ptp` 返回前必须全部有限，真实结果超出 `float64` 可表示范围时抛 `ValueError` 并点名字段，不用 `nan_to_num` 伪造有限值。普通幅值保持公式与舍入级等价，但不承诺跨 NumPy 版本逐位相同。
+- `numpy.ma.MaskedArray` 的掩码语义不在 #73/#66 范围；当前候选仍可能丢弃掩码，另由 #82 先按 §13 评审。不得把上述 dtype 白名单写成“已支持掩码数组”。
 
 ### 8.3 健康评分（启发式，可解释）
 
@@ -497,11 +504,11 @@ python -m g15 benchmark --config configs/benchmark_1m.yaml
 python -m g15 doctor
 ```
 
-输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上述 CLI 是待实现的接口规格，不是已经运行的命令。**
+输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上表是统一接口规格，不代表每个子命令都已实现；其中 `consume` 已由 #71 合入主线，其余命令按各自实现与验收记录判断。**
 
 ### 10.1 consume 的编排与可见性
 
-数据库路径沿用 §11 的 `run_dir/artifacts/results.sqlite`，不新增 `--database` 或生产场景输入参数。参数/消费配置错误映射 2，Manifest/分片/数据库 I/O 或兼容错误映射 3，未预期错误映射 5，正常完成与同配置幂等重放返回 0；具体异常集合由 C2/C3 对接，不能宽泛捕获后返回成功。
+数据库路径沿用 §11 的 `run_dir/artifacts/results.sqlite`，不新增 `--database` 或生产场景输入参数。参数/消费配置错误映射 2，Manifest/分片/数据库 I/O 或兼容错误映射 3，未预期错误映射 5，正常完成与同配置幂等重放返回 0；#71 当前实现已由 C2/C3 对当前 head 确认公开签名与实际异常集合适配，不能再宽泛捕获后返回成功。
 
 退出码 `4`（验收门禁未达标）供 `verify` 及约定使用该码的验收入口表达未达标结果，不用于普通 `consume`；`consume` 的失败分类为 `2`/`3`/`5`。这是返回码的职责划分，不表示当前验证器或验收脚本已实现该分支。
 
