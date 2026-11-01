@@ -62,18 +62,18 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 3. 手工创建 `~/.ssh/authorized_keys` 后需 `restorecon -R -v ~/.ssh` 修正 SELinux 标签，否则 sshd 公钥认证被拒（部署跳板机时相关）。
 4. 网络受限环境（GitHub 直连重置）：可在宿主机代理开启"允许局域网连接"后为 git 配置 `http.proxy`，或在可信网络内用 `git bundle`/受控拷贝中转；正式验收仍须按 acceptance.md §1 从公开仓库全新克隆。
 
-## 5. 双系统实测状态（Issue #10，随进展更新）
+## 5. 双系统实测状态（Issue #10，2026-11-01 双机实测）
 
-| 命令 | RHEL 9.7（2026-11-01 实测） | Ubuntu 24.04 |
+| 命令 | RHEL 9.7（实测） | Ubuntu 24.04.4（实测） |
 |---|---|---|
-| `setup.sh` | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） | **未验证**（第二虚拟机待建） |
-| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 693 passed, 6 skipped；15 配置 validate 全过） | **未验证** |
-| `verify.sh` G4 | ❌ 阻塞于 simulate（模块在途），按设计非零 | **未验证** |
-| `demo.sh` | validate ✅ → simulate 诚实失败，退出 3 | **未验证** |
-| `benchmark.sh` | 前置 ✅ → benchmark 未实现，退出 3，日志留档 | **未验证** |
-| `clean.sh` | ✅ 退出 0，clean 后 editable 安装复测无损 | **未验证** |
+| `setup.sh` | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） |
+| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 693 passed, 6 skipped；15 配置 validate 全过） | ✅ 全过（pylint 9.91/10；pytest 693 passed, 6 skipped；15 配置 validate 全过） |
+| `verify.sh` G4 | ❌ 阻塞于 simulate（模块在途），按设计非零 | ❌ 同 RHEL：阻塞于 simulate，按设计非零 |
+| `demo.sh` | validate ✅ → simulate 诚实失败，退出 3 | validate ✅ → simulate 诚实失败，退出 3 |
+| `benchmark.sh` | 前置 ✅ → benchmark 未实现，退出 3，日志留档 | 前置 ✅ → benchmark 未实现，退出 3，日志留档 |
+| `clean.sh` | ✅ 退出 0，clean 后 editable 安装复测无损 | ✅ 退出 0，clean 后 editable 安装复测无损 |
 
-Ubuntu 24.04 列在第二台虚拟机建成后以真实执行结果更新；在此之前不得声称双 Linux 验收完成（acceptance.md §1）。
+两列均为 2026-11-01 的真实执行结果（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机各自独立执行，Conda 26.9.4 / Python 3.12.16 一致）；证据日志由 C6 分别留档于两台虚拟机 `~/g15-evidence/`。**遗留说明**：部署到两台虚拟机当前经受控 bundle 中转（GitHub 直连在 C6 网络环境受限）；acceptance.md §1 要求的「从公开 GitHub 仓库现场全新克隆」演示待网络条件满足后按同脚本补充留证。simulate/report/benchmark 模块合并后，同一脚本在两系统重跑即为 G4 闭环与性能取证。
 
 ## 6. 双 Linux 验收记录模板（acceptance.md §1）
 
