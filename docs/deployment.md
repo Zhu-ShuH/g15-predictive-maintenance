@@ -79,7 +79,7 @@ Ubuntu 24.04 列在第二台虚拟机建成后以真实执行结果更新；在�
 
 每台机器留存：Git 提交 SHA、configs/health_rules 版本摘要、系统版本（`/etc/os-release`）、CPU/内存/存储（`lscpu`/`free -h`/`df -h`）、Python/NumPy/Conda 版本（`pip freeze`）、每条命令与退出码、完整日志和报告文件。建议逐条 `tee` 到 `runs/evidence/`（clean.sh 会清空，归档前先移出仓库目录）。
 
-## 7. 故障恢复演示指引（acceptance.md §4，待消费模块合并后执行）
+## 7. 故障恢复演示指引（acceptance.md §4，待可产出运行数据的仿真入口交付后执行）
 
 - SHA/文件损坏隔离：篡改某个 `runs/<id>/raw/part-*.npz` 字节后重跑消费，预期被拒收并留日志（退出 3）。
 - `kill -9` 恢复：消费进程运行中强杀后重启，预期从 `processed_chunks` 重放、结果与未中断运行一致。

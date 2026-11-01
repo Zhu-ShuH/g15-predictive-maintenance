@@ -88,7 +88,7 @@ if run_py -m g15 simulate --config configs/sudden_fault.yaml --output-root "$VER
 else
   rc=$?
   echo "❌ G4 仿真阶段未通过（退出码 $rc）；若为 CLI 报子命令未实现，则该门禁待模块合并后自动生效"
-  G4_NOTE="G4 依赖 simulate/consume/report 模块（对应在途 Issue），当前计数为未通过门禁"
+  G4_NOTE="G4 当前先依赖尚未实现的 simulate，后续还需 report；consume 已由 #71 合入，当前计数为未通过门禁"
   FAILURES=$((FAILURES+1))
 fi
 rm -rf "$VERIFY_RUNS"
