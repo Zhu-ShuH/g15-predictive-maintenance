@@ -216,11 +216,11 @@
 | 目录 | 基线 `75b11945` 收集数 | 主线 `8eee3ca` 收集数 |
 |---|---|---|
 | `tests/unit/` | 521 | **543** |
-| `tests/integration/` | 53（其中我新增 22 条匹配规则 + 31 条端到端报告） | **118**（`test_run_verifier.py` 58 项为 #72 新增） |
-| `tests/fault_injection/` | 9（全部新增） | **9** |
+| `tests/integration/` | 0 | **118**（含 #70 新增的 22 条匹配规则 + 31 条端到端报告；`test_run_verifier.py` 58 项为 #72 新增） |
+| `tests/fault_injection/` | 0 | **9**（#70 全部新增） |
 | `tests/performance/` | 6 | **6** |
 | `tests/test_package_import.py` | 1 | **1** |
-| **合计** | **590** | **677** |
+| **合计** | **528** | **677** |
 
 单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5 与 §5.1）。两列都是 `pytest --collect-only` 的收集数，不是"通过数"。
 
