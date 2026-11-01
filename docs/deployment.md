@@ -48,7 +48,7 @@ bash scripts/benchmark.sh    # 百万点基准 ×3（结果留档 runs/evidence/
 | 项 | 值 |
 |---|---|
 | 系统 | Red Hat Enterprise Linux 9.7（内核默认），x86_64 虚拟机（VMware，2 vCPU / 4 GiB / 60 GiB） |
-| 仓库提交 | main `30ad92b` + 本分支 `f0c65d4`（feat/10-deploy-scripts） |
+| 仓库提交 | main `30ad92b` + 本分支 `b2b0a70`（feat/10-deploy-scripts，实测所在树） |
 | Conda | Miniconda 26.9.4，安装于 `~/miniconda3`（用户级，未用系统包管理器） |
 | git | 2.55.0（`conda install -n base git`，系统未注册订阅、无 dnf 来源） |
 | pp03 | `conda env create -f environment.yml` 创建，Python 3.12.16 |
