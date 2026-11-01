@@ -48,7 +48,7 @@ bash scripts/benchmark.sh    # 百万点基准 ×3（结果留档 runs/evidence/
 | 项 | 值 |
 |---|---|
 | 系统 | Red Hat Enterprise Linux 9.7（内核默认），x86_64 虚拟机（VMware，2 vCPU / 4 GiB / 60 GiB） |
-| 仓库提交 | main `30ad92b` + 本分支 `b2b0a70`（feat/10-deploy-scripts，实测所在树） |
+| 仓库提交 | main `0a637fc` + 本分支 `60fc6b4`（pr86-rebased-ready，本表实测所在树） |
 | Conda | Miniconda 26.9.4，安装于 `~/miniconda3`（用户级，未用系统包管理器） |
 | git | 2.55.0（`conda install -n base git`，系统未注册订阅、无 dnf 来源） |
 | pp03 | `conda env create -f environment.yml` 创建，Python 3.12.16 |
@@ -62,18 +62,18 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 3. 手工创建 `~/.ssh/authorized_keys` 后需 `restorecon -R -v ~/.ssh` 修正 SELinux 标签，否则 sshd 公钥认证被拒（部署跳板机时相关）。
 4. 网络受限环境（GitHub 直连重置）：可在宿主机代理开启"允许局域网连接"后为 git 配置 `http.proxy`，或在可信网络内用 `git bundle`/受控拷贝中转；正式验收仍须按 acceptance.md §1 从公开仓库全新克隆。
 
-## 5. 双系统实测状态（Issue #10，2026-11-01 双机实测）
+## 5. 双系统实测状态（Issue #10，2026-11-01 双机实测，绑定 head `60fc6b4`）
 
 | 命令 | RHEL 9.7（实测） | Ubuntu 24.04.4（实测） |
 |---|---|---|
 | `setup.sh` | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） |
-| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 693 passed, 6 skipped；15 配置 validate 全过） | ✅ 全过（pylint 9.91/10；pytest 693 passed, 6 skipped；15 配置 validate 全过） |
+| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 738 passed, 6 skipped；15 配置 validate 全过） | ✅ 全过（pylint 9.91/10；pytest 738 passed, 6 skipped；15 配置 validate 全过） |
 | `verify.sh` G4 | ❌ 阻塞于 simulate（模块在途），按设计非零 | ❌ 同 RHEL：阻塞于 simulate，按设计非零 |
 | `demo.sh` | validate ✅ → simulate 诚实失败，退出 3 | validate ✅ → simulate 诚实失败，退出 3 |
 | `benchmark.sh` | 前置 ✅ → benchmark 未实现，退出 3，日志留档 | 前置 ✅ → benchmark 未实现，退出 3，日志留档 |
 | `clean.sh` | ✅ 退出 0，clean 后 editable 安装复测无损 | ✅ 退出 0，clean 后 editable 安装复测无损 |
 
-两列均为 2026-11-01 的真实执行结果（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机各自独立执行，Conda 26.9.4 / Python 3.12.16 一致）；证据日志由 C6 分别留档于两台虚拟机 `~/g15-evidence/`。**遗留说明**：部署到两台虚拟机当前经受控 bundle 中转（GitHub 直连在 C6 网络环境受限）；acceptance.md §1 要求的「从公开 GitHub 仓库现场全新克隆」演示待网络条件满足后按同脚本补充留证。simulate/report/benchmark 模块合并后，同一脚本在两系统重跑即为 G4 闭环与性能取证。
+本表所有数字在 head `60fc6b4`（main `0a637fc` + Issue #10 五提交）上实测得出，两列均为 2026-11-01 真实执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机各自独立，Conda 26.9.4 / Python 3.12.16 一致）；证据日志由 C6 分别留档于两台虚拟机 `~/g15-evidence/issue10-{rhel97,ubuntu2404}-60fc6b4-*.log`。**遗留说明**：部署到两台虚拟机当前经受控 bundle 中转（GitHub 直连在 C6 网络环境受限）；acceptance.md §1 要求的「从公开 GitHub 仓库现场全新克隆」演示待网络条件满足后按同脚本补充留证。simulate/report/benchmark 模块合并后，同一脚本在两系统重跑即为 G4 闭环与性能取证。
 
 ## 6. 双 Linux 验收记录模板（acceptance.md §1）
 
