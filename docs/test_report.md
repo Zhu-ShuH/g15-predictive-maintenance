@@ -12,7 +12,7 @@
 | 正常场景误报 | **0**（两个 seed 各 0） |
 | 退化场景判定 | **通过**（两 seed 后半段中位数均低于前半段） |
 | 三类独立故障注入 | 业务故障 ✔　文件损坏/SHA ✔　Linux `kill -9` ⏳（Windows 上 skip，需 Linux 留证） |
-| Issue 验收命令 | `pytest -q tests/integration tests/fault_injection` → **60 passed, 1 skipped，退出码 0** |
+| Issue 验收命令 | `pytest -q tests/integration tests/fault_injection` → **61 passed, 1 skipped，退出码 0** |
 | 工程门禁 | black ✔　pylint **9.91/10** ✔　全量 pytest **581 passed, 9 skipped** ✔ |
 | 双 Linux 实测 | **未做**（Issue #10 / C6），本报告数据全部来自 Windows |
 
