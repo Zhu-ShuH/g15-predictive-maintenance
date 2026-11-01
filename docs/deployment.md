@@ -67,7 +67,7 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 | 命令 | RHEL 9.7（2026-11-01 实测） | Ubuntu 24.04 |
 |---|---|---|
 | `setup.sh` | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） | **未验证**（第二虚拟机待建） |
-| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 671 passed, 6 skipped；15 配置 validate 全过） | **未验证** |
+| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 693 passed, 6 skipped；15 配置 validate 全过） | **未验证** |
 | `verify.sh` G4 | ❌ 阻塞于 simulate（模块在途），按设计非零 | **未验证** |
 | `demo.sh` | validate ✅ → simulate 诚实失败，退出 3 | **未验证** |
 | `benchmark.sh` | 前置 ✅ → benchmark 未实现，退出 3，日志留档 | **未验证** |
