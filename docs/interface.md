@@ -316,7 +316,18 @@ consume_run(run_dir: Path, database_path: Path, config: ConsumerConfig) -> Consu
 
 # reporting/builder.py
 build_report(run_dir: Path, database_path: Path) -> Path
+
+# reporting/verifier.py
+VERIFICATION_CHECKS: tuple[str, ...]
+@dataclass(frozen=True)
+class ShardCheck: ...
+@dataclass(frozen=True)
+class VerificationResult: ...
+class VerificationError(Exception): ...
+verify_run(run_dir: Path, *, expected_total_points: int | None = None) -> VerificationResult
 ```
+
+`verify_run` 只读 `run_dir` 中的 Manifest 与其声明的 NPZ，不读 SQLite 或 `private_truth/`，不写文件。七项检查为 `manifest.complete`、`parts.contiguous`、`rows.sum`、`shard.dtype`、`shard.seq`、`shard.hash`、`seq.cross_shard`。Manifest 缺失/结构非法、目录不可读或分片路径逃逸时抛 `VerificationError`；可读但内容不合格时返回 `VerificationResult(passed=False, failures=...)`，逐片结果在 `ShardCheck` 中，声明值与观测值分列。`expected_total_points` 如提供必须为正整数，非法参数抛 `ValueError`，与运行结果不符记 `rows.expected_mismatch`。只覆盖原始分片完整性，不校验 `timestamp_ns` 绝对时间公式、检出率或性能；`verify` CLI 尚未实现。
 
 `simulate_chunk` 与 `inject_faults` 的 `rng` 仅为调用契约兼容保留，接受
 `None` 或 `numpy.random.Generator`，非法类型拒绝；不得消费调用方生成器状态。
