@@ -397,9 +397,9 @@ crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
 - 零方差或零均值时，所有除法使用明确的边界处理，禁止产生 NaN/Inf 且继续入库。
 - `rfft` 单边幅值计算须正确处理 DC/Nyquist 频点（不应无条件乘 2）；主频搜索是否排除直流必须写在规则文档。
 
-**#73 拟议的 analysis `FEATURES_VERSION="1.1"` 接受域（待该候选合入后成为主线事实）**：
+**analysis `FEATURES_VERSION="1.1"` 接受域（#73 已合入主线）**：
 
-- 采样输入只接受显式实数 dtype 白名单：`float16/float32/float64` 与 NumPy 标准有/无符号整数宽度；先把非原生字节序归一为本机字节序，因此大端和小端只改变存储编码，不改变类型判定。复数、`bool`、`datetime64`、`timedelta64`、`longdouble` 及对象等其他 dtype 明确抛 `ValueError`，不得先强转后静默丢信息。
+- 采样输入只接受显式实数 dtype 白名单：`float16/float32/float64` 与 NumPy 标准有/无符号整数宽度；先把非原生字节序归一为本机字节序，因此大端和小端只改变存储编码，不改变类型判定。复数、`bool`、`datetime64`、`timedelta64` 及对象等其他 dtype 明确抛 `ValueError`，不得先强转后静默丢信息；`longdouble` 在比 `float64` 更宽的平台上同属拒收，在与 `float64` 同型的平台（如 Windows）上等价于 `float64` 而被接受。
 - 整数逐值判断能否精确表示为 `float64`；不能精确表示时抛 `ValueError` 并点名 dtype/值。`2**53` 不是一刀切上界：例如 `2**53+1` 不可精确表示而拒收，`2**53+2` 可精确表示而允许。
 - 计算二阶、四阶矩时可按 2 的幂定标以避免中间溢出/下溢；`mean/std/rms/ptp` 返回前必须全部有限，真实结果超出 `float64` 可表示范围时抛 `ValueError` 并点名字段，不用 `nan_to_num` 伪造有限值。普通幅值保持公式与舍入级等价，但不承诺跨 NumPy 版本逐位相同。
 - `numpy.ma.MaskedArray` 的掩码语义不在 #73/#66 范围；当前候选仍可能丢弃掩码，另由 #82 先按 §13 评审。不得把上述 dtype 白名单写成“已支持掩码数组”。
@@ -426,7 +426,7 @@ crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
 
 **重置 streak 不等于重新分析 run**：该动作不清除旧结果/`processed_chunks`，不更新 `runs.scoring_version`，不能作为变更规则/窗宽后“整 run 重算”的承诺。当前更换分析配置应保留原库、向新数据库消费；任何覆盖旧库或新增选择参数必须另行明确操作和审计。不得在消费失败时自动重置。
 
-C2 保证状态与窗口、告警和 `processed_chunks` 按片同事务提交，重启只采用已提交态；真实 `kill -9` 与双 Linux 恢复证据仍须另外交付，不能仅依赖进程内存或异常注入测试。
+C2 保证状态与窗口、告警和 `processed_chunks` 按片同事务提交，重启只采用已提交态；真实 `kill -9` 与双 Linux 恢复证据仍须另外交付，不能仅依赖进程内存或异常注入测试。消费层只保证自然恢复路径：`processed_chunks` 与 `alarm_states` 被人为改到互相矛盾时（例如删掉部分分片标记而保留提交锚点），消费层的锚点比对不命中，错误由 analysis 层的单调性检查拒收，报错措辞不承诺指向真正原因。
 
 ### 8.5 故障捕获率的严格口径
 
