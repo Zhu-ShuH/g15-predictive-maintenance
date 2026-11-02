@@ -174,6 +174,8 @@ spike / step / burst 六个受控事件，见 §3。
 
 该用例在 Windows 上 **skip**，理由写进用例：`kill -9` 是 POSIX 语义，Windows 没有等价物，按 §4 必须在 Linux 留证，不在 Windows 伪造。
 
+**Linux 留证现状（2026-11-02）**：C6 在被测树 main `7daa07c` 上于 Ubuntu 24.04.4 与 RHEL 9.7 各跑 `python -m pytest tests/fault_injection/test_pipeline_faults.py -q`，两次都是 **9 passed、无 skip**。本机 Windows 仍是 `8 passed, 1 skipped`（skip 的就是本条）。留证数字记在 `docs/test_report.md` §4.3。
+
 ### 6.4 真值隔离（可证伪）
 - 删除 `private_truth/faults.json` 后**消费仍然成功**（消费者不读真值），但报告必须判为**不可验证**（`verifiable=false`、`passed=null`、`detection_rate=null`），并给出"缺真值"的原因——不能把"文件没了"当成"没有事件"而判正常通过。
 - 真值未知时，**一切依赖真值的计数一律为 `null`**：`fault_events`、`detected_events`、`missed_events`、`false_alarm_count`、`redundant_alarm_count`、`unmatched_alarm_count` 全部 `null`。特别地，不得把库里的告警算成"误报"——它本来可能命中那个看不见的事件。库侧的已知事实（`alarm_count`、`dropped_alarm_count`）单独保留，仍然报出。
@@ -197,7 +199,7 @@ spike / step / burst 六个受控事件，见 §3。
 
 ## 8 明确不覆盖（不得在答辩中宣称）
 
-- **双 Linux 实测**：Ubuntu 24.04 与 RHEL 9 的全新克隆、安装、运行、`kill -9` 留证属 Issue #10（C6）。本计划所有数据均在 Windows 上取得，不能替代。
+- **双 Linux 实测**：Ubuntu 24.04 与 RHEL 9 的**公开仓库现场全新克隆**与端到端运行属 Issue #10（C6），仍未完成。`kill -9`（§6.3）与百万点基准（§5.3）已有双系统留证，但那是把同一棵树拿到 Linux 上执行，不等于现场全新克隆。本计划的检出率数据全部在 Windows 上取得。
 - **百万点 60 秒的结论**：生产基准的计时方法见 §5.3，实测数字见 `docs/test_report.md` §5.3。本计划只负责受控轮廓（65536 点）的事件检出，两者口径不能互换。
 - **真实工业准确率**：本计划的"100%"只指 §3 那套预定义教学测试集上的事件召回率，不代表现场设备表现。
 - **去抖/升级/恢复（N>1）**：受控轮廓固定 N=1，不能用它冒充去抖已验证。
