@@ -1,4 +1,4 @@
-"""Integration tests for the ``g15`` command line (Issue #65, owner C3).
+"""Integration tests for the ``g15`` command line (Issues #65 and #51, C3).
 
 Every test drives a real ``python -m g15`` subprocess against real files: a
 small run produced by the producer, a consumer configuration, and the
@@ -9,6 +9,12 @@ into C2's public consumer entry and the exit-code mapping of section 10.
 The consumer itself (``consume_run`` and the SQLite schema) belongs to C2 and
 is covered by ``tests/unit/test_consumer.py``; this file only proves that the
 CLI hands it the right inputs and reports the outcome honestly.
+
+The ``benchmark`` tests (Issue #51) additionally pin down that the production
+window and the post-production verification cost stay two separate figures:
+the CLI must never derive one from the other, and it must never present an
+in-process number as the CLI total wall clock, which section 2 of
+``docs/acceptance.md`` requires to be measured process-externally.
 """
 
 from __future__ import annotations
@@ -28,9 +34,42 @@ from g15.pipeline.producer import produce_run
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = ROOT / "configs"
 CONSUMER_CONFIG = CONFIGS / "consumer.yaml"
+BENCHMARK_CONFIG = CONFIGS / "benchmark_1m.yaml"
+
+#: A tiny scenario that keeps the benchmark tests fast.
+#:
+#: The shipped ``benchmark_1m.yaml`` is exercised once, on its own, to pin the
+#: acceptance contour; every other benchmark test uses this one.
+SMALL_BENCHMARK_CONFIG = """\
+schema_version: '1.0'
+scenario:
+  id: bench_small
+  description: 'small benchmark used by the CLI integration tests'
+  seed: 42
+  start_time_utc: '2026-10-14T00:00:00Z'
+  device_id: 'DEV-005'
+  sample_rate_hz: 100
+  total_points: 10240
+  chunk_points: 2560
+signals:
+  vibration:
+    baseline: 0.5
+    degradation_rate_per_sample: 0.000001
+    noise_std: 0.05
+    unit: 'g'
+  temperature:
+    baseline: 35.0
+    degradation_rate_per_sample: 0.000003
+    noise_std: 0.15
+    unit: 'degC'
+fault_generation:
+  mode: manual
+  stochastic_probability_per_window: 0.0
+  events: []
+"""
 
 
-def run_cli(*argv: str) -> subprocess.CompletedProcess[str]:
+def run_cli(*argv: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     """Run ``python -m g15`` in a real subprocess and capture everything."""
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src")
@@ -41,6 +80,7 @@ def run_cli(*argv: str) -> subprocess.CompletedProcess[str]:
         env=env,
         timeout=300,
         check=False,
+        cwd=cwd,
     )
 
 
@@ -63,6 +103,23 @@ def summary_field(stdout: str, field: str) -> int:
         if token.startswith(prefix):
             return int(token[len(prefix) :].rstrip(","))
     raise AssertionError(f"{field!r} missing from summary: {stdout!r}")
+
+
+def text_field(stdout: str, field: str) -> str:
+    """Read ``field=`` from the CLI's key=value block as text."""
+    prefix = f"{field}="
+    for line in stdout.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :]
+    raise AssertionError(f"{field!r} missing from stdout: {stdout!r}")
+
+
+@pytest.fixture()
+def small_benchmark_config(tmp_path: Path) -> Path:
+    """Write the tiny benchmark scenario and return its path."""
+    path = tmp_path / "bench_small.yaml"
+    path.write_text(SMALL_BENCHMARK_CONFIG, encoding="utf-8")
+    return path
 
 
 # --------------------------------------------------------------------------- #
@@ -470,6 +527,204 @@ def test_unexpected_exception_exits_five(tmp_path: Path, run_dir: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# benchmark: the separated cost figures of acceptance.md section 2 (Issue #51)
+# --------------------------------------------------------------------------- #
+
+
+def test_benchmark_help_documents_its_argument() -> None:
+    """The frozen invocation of section 10 must be discoverable."""
+    result = run_cli("benchmark", "--help")
+
+    assert result.returncode == 0
+    assert "--config" in result.stdout
+    assert "CLI total wall clock" in result.stdout
+    assert "/usr/bin/time" in result.stdout
+
+
+def test_benchmark_requires_its_config() -> None:
+    """A missing required argument is an argument error, not a crash."""
+    result = run_cli("benchmark")
+
+    assert result.returncode == 2
+    assert "required" in result.stderr
+
+
+def test_benchmark_separates_the_production_and_verification_figures(
+    small_benchmark_config: Path, tmp_path: Path
+) -> None:
+    """Figures 1 and 3 are printed apart; figure 2 is left to the caller."""
+    result = run_cli("benchmark", "--config", str(small_benchmark_config), cwd=tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+
+    window = float(text_field(result.stdout, "production_window_seconds"))
+    verification = float(text_field(result.stdout, "verification_seconds"))
+    assert window > 0.0
+    assert verification > 0.0
+
+    # Figure 2 is the CLI total wall clock, which includes interpreter startup.
+    # A process cannot observe its own startup, so the CLI must not claim it
+    # measured that figure -- and must not pass an in-process number off as it.
+    assert text_field(result.stdout, "cli_wallclock_seconds") == "unmeasured"
+
+    assert text_field(result.stdout, "status") == "complete"
+    assert text_field(result.stdout, "verification_passed") == "true"
+    assert text_field(result.stdout, "parts") == "4"
+    assert text_field(result.stdout, "total_points") == "10240"
+    assert text_field(result.stdout, "scalar_value_count") == "20480"
+
+    run_dir = Path(text_field(result.stdout, "run_dir"))
+    if not run_dir.is_absolute():
+        run_dir = tmp_path / run_dir
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "complete"
+    assert manifest["run_id"] == text_field(result.stdout, "run_id")
+
+
+def test_benchmark_matches_the_shipped_acceptance_contour(tmp_path: Path) -> None:
+    """``benchmark_1m.yaml`` must keep the 10 x (9x102400 + 78400) contour."""
+    result = run_cli("benchmark", "--config", str(BENCHMARK_CONFIG), cwd=tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert text_field(result.stdout, "parts") == "10"
+    assert text_field(result.stdout, "total_points") == "1000000"
+    assert text_field(result.stdout, "scalar_value_count") == "2000000"
+    assert text_field(result.stdout, "shard_shape") == "9x102400+78400"
+    assert text_field(result.stdout, "status") == "complete"
+    assert text_field(result.stdout, "verification_passed") == "true"
+
+
+def test_benchmark_rejects_an_invalid_config(tmp_path: Path) -> None:
+    """A bad scenario document exits 2 and names the offending field."""
+    config = tmp_path / "bad.yaml"
+    config.write_text(
+        SMALL_BENCHMARK_CONFIG + "unexpected_field: 1\n", encoding="utf-8"
+    )
+
+    result = run_cli("benchmark", "--config", str(config), cwd=tmp_path)
+
+    assert result.returncode == 2
+    assert "unexpected_field" in result.stderr
+    assert "unknown field" in result.stderr
+
+
+def test_benchmark_reports_a_missing_config(tmp_path: Path) -> None:
+    """A missing configuration file is a configuration error, not a crash."""
+    result = run_cli(
+        "benchmark", "--config", str(tmp_path / "no-such.yaml"), cwd=tmp_path
+    )
+
+    assert result.returncode == 2
+    assert "error:" in result.stderr
+    assert not (tmp_path / "runs").exists()
+
+
+def _run_injected_benchmark(
+    tmp_path: Path, config: Path, body: str
+) -> subprocess.CompletedProcess[str]:
+    """Run ``benchmark`` through a launcher that swaps ``cli.verify_run``.
+
+    The verifier is C3's dependency, not C3's code, so the only way to reach
+    its failure branches without corrupting a real run is to replace the name
+    the CLI calls.  This is still a real subprocess with a real produced run.
+    """
+    launcher = tmp_path / "launcher.py"
+    launcher.write_text(
+        "import sys\n"
+        "import g15.cli as cli\n"
+        "\n"
+        "\n" + body + "\n\nsys.exit(cli.main(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "src")
+    return subprocess.run(
+        [
+            sys.executable,
+            str(launcher),
+            "benchmark",
+            "--config",
+            str(config),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=300,
+        check=False,
+        cwd=tmp_path,
+    )
+
+
+def test_benchmark_exits_four_when_verification_fails(
+    small_benchmark_config: Path, tmp_path: Path
+) -> None:
+    """A gate that ran and failed is exit 4 -- never 0, never 5."""
+    result = _run_injected_benchmark(
+        tmp_path,
+        small_benchmark_config,
+        "class _Failed:\n"
+        "    run_id = 'injected'\n"
+        "    status = 'complete'\n"
+        "    passed = False\n"
+        "    failures = ('shard.hash_mismatch',)\n"
+        "    elapsed_seconds = 0.01\n"
+        "    shard_shape = '1x16'\n"
+        "\n"
+        "\n"
+        "cli.verify_run = lambda *_args, **_kwargs: _Failed()",
+    )
+
+    assert result.returncode == 4
+    assert "did not pass" in result.stderr
+    assert "shard.hash_mismatch" in result.stderr
+    # The figures are still printed: the operator needs to see what was
+    # produced before the gate rejected it.
+    assert "production_window_seconds=" in result.stdout
+
+
+def test_benchmark_exits_three_when_verification_cannot_run(
+    small_benchmark_config: Path, tmp_path: Path
+) -> None:
+    """A run the verifier cannot read at all is an I/O or schema failure."""
+    result = _run_injected_benchmark(
+        tmp_path,
+        small_benchmark_config,
+        "from g15.reporting.verifier import VerificationError\n"
+        "\n"
+        "\n"
+        "def _boom(*_args, **_kwargs):\n"
+        "    raise VerificationError('injected verification failure')\n"
+        "\n"
+        "\n"
+        "cli.verify_run = _boom",
+    )
+
+    assert result.returncode == 3
+    assert "cannot verify" in result.stderr
+
+
+def test_benchmark_exits_five_on_an_unexpected_error(
+    small_benchmark_config: Path, tmp_path: Path
+) -> None:
+    """Anything the mapping does not name stays an unexpected error."""
+    result = _run_injected_benchmark(
+        tmp_path,
+        small_benchmark_config,
+        "def _boom(*_args, **_kwargs):\n"
+        "    raise RuntimeError('injected fault for test')\n"
+        "\n"
+        "\n"
+        "cli.verify_run = _boom",
+    )
+
+    assert result.returncode == 5
+    assert "unexpected" in result.stderr
+    assert "RuntimeError" in result.stderr
+
+
+# --------------------------------------------------------------------------- #
 # Unimplemented subcommands stay explicitly unsuccessful
 # --------------------------------------------------------------------------- #
 
@@ -487,7 +742,6 @@ def test_unexpected_exception_exits_five(tmp_path: Path, run_dir: Path) -> None:
         ),
         ("report", "--run-dir", "runs/whatever"),
         ("verify", "--run-dir", "runs/whatever"),
-        ("benchmark", "--config", str(CONFIGS / "benchmark_1m.yaml")),
     ],
 )
 def test_unimplemented_subcommands_fail_explicitly(argv: tuple[str, ...]) -> None:
