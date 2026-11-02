@@ -1,0 +1,26 @@
+# Locked by C6 (Ran2149975600) per Issue #28.
+# Source: `pip freeze` of Conda env pp03 (Python 3.12.16) on Ubuntu 24.04.4 LTS,
+# repo tree at main 1098ae5, excluding the editable project itself.
+# Includes direct, transitive and build dependencies (setuptools, wheel) so that
+# `pip install --no-deps --no-build-isolation` of this project works in a clean env.
+astroid==4.3.4
+black==26.10.1
+click==8.5.0
+dill==0.4.1
+iniconfig==2.3.1
+isort==9.0.2
+mccabe==0.7.0
+mypy_extensions==1.1.0
+numpy==2.5.4
+packaging==26.3
+pathspec==1.1.1
+platformdirs==4.14.2
+pluggy==1.7.0
+Pygments==2.21.0
+pylint==4.1.3
+pytest==9.2.0
+pytokens==0.4.1
+PyYAML==6.0.3
+setuptools==84.2.1
+tomlkit==0.15.2
+wheel==0.48.0
