@@ -141,11 +141,11 @@
    conda activate pp03
    python --version
    python -c "import sys; print(sys.executable)"
-   python -m pip install -e . -r requirements-dev.txt
+   python -m pip install --no-deps --no-build-isolation -e . -r requirements.lock.txt
    python -c "import g15"
    ```
 
-   ✅ 成功标志：Python 为 3.12.x，解释器属于 pp03，安装和导入退出 0。当前依赖未锁版本，导入成功只证明包结构可用；脚本与闭环仍未实现。
+   ✅ 成功标志：Python 为 3.12.x，解释器属于 pp03，安装和导入退出 0。导入成功只证明包结构与当前锁定依赖可用；脚本与完整闭环仍需按对应 Issue 的实际结果判断。
 
 ## 5. 写代码与测试：只改这次获准的文件
 
@@ -309,7 +309,7 @@ git status --short --branch
 | `! [rejected] main -> main (fetch first)` | 曾试图推送主分支且远端已有新提交。**停止推 main**，保留本地改动、向 A 报告并在任务分支继续；不要强推，别用硬重置丢改动。 |
 | `remote origin already exists` | 本地已有名为 `origin` 的远端。先 `git remote -v` 看地址是否正确；正确就不要重复添加，错误先向 A 核实再修改。 |
 | CI 变红 | 在 PR 的 Checks 点红色 job → 失败 step → 日志第一处具体错误；用 §6 对应命令本地复现，记录命令、退出码、文件和行号，再修自己有权限的文件。 |
-| `pytest` 找不到 `g15` 包 | 确认位于仓库根目录、已激活步骤 4 的 pp03，执行本平台 `python -m pip install -e . -r requirements-dev.txt` 后重试；不要借改测试或私自增 `sys.path` 掩盖安装失败。 |
+| `pytest` 找不到 `g15` 包 | 确认位于仓库根目录、已激活步骤 4 的 pp03，执行本平台 `python -m pip install --no-deps --no-build-isolation -e . -r requirements.lock.txt` 后重试；不要借改测试或私自增 `sys.path` 掩盖安装失败。 |
 | Black `would reformat` | 在获准文件上使用本平台 `...python -m black <获准文件>`，检查 diff 后重跑 `--check`；无权修改的文件向负责人报告。 |
 | `bash scripts/verify.sh` 或 `python -m g15` 报“未实现” | 这是当前骨架的**预期占位失败（退出码 1）**，不能报告成验收通过；等待相应 Issue 实现。**在可执行位修复前**，一律以 `bash scripts/xxx.sh` 调用（不要用 `./scripts/xxx.sh`）；修复后两种方式均可，但文档仍以 `bash` 形式为准，跨平台更稳。 |
 
