@@ -2,3 +2,7 @@ name: pp03
 dependencies:
   - python=3.12
   - pip
+
+# The Conda environment carries only Python and pip. Python packages are installed
+# from requirements.lock.txt on Python 3.12, or requirements.lock-py311.txt for the
+# Python 3.11 compatibility lane; this file is not a complete package lock.
