@@ -397,12 +397,12 @@ crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
 - 零方差或零均值时，所有除法使用明确的边界处理，禁止产生 NaN/Inf 且继续入库。
 - `rfft` 单边幅值计算须正确处理 DC/Nyquist 频点（不应无条件乘 2）；主频搜索是否排除直流必须写在规则文档。
 
-**analysis `FEATURES_VERSION="1.1"` 接受域（#73 已合入主线）**：
+**analysis `FEATURES_VERSION="1.2"` 接受域（#73 与 #91 已合入主线）**：
 
 - 采样输入只接受显式实数 dtype 白名单：`float16/float32/float64` 与 NumPy 标准有/无符号整数宽度；先把非原生字节序归一为本机字节序，因此大端和小端只改变存储编码，不改变类型判定。复数、`bool`、`datetime64`、`timedelta64` 及对象等其他 dtype 明确抛 `ValueError`，不得先强转后静默丢信息；`longdouble` 在比 `float64` 更宽的平台上同属拒收，在与 `float64` 同型的平台（如 Windows）上等价于 `float64` 而被接受。
 - 整数逐值判断能否精确表示为 `float64`；不能精确表示时抛 `ValueError` 并点名 dtype/值。`2**53` 不是一刀切上界：例如 `2**53+1` 不可精确表示而拒收，`2**53+2` 可精确表示而允许。
 - 计算二阶、四阶矩时可按 2 的幂定标以避免中间溢出/下溢；`mean/std/rms/ptp` 返回前必须全部有限，真实结果超出 `float64` 可表示范围时抛 `ValueError` 并点名字段，不用 `nan_to_num` 伪造有限值。普通幅值保持公式与舍入级等价，但不承诺跨 NumPy 版本逐位相同。
-- `numpy.ma.MaskedArray` 的掩码语义不在 #73/#66 范围；当前候选仍可能丢弃掩码，另由 #82 先按 §13 评审。不得把上述 dtype 白名单写成“已支持掩码数组”。
+- `numpy.ma.MaskedArray` 携带任何实际掩码时，在转换或整数检查前明确抛 `ValueError` 并点名掩码样本数，不读取掩码下的值；`mask=False` 或全 `False` 掩码视为无掩码并接受，与同一普通数组结果一致。该语义已由 #82/#91 升版到 1.2；当前不引入 `compressed()` 数值语义。
 
 ### 8.3 健康评分（启发式，可解释）
 
@@ -495,7 +495,7 @@ CREATE TABLE alarm_states (
 上述五表、字段、主键和外键不因 JSON 信封新增或改变：
 
 - `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
-- 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION` 是另一个常量（当前值见该模块；#73 候选拟由 `1.0` 升为 `1.1`，未合入前不写成主线已升级）。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
+- 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION` 是另一个常量（当前主线值为 `1.2`，随算法接受域演进）。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
 - `alarms.created_at` 是消费落库 UTC RFC3339 `Z` 时间，不是数据采样时刻或真值事件时间；run/device 来源于公开 Manifest。
 - `runs.status` 镜像 Manifest 状态，不代表消费已完成；完成进度由已提交 `processed_chunks` 与 Manifest 对照。相同 run 的已记录元数据/评分版本与已有窗口宽度冲突时拒收。
 - 同片同 SHA 重放跳过分析、保留已提交状态；同 ID 异 SHA 拒收。片事务成功后才推进内存状态，失败/重启从提交态恢复，不继承未提交的计算结果。
