@@ -32,7 +32,7 @@ bash scripts/benchmark.sh    # 百万点基准 ×3（结果留档 runs/evidence/
 
 | 脚本/能力 | 状态 | 说明 |
 |---|---|---|
-| `setup.sh` | **可用（已在 RHEL 9.7 实测）** | 建环境/校验版本/装依赖/导入检查 |
+| `setup.sh` | **可用（RHEL 9.7 / Ubuntu 24.04 双机实测）** | 建环境/校验版本/装依赖/导入检查 |
 | `g15 validate` | 可用 | Issue #4 已实现 |
 | `g15 consume` | 可用 | Issue #65/#71 已合入 main（`30ad92b`） |
 | `g15 consume/benchmark` | 可用 | consume #71、benchmark #92 已合入 main |
@@ -40,7 +40,7 @@ bash scripts/benchmark.sh    # 百万点基准 ×3（结果留档 runs/evidence/
 | `verify.sh` G1–G3 | 可用 | black/pylint/pytest/validate |
 | `verify.sh` G4 | 阻塞于 simulate | consume 已可用；G4 当前先阻塞在 simulate（CLI 退出 5） |
 | `demo.sh` | 部分可用 | 推进到仿真步骤诚实失败（CLI 报子命令未实现，退出 3） |
-| `benchmark.sh` | **可用（双机实测 3/3 成功）** | 百万点 production_window ≈0.22 s（预算 60 s），10 分片 shape 9×102400+78400，verification passed |
+| `benchmark.sh` | **可用（双机实测 3/3 成功）** | 百万点 production_window 三轮 0.12–0.15 s（预算 60 s），10 分片 shape 9×102400+78400，verification passed，日志留档 runs/evidence/ |
 
 > 诚实声明：simulate/report 合并前，demo 不得宣称任何闭环结论（G4 阻塞于 simulate，退出 4 是预期行为，不是脚本缺陷）；benchmark 已随 #92 可用并完成双机取证（见 §5），但其数字仅覆盖生产基准口径，不构成检出率、误报或闭环结论。
 
@@ -71,10 +71,10 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 | `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 756 passed, 10 skipped；15 配置 validate 全过） | ✅ 全过（pylint 9.91/10；pytest 756 passed, 10 skipped；15 配置 validate 全过） |
 | `verify.sh` G4 | ❌ 阻塞于 simulate（模块在途），按设计非零 | ❌ 同 RHEL：阻塞于 simulate，按设计非零 |
 | `demo.sh` | validate ✅ → simulate 诚实失败，退出 3 | validate ✅ → simulate 诚实失败，退出 3 |
-| `benchmark.sh` | ✅ 3/3 成功，production_window 0.2211 s（预算 60 s），verification passed | ✅ 3/3 成功，production_window 0.2152 s（预算 60 s），verification passed |
+| `benchmark.sh` | ✅ 3/3 成功，production_window 0.1201/0.1262/0.1314 s（中位 0.1262，预算 60 s），verification passed | ✅ 3/3 成功，production_window 0.1279/0.1396/0.1458 s（中位 0.1396，预算 60 s），verification passed |
 | `clean.sh` | ✅ 退出 0，clean 后 editable 安装复测无损 | ✅ 退出 0，clean 后 editable 安装复测无损 |
 
-本表在 main `2054bb5`（含 #86 脚本、#90 依赖锁、#92 benchmark 实现、#85 并发用例）上实测得出，两列均为真实独立执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机，Conda 26.9.4 / Python 3.12.16 一致）；验证/演示证据日志留档 `~/g15-evidence/issue10-*-2054bb5-*.log`，基准轮次日志在 `runs/evidence/benchmark_*.log`。历史版本（2026-11-01，head `60fc6b4`，pytest 738 passed）的记录由本轮取代。**遗留说明**：部署到两台虚拟机当前经受控 bundle 中转（GitHub 直连在 C6 网络环境受限）；acceptance.md §1 要求的「从公开 GitHub 仓库现场全新克隆」演示待网络条件满足后按同脚本补充留证。simulate/report 模块合并后，同一脚本在两系统重跑即为 G4 闭环取证。
+本表在 main `2054bb5`（含 #86 脚本、#90 依赖锁、#92 benchmark 实现、#85 并发用例）上实测得出，两列均为真实独立执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机，Conda 26.9.4 / Python 3.12.16 一致）；验证/演示证据日志留档 `~/g15-evidence/issue10-*-2054bb5-*.log`，基准轮次日志留存于两机 `runs/evidence/benchmark_Linux-x86_64_*_20261102T15*.log`（三轮原始数值见上表）。历史版本（2026-11-01，head `60fc6b4`，pytest 738 passed）的记录由本轮取代。**遗留说明**：部署到两台虚拟机当前经受控 bundle 中转（GitHub 直连在 C6 网络环境受限）；acceptance.md §1 要求的「从公开 GitHub 仓库现场全新克隆」演示待网络条件满足后按同脚本补充留证。simulate/report 模块合并后，同一脚本在两系统重跑即为 G4 闭环取证。
 
 ## 6. 双 Linux 验收记录模板（acceptance.md §1）
 
