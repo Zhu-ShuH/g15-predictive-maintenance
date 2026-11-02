@@ -31,6 +31,13 @@ Contract decisions that callers must know:
   physical duration in ``[s]`` would give a different feature vector. The
   supported set is listed in :data:`REAL_SAMPLE_DTYPES` and anything else is
   rejected with its dtype named.
+* **Masked windows are refused.** A ``np.ma.MaskedArray`` window that carries
+  any masked element is rejected with ``ValueError``: the masked samples are
+  the ones the caller marked as invalid, and reading the values underneath
+  would report features of a window that was never observed. A window whose
+  mask is empty (``mask=False`` or all-``False``) carries the same signal as
+  the plain array and is accepted, giving the same numbers for the same
+  values.
 * **Integers must survive the conversion to ``float64``.** An integer window is
   converted before the moments are formed, and ``[2**64-1, 2**64-2]`` collapses
   to one ``float64`` value, so ``std`` and ``ptp`` would both be ``0.0`` for two
@@ -77,11 +84,23 @@ __all__ = [
 
 #: Version of the feature definitions in this module.
 #:
-#: ``1.1`` is ``1.0`` with a narrower accepted input domain and defined results
-#: at the extremes; the eight formulas themselves are unchanged.
+#: ``1.2`` is ``1.1`` with one more accepted input refused; the eight formulas
+#: themselves are unchanged.
 #:
 #: What moved, stated precisely because "unchanged for ordinary inputs" is easy
 #: to over-read:
+#:
+#: * masked windows are refused: a ``np.ma.MaskedArray`` that carries any masked
+#:   element raises ``ValueError`` instead of having the mask dropped and the
+#:   values underneath read as measurements. ``1.1`` accepted them silently for
+#:   ``float64`` (the masked values took part in every statistic) and raised
+#:   ``numpy.ma.MaskError`` -- which is *not* a ``ValueError`` -- for a fully
+#:   masked integer window;
+#: * a window whose mask is empty is still the same signal as the plain array
+#:   and still accepted, with the same numbers.
+#:
+#: The rest of the history is kept because the version is what makes an older
+#: stored feature vector attributable:
 #:
 #: * complex windows are rejected instead of being cast (``1.0`` silently kept
 #:   the real part and warned);
@@ -106,7 +125,7 @@ __all__ = [
 #: would add a column to ``feature_windows``, which is a schema decision still
 #: open in issue #57 -- do not assume a stored row can be traced by itself until
 #: that issue closes.
-FEATURES_VERSION: Final[str] = "1.1"
+FEATURES_VERSION: Final[str] = "1.2"
 
 #: dtypes a vibration window may carry, in the order they are documented.
 #:
@@ -240,7 +259,10 @@ def extract_features(
         vibration: One-dimensional window of vibration samples in ``g``. The
             array is not modified. Non-finite values are rejected instead of
             being silently replaced, because a silent replacement would hide an
-            upstream corruption that the shard contract already forbids.
+            upstream corruption that the shard contract already forbids. A
+            window carrying a non-empty mask is rejected as well: a masked
+            sample is not a measurement, and the values underneath the mask are
+            not the window the caller meant to pass.
         sample_rate_hz: Sampling rate of ``vibration`` in Hz.
         window_start_seq: Absolute ``seq`` of the first sample, recorded so that
             a later alarm can name the window. Optional only for callers that
@@ -254,10 +276,11 @@ def extract_features(
             **real** array, or its dtype is outside :data:`REAL_SAMPLE_DTYPES`,
             or it carries an integer sample with no exact ``float64`` value
             (not "beyond ``MAX_EXACT_INTEGER``": values such as ``2**53 + 2``
-            are accepted), or ``sample_rate_hz`` is not an integer in
-            ``1..MAX_SAMPLE_RATE_HZ``, or ``window_start_seq`` is negative, or a
-            feature of a finite window cannot be represented as a finite
-            ``float64`` (see :func:`_restore_scale`).
+            are accepted), or it carries a non-empty mask, or
+            ``sample_rate_hz`` is not an integer in ``1..MAX_SAMPLE_RATE_HZ``,
+            or ``window_start_seq`` is negative, or a feature of a finite
+            window cannot be represented as a finite ``float64`` (see
+            :func:`_restore_scale`).
     """
     samples = _as_signal(vibration)
     rate = _as_sample_rate(sample_rate_hz)
@@ -411,7 +434,8 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         ValueError: if it is not a non-empty one-dimensional finite real array
             whose dtype is in :data:`REAL_SAMPLE_DTYPES` and whose integer
             samples all have an exact ``float64`` value (not "fit
-            ``MAX_EXACT_INTEGER``": see :func:`_require_exact_integers`).
+            ``MAX_EXACT_INTEGER``": see :func:`_require_exact_integers`), or if
+            it carries a non-empty mask (see :func:`_reject_mask`).
     """
     if not isinstance(vibration, np.ndarray):
         raise ValueError(
@@ -423,6 +447,13 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         )
     if vibration.size == 0:
         raise ValueError("vibration window must not be empty")
+    _reject_mask(vibration)
+    # A window that passed the mask check carries no masked sample, so reading
+    # the values underneath is exact. Normalising to a plain ``ndarray`` here
+    # makes every check below behave identically for a masked-array input and
+    # the equivalent plain array, which is what "same signal, same numbers"
+    # means for the accepted (empty-mask) case.
+    vibration = np.asarray(vibration)
     if np.iscomplexobj(vibration):
         # ``astype(float64)`` would only warn and drop the imaginary part, so the
         # record would describe a signal nobody passed in.
@@ -449,6 +480,43 @@ def _as_signal(vibration: object) -> NDArray[np.float64]:
         index = int(np.argmax(~np.isfinite(samples)))
         raise ValueError(f"vibration is not finite at local index {index}")
     return samples
+
+
+def _reject_mask(vibration: np.ndarray) -> None:
+    """Refuse a window that carries any masked sample.
+
+    A masked element is a sample the caller marked as not observed. Reading
+    the value underneath it would report features of a window that was never
+    measured -- and the mask would be gone by the time anybody noticed. The
+    window is therefore refused instead, by name and with the count, so the
+    caller knows how many samples to fix.
+
+    A window whose mask is empty (``mask=False`` or all ``False``) is not
+    masked at all: it holds the same signal as the plain array and is
+    accepted, so this check never rejects a value a caller could have passed
+    as a plain array.
+
+    Args:
+        vibration: One-dimensional candidate window.
+
+    Raises:
+        ValueError: if the window carries at least one masked sample. The
+            message names the mask and how many samples it hides.
+    """
+    # ``getmaskarray`` is used rather than ``.mask`` because the attribute is
+    # ``nomask`` (a scalar) for a window without a mask, and because it answers
+    # the same way for a plain array and for a masked one. Its result is read
+    # only: it shares memory with the caller's mask, and the input must not be
+    # modified.
+    mask = np.ma.getmaskarray(vibration)
+    if not bool(mask.any()):
+        return
+    hidden = int(np.count_nonzero(mask))
+    raise ValueError(
+        f"vibration must not carry a mask: {hidden} of {int(vibration.size)} "
+        "samples are masked, and a masked sample is not a measurement. "
+        "Unmask or drop the masked samples before extracting features"
+    )
 
 
 def _require_exact_integers(vibration: NDArray[np.integer]) -> None:

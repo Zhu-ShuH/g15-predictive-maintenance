@@ -338,7 +338,7 @@ def test_features_version_marks_the_narrowed_input_domain() -> None:
     The eight formulas are unchanged; the accepted inputs are not, so a stored
     feature vector cannot be attributed to this module without the version.
     """
-    assert FEATURES_VERSION == "1.1"
+    assert FEATURES_VERSION == "1.2"
 
 
 def test_ordinary_windows_match_the_plain_float64_formulas() -> None:
@@ -572,3 +572,130 @@ def test_window_inside_the_rescale_range_is_not_rescaled() -> None:
     assert record.std == math.sqrt(float(np.mean(centered**2)))
     assert record.rms == math.sqrt(float(np.mean(samples**2)))
     assert record.ptp == float(samples.max() - samples.min())
+
+
+# --- Issue #82: masked windows are refused -----------------------------------
+#
+# A masked element is a sample the caller marked as *not observed*. Reading the
+# value underneath it produces features of a window that was never measured, and
+# the mask is gone by the time anybody notices, so the window is refused.
+
+
+def test_partially_masked_float_window_is_refused() -> None:
+    """A masked float window must not silently take part in the statistics.
+
+    The masked value used to reach every feature: masking ``999.0`` out of
+    ``[1.0, 999.0, 3.0, 4.0]`` still reported ``mean=251.75`` and
+    ``ptp=998.0``, i.e. the features of a window that included a sample the
+    caller had marked as missing.
+    """
+    window = np.ma.array([1.0, 999.0, 3.0, 4.0], mask=[False, True, False, False])
+
+    with pytest.raises(ValueError, match="mask"):
+        extract_features(window, 100)
+
+
+def test_fully_masked_float_window_is_refused() -> None:
+    """A fully masked float window is refused too, not just a partial one."""
+    window = np.ma.array([1.0, 2.0, 3.0, 4.0], mask=[True] * 4)
+
+    with pytest.raises(ValueError, match="mask"):
+        extract_features(window, 100)
+
+
+@pytest.mark.parametrize("dtype", ["int32", "int64"])
+def test_fully_masked_integer_window_is_refused_as_value_error(dtype: str) -> None:
+    """Issue #82: a fully masked integer window raised ``numpy.ma.MaskError``.
+
+    ``MaskError`` is **not** a ``ValueError``, so a caller writing
+    ``except ValueError`` around the public entry point did not catch it. The
+    refusal must be an ordinary ``ValueError`` and must not leak ``MaskError``.
+    """
+    window = np.ma.array([1, 2, 3, 4], mask=[True] * 4, dtype=dtype)
+
+    with pytest.raises(ValueError) as info:
+        extract_features(window, 100)
+
+    assert not isinstance(info.value, np.ma.MaskError)
+    assert "mask" in str(info.value)
+
+
+def test_masked_window_reports_how_many_samples_are_masked() -> None:
+    """The message names the mask and the count, so the caller can act on it."""
+    window = np.ma.array([1.0, 2.0, 3.0, 4.0], mask=[True, False, True, False])
+
+    with pytest.raises(ValueError) as info:
+        extract_features(window, 100)
+
+    message = str(info.value)
+    assert "mask" in message
+    assert "2" in message
+
+
+def test_window_without_a_mask_is_the_same_signal_as_the_plain_array() -> None:
+    """``mask=False`` and an all-``False`` mask carry no missing sample.
+
+    Such a window holds the same signal as the plain array, so it is accepted
+    and gives the same numbers -- refusing it would reject a value the caller
+    could have passed as a plain array in the first place.
+    """
+    values = [1.0, 2.5, -3.25, 0.0]
+    plain = np.array(values)
+
+    for window in (
+        np.ma.array(values, mask=False),
+        np.ma.array(values, mask=[False] * len(values)),
+    ):
+        record = extract_features(window, 100)
+
+        assert record.as_mapping() == extract_features(plain, 100).as_mapping()
+
+
+def test_refusing_a_masked_window_does_not_modify_the_input() -> None:
+    """Neither the data nor the mask may be touched by the refusal."""
+    window = np.ma.array([1.0, 999.0, 3.0, 4.0], mask=[False, True, False, False])
+    data_before = window.data.copy()
+    mask_before = np.ma.getmaskarray(window).copy()
+
+    with pytest.raises(ValueError, match="mask"):
+        extract_features(window, 100)
+
+    np.testing.assert_array_equal(window.data, data_before)
+    np.testing.assert_array_equal(np.ma.getmaskarray(window), mask_before)
+
+
+def test_masked_extreme_integer_window_is_refused_as_value_error() -> None:
+    """The mask is refused before the exact-integer rule gets a chance to run.
+
+    ``2**63 - 1`` has no exact ``float64`` value, so the integer check would
+    also refuse the window -- but for the wrong reason, and with a message that
+    says nothing about the mask. The mask is the more specific problem: these
+    samples are missing, not merely imprecise.
+    """
+    window = np.ma.array([2**63 - 1, 1, 2], mask=[True, False, False], dtype="int64")
+
+    with pytest.raises(ValueError) as info:
+        extract_features(window, 100)
+
+    assert not isinstance(info.value, np.ma.MaskError)
+    assert "mask" in str(info.value)
+    assert "exactly representable" not in str(info.value)
+
+
+def test_masked_window_of_an_unsupported_dtype_is_refused_as_value_error() -> None:
+    """A mask is refused even when the dtype would be refused as well.
+
+    The refusal must be an ordinary ``ValueError`` in every case: a caller
+    wrapping the public entry point in ``except ValueError`` has to catch it.
+    """
+    window = np.ma.array(np.array([1, 2], dtype=object), mask=[True, False])
+
+    with pytest.raises(ValueError) as info:
+        extract_features(window, 100)
+
+    assert not isinstance(info.value, np.ma.MaskError)
+
+
+def test_features_version_marks_the_refused_mask() -> None:
+    """``1.2`` is ``1.1`` with masked windows refused; the formulas are unchanged."""
+    assert FEATURES_VERSION == "1.2"
