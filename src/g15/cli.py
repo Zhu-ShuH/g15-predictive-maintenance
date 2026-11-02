@@ -1,19 +1,23 @@
 """Command line entry point for the G15 sandbox.
 
-``validate`` has been implemented since Issue #4 and ``consume`` since Issue
-#65; the remaining subcommands of ``docs/interface.md`` section 10 are
-registered with their frozen arguments so that ``--help`` stays honest, and
-they exit non-zero with an explicit message instead of pretending to succeed.
+``validate`` has been implemented since Issue #4, ``consume`` since Issue #65
+and ``benchmark`` since Issue #51; the remaining subcommands of
+``docs/interface.md`` section 10 are registered with their frozen arguments so
+that ``--help`` stays honest, and they exit non-zero with an explicit message
+instead of pretending to succeed.
 
 Exit codes (``docs/interface.md`` section 10):
 
 * ``0`` success;
 * ``2`` invalid arguments or invalid configuration;
 * ``3`` I/O or schema failure;
+* ``4`` an acceptance gate that actually ran did not pass;
 * ``5`` unexpected error, also used for "subcommand not implemented yet".
 
 The CLI performs argument parsing, command dispatch and exit-code mapping only;
-it contains no simulation, scoring, alarm or SQL logic.
+it contains no simulation, scoring, alarm or SQL logic.  ``benchmark`` prints
+the producer's own measurement window and the independent verifier's own
+elapsed time; it never re-derives either number from wall-clock arithmetic.
 """
 
 from __future__ import annotations
@@ -25,6 +29,9 @@ from pathlib import Path
 
 from .config import ConfigError, load_config, load_consumer_config
 from .pipeline.consumer import ConsumptionError, consume_run
+from .pipeline.producer import produce_run_detailed
+from .pipeline.schema import DataContractError
+from .reporting.verifier import VerificationError, verify_run
 from .storage.database import DatabaseError
 from .storage.repository import StorageError
 
@@ -34,11 +41,23 @@ EXIT_OK = 0
 EXIT_INVALID = 2
 #: I/O or schema failure.
 EXIT_IO = 3
+#: An acceptance gate that actually ran did not pass.
+EXIT_ACCEPTANCE = 4
 #: Unexpected error; also used by the not-yet-implemented subcommands.
 EXIT_UNEXPECTED = 5
 
 #: Location of the consumer database inside a run directory (section 11).
 DATABASE_RELATIVE_PATH = Path("artifacts") / "results.sqlite"
+
+#: Output root used by ``benchmark``.
+#:
+#: Section 10 freezes the benchmark invocation as
+#: ``python -m g15 benchmark --config configs/benchmark_1m.yaml``, so there is
+#: no ``--output-root`` option to pass.  The documented layout of section 11 is
+#: ``runs/<run_id>`` relative to the working directory, and every invocation
+#: creates a fresh ``<run_id>``, which keeps the runs independent without an
+#: extra flag (a new public option would be a section 13 change).
+BENCHMARK_OUTPUT_ROOT = Path("runs")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -86,7 +105,16 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--run-dir", required=True, help="path to runs/<run_id>")
 
     benchmark = subparsers.add_parser(
-        "benchmark", help="measure the 1M-point budget (not implemented)"
+        "benchmark",
+        help="publish one benchmark run and report the separated cost figures",
+        description=(
+            "Generate one run inside the producer's official measurement "
+            "window, then verify it independently. The production window and "
+            "the verification cost are printed as separate figures. The CLI "
+            "total wall clock is measured outside this process (for example "
+            "with /usr/bin/time -v), because a process cannot observe its own "
+            "interpreter startup; peak RSS is measured the same way."
+        ),
     )
     benchmark.add_argument("--config", required=True, help="path to benchmark_1m.yaml")
 
@@ -187,6 +215,87 @@ def _run_consume(run_dir: Path, config_path: Path) -> int:
     return EXIT_OK
 
 
+def _run_benchmark(config_path: Path) -> int:
+    """Publish one benchmark run and report the separated cost figures.
+
+    ``docs/acceptance.md`` section 2 keeps the four numbers apart, and this
+    command is the CLI half of that contract:
+
+    * the producer's own ``perf_counter`` window (figure 1) comes from
+      :class:`~g15.pipeline.producer.ProductionSummary`;
+    * the independent post-production verification (figure 3) comes from
+      :func:`~g15.reporting.verifier.verify_run`, which times itself and never
+      overlaps the production window;
+    * the CLI total wall clock (figure 2) and the peak RSS (figure 4) are
+      measured *outside* this process -- a process cannot observe its own
+      interpreter startup, so figure 2 is printed as ``unmeasured`` instead of
+      being replaced by a smaller in-process number.
+
+    Args:
+        config_path: Benchmark scenario YAML.
+
+    Returns:
+        ``0`` on success, ``2`` for an invalid configuration, ``3`` for an I/O
+        or schema failure, ``4`` when the independent verification ran and did
+        not pass, ``5`` for an unexpected error.
+    """
+    try:
+        config = load_config(config_path)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+    except OSError as exc:
+        print(f"error: cannot read {config_path}: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+
+    try:
+        summary = produce_run_detailed(config, BENCHMARK_OUTPUT_ROOT)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+    except (DataContractError, OSError) as exc:
+        print(f"error: cannot publish the benchmark run: {exc}", file=sys.stderr)
+        return EXIT_IO
+
+    try:
+        verification = verify_run(summary.run_dir)
+    except VerificationError as exc:
+        print(f"error: cannot verify {summary.run_dir}: {exc}", file=sys.stderr)
+        return EXIT_IO
+
+    print(
+        f"Benchmarked {verification.run_id}: {summary.part_count} parts, "
+        f"{summary.total_points} points, status={verification.status}, "
+        f"verification={'passed' if verification.passed else 'failed'}"
+    )
+    print(f"production_window_seconds={summary.elapsed_seconds:.4f}")
+    print(f"verification_seconds={verification.elapsed_seconds:.4f}")
+    print("cli_wallclock_seconds=unmeasured")
+    print(f"parts={summary.part_count}")
+    print(f"total_points={summary.total_points}")
+    print(f"scalar_value_count={summary.scalar_value_count}")
+    print(f"shard_shape={verification.shard_shape}")
+    print(f"status={verification.status}")
+    print(f"verification_passed={'true' if verification.passed else 'false'}")
+    print(f"run_id={verification.run_id}")
+    print(f"run_dir={summary.run_dir}")
+
+    if not verification.passed:
+        # The gate ran and failed: exit 4, never 0 and never 5.  A corrupt run
+        # must not be reported as a successful benchmark measurement.
+        print(
+            "error: independent verification of the produced run did not pass: "
+            + ", ".join(verification.failures),
+            file=sys.stderr,
+        )
+        return EXIT_ACCEPTANCE
+
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI.
 
@@ -205,6 +314,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_validate(Path(args.config))
         if args.command == "consume":
             return _run_consume(Path(args.run_dir), Path(args.config))
+        if args.command == "benchmark":
+            return _run_benchmark(Path(args.config))
     except Exception as exc:  # pylint: disable=broad-except
         # Section 10 maps an unexpected failure to 5; a traceback would only
         # help the developer, not whoever ran the command.
@@ -213,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"error: subcommand {args.command!r} is not implemented yet; "
-        "only 'validate' and 'consume' are available so far",
+        "'validate', 'consume' and 'benchmark' are available so far",
         file=sys.stderr,
     )
     return EXIT_UNEXPECTED
