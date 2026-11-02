@@ -50,7 +50,7 @@
 | [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70) | 独立验证器与闭环报告 | B2提出场景类型依赖名称的风险，A独立复证并请求修改；A已裁定采用受审清单精确id/未知不可验证方案C，等B1按裁定提交新head与回归，其他集成与独立验收条件保留 |
 | [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71) | consume CLI 接线 | C2 对公开签名/异常集合的本人确认等门禁 |
 | [#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 原始分片独立校验 | R5 已获 A 与 B2 本人复审 APPROVED（B2：5684239091）；C4已COMMENTED三块通过但正文范围/历史数字待作者补，C3与相关接口条件仍保留；七项检查不核绝对时间公式 |
-| [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) | 特征数值稳定性修复 | `e4814b65769fa6da45ca070daac89af02d03d0e9` 已提交类型、整数精度、FEATURES_VERSION 1.1、大端字节序与兼容说明整改；A已在该 head 复审APPROVED，B1 已于[5700184005](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5700184005) 复审 APPROVED，C4已于[5701409871](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73#pullrequestreview-5701409871)复审APPROVED，仍待C2意见；未合入不当作主线已解决。部分掩码与全掩码float静默丢弃属 `1.0` 既有行为；全掩码整数在1.1出现MaskError翻转，统一跟踪于 [#82](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/82) |
+| [#73](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73) | 特征数值稳定性修复 | #73 已合入 `0a637fc2`，A/B1/C4/C2 均已在 `e4814b65` 批准，FEATURES_VERSION 1.1 成为主线事实；#82 已由 #91 合入 `51cd99ad`，1.0/1.1 时期部分掩码与全掩码 float 被静默使用、全掩码整数在 1.1 泄漏 MaskError 的历史行为，已在 1.2 改为掩码非空即 `ValueError` 拒收，空掩码继续接受。性能、双 Linux 与检出率验收边界不因该合入完成 |
 
 #76 多片末片上界预检已获A/B1/C4固定head审阅并合入主线`b3daf15ee8d53d7515f32b13b57de149f6767561`；超界在业务写入前拒收、等长允许，单片不反推。#67接口现状同步仍须审查，不把代码集成当作接口冻结。
 
