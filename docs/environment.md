@@ -6,7 +6,7 @@
 
 课程指南第三章给项目课的命令是 `conda create -n pp03 python=3.12 -y`；第七章表格却写 3.10。小组统一选择前述创建命令的 3.12，不采用冲突的 3.10。指南是参考材料，其中改变 PATH、镜像、删除环境和安装其他课程包的命令不属于本项目自动执行指令。
 
-项目仅安装自身声明的依赖：运行依赖 NumPy、PyYAML，开发依赖 Black、Pylint、pytest；SQLite 使用 Python 标准库。不因课程通用清单额外引入 Pandas、Streamlit、PyTorch 或机器学习框架。
+项目仅安装自身声明的依赖：运行依赖 NumPy、PyYAML，开发依赖 Black、Pylint、pytest；SQLite 使用 Python 标准库。不因课程通用清单额外引入 Pandas、Streamlit、PyTorch 或机器学习框架。正式安装使用 `requirements.lock.txt`（Python 3.12），兼容安装使用 `requirements.lock-py311.txt`（Python 3.11）；两份清单不能混用，更新依赖需先更新对应锁并复审。
 
 ## 2. 在仓库根目录操作
 
@@ -34,11 +34,14 @@ python -c "import sys; print(sys.executable)"
 必须显示 Python 3.12.x，且解释器属于 pp03。若已有 pp03 为 3.10/3.11，先保留课程环境及依赖清单，把版本结果交 A/C6 协调迁移；不要删除、覆盖或在其中再建 .venv。安装命令仅在确认正确环境后执行：
 
 ```sh
-python -m pip install -e . -r requirements-dev.txt
+python -m pip install --no-deps --no-build-isolation -e . -r requirements.lock.txt
 python -c "import g15, numpy, yaml; print('G15 package imports OK')"
 python -m black --check src tests
 python -m pylint src/g15 --fail-under=8.5
 python -m pytest -q
+
+# Python 3.11 兼容检查改用变体锁，不换环境里的 Python 3.12：
+python -m pip install --no-deps --no-build-isolation -e . -r requirements.lock-py311.txt
 ```
 
 成功标志：各命令退出 0；这仅证明当次安装及检查成功，不能代替业务闭环和双 Linux 验收。每次新开终端先 `conda activate pp03`；PyCharm 选择现有 pp03 解释器。
@@ -48,10 +51,10 @@ python -m pytest -q
 - `setup.sh` 检查 Conda；无 Conda 时给清晰安装提示并非零退出。安装 Anaconda 不由项目脚本静默完成。
 - 不存在 pp03 时按 environment.yml 创建；存在时检查 Python 3.12，版本不符即停止并说明原因。重复运行不删除环境。
 - 脚本使用 `conda run --no-capture-output -n pp03 python ...`，避免依赖调用者已激活环境；先检查版本，再安装、导入与运行。
-- 运行阶段不访问网络或 AI API；安装阶段可联网。A/C6 在双系统验证后再提交锁定依赖及备用安装包方案，不把 environment.yml 当作完整依赖锁。
+- 运行阶段不访问网络或 AI API；安装阶段可联网。`environment.yml` 只负责 Conda 的 Python/pip，不是完整 Python 依赖锁；#90 已交付双解释器锁文件，本 PR 将它们接入实际安装路径。CI 的工作流接线需要 workflow 权限，见 PR 正文边界，不把本文档更新冒充 CI 已接线。
 - Ubuntu 24.04 LTS 与 RHEL 9 各自安装 Conda/创建环境，无需替换操作系统 Python；仍须实际记录 Conda 发行版、版本、软件来源与系统架构。
 
-本文件规定目标行为；当前 scripts 下仍是未实现占位。脚本实现、真实安装、依赖锁定和虚拟机日志由相应 Issue 继续交付。
+本文件规定目标行为；脚本实现已由 #86 合入，锁定清单已由 #90 合入，本 PR 负责把锁定清单接入文档化安装路径。双 Linux 最终验收、公开 GitHub 现场克隆、虚拟机日志与 CI 工作流接线仍由相应 Issue 继续交付。
 
 ## 4. Windows 本机验证记录（2026-10-16）
 
