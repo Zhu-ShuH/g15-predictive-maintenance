@@ -554,6 +554,26 @@ def test_sample_rate_at_the_contract_ceiling_is_accepted(tmp_path: Path) -> None
     assert validate_config(config) is None
 
 
+def test_configuration_ceiling_matches_the_kernel_ceiling() -> None:
+    """The loader and the kernel must not drift apart (Issue #58, N2).
+
+    Both layers enforce the same 1 GHz ceiling: :mod:`g15.config` rejects a
+    document above it, :mod:`g15.simulation.engine` rejects a rate whose
+    timestamps would overflow ``int64`` nanoseconds.  Two independent literals
+    would let one layer accept a document the other refuses, which is exactly
+    the inconsistency ``docs/interface.md`` section 5.1 forbids.
+
+    The equality below is the anti-drift guard; the literal is the contract
+    anchor, because equality alone still holds if both constants drift
+    together.  Both values are imported from their public re-exports, not from
+    a private module attribute.
+    """
+    from g15.simulation.engine import MAX_SAMPLE_RATE_HZ as KERNEL_CEILING
+
+    assert MAX_SAMPLE_RATE_HZ == KERNEL_CEILING
+    assert KERNEL_CEILING == 1_000_000_000
+
+
 @pytest.mark.parametrize("value", [1_000_000_001, 9_223_372_034, 10**10])
 def test_sample_rate_above_the_ceiling_is_rejected(tmp_path: Path, value: int) -> None:
     """A sub-nanosecond period overflows ``int64`` nanoseconds in the kernel.
