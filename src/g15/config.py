@@ -51,7 +51,10 @@ __all__ = [
     "validate_config",
 ]
 
-#: Only schema version accepted by this implementation (``docs/interface.md``).
+#: Only schema version accepted by this implementation (``docs/interface.md``
+#: section 4).  This is the *configuration* contract version, not the manifest
+#: one: :data:`g15.pipeline.schema.SCHEMA_VERSION` is a separate constant with a
+#: separate value, because the two documents version independently.
 SCHEMA_VERSION = "1.0"
 
 #: Fault mechanisms of ``docs/interface.md`` section 7.2.

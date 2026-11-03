@@ -608,6 +608,29 @@ def test_manifest_rejects_an_unknown_field(tmp_path: Path) -> None:
         manifest_from_dict(payload)
 
 
+def test_a_missing_schema_version_reports_the_real_key_set(tmp_path: Path) -> None:
+    """The version pre-check must not understate what is wrong with the keys.
+
+    Version is checked before the key set, so a payload without
+    ``schema_version`` takes a dedicated branch.  That branch still has to
+    report the real ``missing``/``unknown`` lists: an operator reading
+    ``missing=['schema_version'], unknown=[]`` on a payload that is also
+    missing ``run_id`` and carries an unknown key would be misled.
+    """
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    del payload["schema_version"]
+    del payload["run_id"]
+    payload["totally_unknown_key"] = 1
+
+    with pytest.raises(ManifestError, match=r"missing=\['run_id', 'schema_version'\]"):
+        manifest_from_dict(payload)
+    with pytest.raises(ManifestError, match=r"unknown=\['totally_unknown_key'\]"):
+        manifest_from_dict(payload)
+
+
 def test_manifest_rejects_a_wrong_schema_version(tmp_path: Path) -> None:
     """A version outside the read window is refused."""
     entry = write_chunk_atomic(

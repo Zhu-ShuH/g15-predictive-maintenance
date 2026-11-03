@@ -53,6 +53,10 @@ __all__ = [
 
 #: Schema version written by this implementation; bumping it is an interface
 #: change (section 13).  ``2.0`` adds the optional ``scenario_kind`` key.
+#:
+#: This is the *manifest* contract version.  :data:`g15.config.SCHEMA_VERSION`
+#: is a separate constant covering the configuration document and is still
+#: ``1.0``; the two are deliberately not the same value.
 SCHEMA_VERSION: Final[str] = "2.0"
 
 #: Manifest versions this reader accepts (``docs/interface.md`` section 5.2.1).
@@ -613,6 +617,39 @@ def _optional_scenario_kind(payload: Mapping[str, Any]) -> str | None:
     return _check_scenario_kind(payload["scenario_kind"], "manifest.scenario_kind")
 
 
+def _key_set_problem(
+    payload: Mapping[str, Any],
+    expected: frozenset[str],
+    path: str,
+    optional: frozenset[str] = frozenset(),
+) -> ManifestError | None:
+    """Return the wrong-key-set error, or ``None`` when the key set is fine.
+
+    The full ``missing``/``unknown`` sets are computed here rather than at each
+    call site, so a caller that has to check one specific key first (the
+    schema version) can still report the real key-set diagnosis instead of a
+    hand-written placeholder that understates what is wrong with the payload.
+
+    Args:
+        payload: Mapping being parsed.
+        expected: Key set that must be present.
+        path: Dotted path used in the error message.
+        optional: Keys that may be present in addition to ``expected``.
+
+    Returns:
+        The error to raise, or ``None`` when the key set is acceptable.
+    """
+    allowed = expected | optional
+    actual = set(payload)
+    missing = sorted(expected - actual)
+    unknown = sorted(actual - allowed)
+    if not missing and not unknown:
+        return None
+    return ManifestError(
+        f"{path} has the wrong key set; missing={missing}, unknown={unknown}"
+    )
+
+
 def _require_keys(
     payload: Mapping[str, Any],
     expected: frozenset[str],
@@ -635,15 +672,9 @@ def _require_keys(
     Raises:
         ManifestError: listing the missing and the unknown keys.
     """
-    allowed = expected | optional
-    actual = set(payload)
-    missing = sorted(expected - actual)
-    unknown = sorted(actual - allowed)
-    if not missing and not unknown:
-        return
-    raise ManifestError(
-        f"{path} has the wrong key set; missing={missing}, unknown={unknown}"
-    )
+    problem = _key_set_problem(payload, expected, path, optional)
+    if problem is not None:
+        raise problem
 
 
 def _require_int(payload: Mapping[str, Any], name: str, path: str) -> int:
@@ -721,8 +752,11 @@ def manifest_from_dict(payload: object) -> Manifest:
     """
     mapping = _require_mapping(payload, "manifest")
     if "schema_version" not in mapping:
-        raise ManifestError(
-            "manifest has the wrong key set; missing=['schema_version'], unknown=[]"
+        # ``schema_version`` is a required key, so this always produces an error;
+        # computing it from the real payload keeps the missing/unknown lists
+        # accurate instead of hard-coding them.
+        raise _key_set_problem(
+            mapping, _MANIFEST_KEYS, "manifest", _MANIFEST_OPTIONAL_KEYS
         )
     version = mapping["schema_version"]
     if version not in READABLE_SCHEMA_VERSIONS:
