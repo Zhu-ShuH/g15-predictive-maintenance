@@ -31,11 +31,12 @@
 /src/g15/pipeline/consumer.py @zty-78
 /src/g15/storage/ @zty-78
 /tests/unit/test_consumer*.py @zty-78
-/src/g15/reporting/ @Gyy-yyy
-/tests/integration/ @Gyy-yyy
-/tests/fault_injection/ @Gyy-yyy
-/docs/test_plan.md @Gyy-yyy
-/docs/test_report.md @Gyy-yyy
+# 2026-10-25 C5 转派 B1 后的归属同步（#9）：以下五条路径改由 B1 承接，避免评审请求自动派给已退出成员。
+/src/g15/reporting/ @kittywent
+/tests/integration/ @kittywent
+/tests/fault_injection/ @kittywent
+/docs/test_plan.md @kittywent
+/docs/test_report.md @kittywent
 /scripts/ @Ran2149975600
 /docs/deployment.md @Ran2149975600
 /docs/operations.md @Ran2149975600
