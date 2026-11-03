@@ -38,7 +38,8 @@ python -m pip install --no-deps --no-build-isolation -e . -r requirements.lock.t
 python -c "import g15, numpy, yaml; print('G15 package imports OK')"
 python -m black --check src tests
 python -m pylint src/g15 --fail-under=8.5
-python -m pytest -q```
+python -m pytest -q
+```
 
 成功标志：各命令退出 0；这仅证明当次安装及检查成功，不能代替业务闭环和双 Linux 验收。Python 3.11 兼容性由 CI 的 matrix lane 覆盖；如需本机验证，另建独立 Python 3.11 环境并运行同一份锁定安装命令，不得在 pp03 的 3.12 环境中降级验证。每次新开终端先 `conda activate pp03`；PyCharm 选择现有 pp03 解释器。
 
