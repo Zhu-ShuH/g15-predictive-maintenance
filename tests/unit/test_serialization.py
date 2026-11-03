@@ -49,6 +49,23 @@ from g15.common.types import SimulationChunk
 
 START_TIME_UTC = "2026-10-14T00:00:00Z"
 
+#: Keys every manifest must carry, whatever schema version wrote it.
+REQUIRED_MANIFEST_KEYS = frozenset(
+    {
+        "schema_version",
+        "run_id",
+        "scenario_id",
+        "device_id",
+        "seed",
+        "sample_rate_hz",
+        "start_time_utc",
+        "total_points",
+        "units",
+        "status",
+        "parts",
+    }
+)
+
 
 def make_chunk(
     count: int = 8,
@@ -114,6 +131,7 @@ def make_manifest(
     parts: tuple[ChunkManifestEntry, ...],
     total_points: int,
     status: ManifestStatus = ManifestStatus.COMPLETE,
+    scenario_kind: str | None = None,
 ) -> Manifest:
     """Build a manifest around ``parts`` with the frozen metadata."""
     return Manifest(
@@ -128,6 +146,7 @@ def make_manifest(
         units={"vibration": "g", "temperature": "degC"},
         status=status,
         parts=parts,
+        scenario_kind=scenario_kind,
     )
 
 
@@ -526,19 +545,10 @@ def test_manifest_round_trip_through_json(tmp_path: Path) -> None:
     restored = manifest_from_dict(payload)
 
     assert restored == manifest
-    assert set(payload) == {
-        "schema_version",
-        "run_id",
-        "scenario_id",
-        "device_id",
-        "seed",
-        "sample_rate_hz",
-        "start_time_utc",
-        "total_points",
-        "units",
-        "status",
-        "parts",
-    }
+    # An undeclared run keeps exactly the required key set: ``scenario_kind``
+    # is only written when it is actually declared, so no reader has to
+    # interpret a ``null`` (Issue #83).
+    assert set(payload) == REQUIRED_MANIFEST_KEYS
     assert payload["status"] == "complete"
     assert [part["path"] for part in payload["parts"]] == [
         "raw/part-000000.npz",
@@ -599,7 +609,7 @@ def test_manifest_rejects_an_unknown_field(tmp_path: Path) -> None:
 
 
 def test_manifest_rejects_a_wrong_schema_version(tmp_path: Path) -> None:
-    """Only ``1.0`` is readable."""
+    """A version outside the read window is refused."""
     entry = write_chunk_atomic(
         make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
     )
@@ -607,6 +617,110 @@ def test_manifest_rejects_a_wrong_schema_version(tmp_path: Path) -> None:
     payload["schema_version"] = "1.1"
 
     with pytest.raises(ManifestError, match="schema_version"):
+        manifest_from_dict(payload)
+
+
+def test_a_declared_scenario_kind_survives_the_round_trip(tmp_path: Path) -> None:
+    """A declared kind is written, read back, and survives a JSON hop."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    manifest = make_manifest((entry,), total_points=8, scenario_kind="degradation")
+
+    payload = json.loads(json.dumps(manifest_to_dict(manifest)))
+
+    assert payload["scenario_kind"] == "degradation"
+    assert set(payload) == REQUIRED_MANIFEST_KEYS | {"scenario_kind"}
+    assert manifest_from_dict(payload) == manifest
+
+
+def test_a_schema_1_0_manifest_stays_readable(tmp_path: Path) -> None:
+    """An old manifest has no ``scenario_kind`` and must still parse."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["schema_version"] = "1.0"
+
+    restored = manifest_from_dict(payload)
+
+    assert restored.schema_version == "1.0"
+    assert restored.scenario_kind is None
+
+
+def test_a_schema_1_0_manifest_may_still_carry_the_new_key(tmp_path: Path) -> None:
+    """A ``1.0`` payload with ``scenario_kind`` is compatible input, not 2.0.
+
+    The window says which versions this reader accepts; the key says what the
+    run declares.  A ``1.0`` writer that already knew the field stays readable,
+    while the writer of *this* implementation always emits ``2.0``.
+    """
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["schema_version"] = "1.0"
+    payload["scenario_kind"] = "normal"
+
+    restored = manifest_from_dict(payload)
+
+    assert restored.schema_version == "1.0"
+    assert restored.scenario_kind == "normal"
+
+
+def test_a_future_schema_version_is_reported_before_the_key_set(
+    tmp_path: Path,
+) -> None:
+    """A 3.0 payload must say "unsupported version", not list unknown keys.
+
+    The order matters to whoever reads the error: a manifest from a newer
+    writer is a version problem, not a typo in a field name.
+    """
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["schema_version"] = "3.0"
+    payload["future_field"] = 1
+
+    with pytest.raises(ManifestError, match=r"must be one of \['1.0', '2.0'\]"):
+        manifest_from_dict(payload)
+
+
+def test_an_explicit_null_scenario_kind_is_refused(tmp_path: Path) -> None:
+    """``null`` is not "undeclared": only a missing key is."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["scenario_kind"] = None
+
+    with pytest.raises(ManifestError, match="must be a string, got None"):
+        manifest_from_dict(payload)
+
+
+@pytest.mark.parametrize("value", ["NORMAL", "bogus", ""])
+def test_an_unknown_scenario_kind_is_refused(tmp_path: Path, value: str) -> None:
+    """The kind is a closed set; a typo must not become a verdict."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["scenario_kind"] = value
+
+    with pytest.raises(ManifestError, match="must be one of"):
+        manifest_from_dict(payload)
+
+
+def test_a_non_string_scenario_kind_is_refused(tmp_path: Path) -> None:
+    """``123`` is refused rather than coerced to ``"123"``."""
+    entry = write_chunk_atomic(
+        make_chunk(count=8), shard_path(tmp_path), run_dir=tmp_path
+    )
+    payload = manifest_to_dict(make_manifest((entry,), total_points=8))
+    payload["scenario_kind"] = 123
+
+    with pytest.raises(ManifestError, match="must be a string, got 123"):
         manifest_from_dict(payload)
 
 

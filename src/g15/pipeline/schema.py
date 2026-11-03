@@ -40,6 +40,8 @@ __all__ = [
     "ChunkManifestEntry",
     "Manifest",
     "NPZ_FIELDS",
+    "READABLE_SCHEMA_VERSIONS",
+    "SCENARIO_KINDS",
     "SCHEMA_VERSION",
     "FIELD_DTYPES",
     "FIELD_UNITS",
@@ -49,8 +51,24 @@ __all__ = [
     "manifest_from_dict",
 ]
 
-#: Frozen schema version; bumping it is an interface change (section 13).
-SCHEMA_VERSION: Final[str] = "1.0"
+#: Schema version written by this implementation; bumping it is an interface
+#: change (section 13).  ``2.0`` adds the optional ``scenario_kind`` key.
+SCHEMA_VERSION: Final[str] = "2.0"
+
+#: Manifest versions this reader accepts (``docs/interface.md`` section 5.2.1).
+#:
+#: ``1.0`` stays readable forever: a historical run has no ``scenario_kind`` and
+#: must not become unreadable just because the writer moved on.  Anything outside
+#: this window is refused by name instead of being parsed leniently.
+READABLE_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset({"1.0", SCHEMA_VERSION})
+
+#: Scenario kinds a manifest may declare (``docs/interface.md`` section 5.2).
+#:
+#: The writer only ever derives ``fault`` from injected events; the reader
+#: accepts all three because an older or external producer may have written any
+#: of them.  The literals match :mod:`g15.reporting.metrics`, which cannot be
+#: imported here without inverting the pipeline/reporting layering.
+SCENARIO_KINDS: Final[frozenset[str]] = frozenset({"normal", "degradation", "fault"})
 
 #: The four arrays every shard carries, in the order they are documented.
 NPZ_FIELDS: Final[tuple[str, ...]] = (
@@ -106,6 +124,13 @@ _MANIFEST_KEYS: Final[frozenset[str]] = frozenset(
 )
 
 _ENTRY_KEYS: Final[frozenset[str]] = frozenset({"part_id", "path", "rows", "sha256"})
+
+#: Keys a manifest may carry on top of :data:`_MANIFEST_KEYS`.
+#:
+#: They stay *optional* on purpose.  Folding them into the required set would
+#: reject every historical manifest for a missing key, which contradicts "an old
+#: run must stay readable"; the key is validated separately when present.
+_MANIFEST_OPTIONAL_KEYS: Final[frozenset[str]] = frozenset({"scenario_kind"})
 
 
 class DataContractError(Exception):
@@ -284,7 +309,8 @@ class Manifest:
     """Run-level metadata published last, after every shard is durable.
 
     Attributes:
-        schema_version: Must equal :data:`SCHEMA_VERSION`.
+        schema_version: One of :data:`READABLE_SCHEMA_VERSIONS`; the writer
+            always emits :data:`SCHEMA_VERSION`.
         run_id: Identifier of the run directory.
         scenario_id: Scenario identifier copied from the configuration.
         device_id: Device the run belongs to; one run carries one device.
@@ -296,6 +322,10 @@ class Manifest:
         units: Physical unit per signal, ``vibration`` and ``temperature``.
         status: Publication state; only ``complete`` may be consumed.
         parts: Shards in ascending ``part_id`` order; empty only when ``failed``.
+        scenario_kind: Kind the producer declared for this run, or ``None`` when
+            the manifest does not say (every ``1.0`` manifest, and a ``2.0`` one
+            written by a configuration that declares no kind).  Absent means
+            undeclared -- it is never read as ``normal``.
     """
 
     # A manifest is a flat record; splitting it would only obscure the contract.
@@ -312,6 +342,7 @@ class Manifest:
     units: dict[str, str]
     status: ManifestStatus
     parts: tuple[ChunkManifestEntry, ...]
+    scenario_kind: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the manifest, including the completeness invariant.
@@ -324,11 +355,13 @@ class Manifest:
                 or a ``complete`` manifest has no parts or does not cover
                 ``total_points``.
         """
-        if self.schema_version != SCHEMA_VERSION:
+        if self.schema_version not in READABLE_SCHEMA_VERSIONS:
             raise ManifestError(
-                f"schema_version must be {SCHEMA_VERSION!r}, got "
-                f"{self.schema_version!r}"
+                "schema_version must be one of "
+                f"{sorted(READABLE_SCHEMA_VERSIONS)}, got {self.schema_version!r}"
             )
+        if self.scenario_kind is not None:
+            _check_scenario_kind(self.scenario_kind, "scenario_kind")
         for name in ("run_id", "scenario_id"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
@@ -494,9 +527,12 @@ def manifest_to_dict(manifest: Manifest) -> dict[str, Any]:
         manifest: A validated manifest.
 
     Returns:
-        A mapping whose key set is exactly the frozen manifest keys.
+        A mapping whose key set is the required manifest keys plus ``scenario_kind``,
+        which is written only when the manifest actually declares a kind.  An
+        undeclared run therefore keeps the ``1.0`` key set instead of gaining a
+        ``null`` field that a reader would have to interpret.
     """
-    return {
+    payload: dict[str, Any] = {
         "schema_version": manifest.schema_version,
         "run_id": manifest.run_id,
         "scenario_id": manifest.scenario_id,
@@ -509,6 +545,9 @@ def manifest_to_dict(manifest: Manifest) -> dict[str, Any]:
         "status": manifest.status.value,
         "parts": [entry.to_dict() for entry in manifest.parts],
     }
+    if manifest.scenario_kind is not None:
+        payload["scenario_kind"] = manifest.scenario_kind
+    return payload
 
 
 def _require_mapping(value: object, path: str) -> Mapping[str, Any]:
@@ -529,27 +568,79 @@ def _require_mapping(value: object, path: str) -> Mapping[str, Any]:
     return value
 
 
+def _check_scenario_kind(value: object, path: str) -> str:
+    """Return ``value`` as a declared scenario kind.
+
+    Args:
+        value: Candidate value; must already be a string.
+        path: Dotted path used in the error message.
+
+    Returns:
+        The kind.
+
+    Raises:
+        ManifestError: if the value is not a string or not one of
+            :data:`SCENARIO_KINDS`.
+    """
+    if not isinstance(value, str):
+        raise ManifestError(f"{path} must be a string, got {value!r}")
+    if value not in SCENARIO_KINDS:
+        raise ManifestError(
+            f"{path} must be one of {sorted(SCENARIO_KINDS)}, got {value!r}"
+        )
+    return value
+
+
+def _optional_scenario_kind(payload: Mapping[str, Any]) -> str | None:
+    """Return the declared ``scenario_kind`` of a payload, or ``None`` when absent.
+
+    "Undeclared" has exactly one representation here: the key is missing.  An
+    explicit ``null`` is refused instead of being read as ``None``, because a
+    writer that emits the key has made a statement and ``null`` is not one of the
+    three kinds (C4 review of Issue #83).
+
+    Args:
+        payload: Manifest mapping being parsed.
+
+    Returns:
+        The kind, or ``None`` when the key is absent.
+
+    Raises:
+        ManifestError: if the key is present but not a valid kind.
+    """
+    if "scenario_kind" not in payload:
+        return None
+    return _check_scenario_kind(payload["scenario_kind"], "manifest.scenario_kind")
+
+
 def _require_keys(
-    payload: Mapping[str, Any], expected: frozenset[str], path: str
+    payload: Mapping[str, Any],
+    expected: frozenset[str],
+    path: str,
+    optional: frozenset[str] = frozenset(),
 ) -> None:
-    """Reject a payload whose key set is not exactly ``expected``.
+    """Reject a payload whose key set is not ``expected`` plus ``optional``.
 
     Unknown keys are refused rather than ignored: a typo in a field name would
-    otherwise silently drop data from a consumed run.
+    otherwise silently drop data from a consumed run.  ``optional`` keys may be
+    absent, which is how a newer key stays readable in an older payload; when
+    present they are validated by the caller, not merely tolerated.
 
     Args:
         payload: Mapping being parsed.
-        expected: Exact key set required.
+        expected: Key set that must be present.
         path: Dotted path used in the error message.
+        optional: Keys that may be present in addition to ``expected``.
 
     Raises:
         ManifestError: listing the missing and the unknown keys.
     """
+    allowed = expected | optional
     actual = set(payload)
-    if actual == expected:
-        return
     missing = sorted(expected - actual)
-    unknown = sorted(actual - expected)
+    unknown = sorted(actual - allowed)
+    if not missing and not unknown:
+        return
     raise ManifestError(
         f"{path} has the wrong key set; missing={missing}, unknown={unknown}"
     )
@@ -608,9 +699,15 @@ def _entry_from_dict(payload: object, path: str) -> ChunkManifestEntry:
 def manifest_from_dict(payload: object) -> Manifest:
     """Parse and validate a manifest payload.
 
-    The parser is strict on purpose: the schema version must match exactly and
-    unknown keys are refused, so a stale or hand-edited manifest cannot be
-    consumed by accident.
+    The parser is strict on purpose: the schema version must be inside the
+    accepted window and unknown keys are refused, so a stale or hand-edited
+    manifest cannot be consumed by accident.
+
+    The version is checked *before* the key set: a manifest from a future
+    writer fails with "unsupported schema version" rather than with a list of
+    keys this reader does not know, which is the message an operator can act
+    on.  The key set is then checked against the required keys plus the
+    optional ones, so a ``1.0`` manifest without ``scenario_kind`` still parses.
 
     Args:
         payload: Decoded JSON object of a manifest.
@@ -623,13 +720,17 @@ def manifest_from_dict(payload: object) -> Manifest:
             ``status``, or any value violating section 5.2.
     """
     mapping = _require_mapping(payload, "manifest")
-    _require_keys(mapping, _MANIFEST_KEYS, "manifest")
-
-    version = mapping["schema_version"]
-    if version != SCHEMA_VERSION:
+    if "schema_version" not in mapping:
         raise ManifestError(
-            f"manifest.schema_version must be {SCHEMA_VERSION!r}, got {version!r}"
+            "manifest has the wrong key set; missing=['schema_version'], unknown=[]"
         )
+    version = mapping["schema_version"]
+    if version not in READABLE_SCHEMA_VERSIONS:
+        raise ManifestError(
+            "manifest.schema_version must be one of "
+            f"{sorted(READABLE_SCHEMA_VERSIONS)}, got {version!r}"
+        )
+    _require_keys(mapping, _MANIFEST_KEYS, "manifest", _MANIFEST_OPTIONAL_KEYS)
 
     status = mapping["status"]
     if not isinstance(status, str):
@@ -671,4 +772,5 @@ def manifest_from_dict(payload: object) -> Manifest:
         units=dict(units),
         status=parsed_status,
         parts=parts,
+        scenario_kind=_optional_scenario_kind(mapping),
     )

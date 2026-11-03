@@ -60,6 +60,21 @@
 
 把演示 id 塞进受审清单会让「报告产出了」被误读成「演示配置通过了验收」，所以明确拒绝这种做法。
 
+### 3.2 场景类型的来源与 manifest 版本窗口（Issue #83）
+
+报告里的 `scenario_kind` 决定套用哪一套验收判据，所以它只能来自 run 自己带得出的证据。三个来源按优先级取第一个可用的，并在 `scenario_kind_source` 里点名：
+
+| 优先级 | 来源 | `scenario_kind_source` | 何时生效 |
+|---|---|---|---|
+| 1 | `private_truth/faults.json` 有注入事件 | `fault_events` | 事件本身就是证据，即使 manifest 也声明了 |
+| 2 | `manifest.json` 的 `scenario_kind` | `manifest` | schema 2.0 生产端写下声明 |
+| 3 | 受审验收清单 `ACCEPTANCE_SCENARIO_KINDS` | `acceptance_manifest` | 仅作 schema 1.0 历史 run 的迁移回退 |
+| — | 三者都没有 | `null` | 判据不套用，`verifiable=false`、`passed=null` |
+
+manifest 侧的版本窗口：生产端只写 `2.0`；读入端接受 `{1.0, 2.0}`，窗口外（如 `3.0`）在键集校验**之前**就点名拒收。`scenario_kind` 是可选键，缺键 = 未声明（不是 `normal`），显式 `null` 与非法取值都会被读入侧拒收。1.0 的 run 仍可长期读入，`scenario_kind` 缺失时走第 3 条回退。
+
+配置侧只允许 `scenario.kind` 取 `normal` / `degradation`；写 `fault` 直接 `ConfigError`，因为 fault 只能由真实注入事件得出。声明 `normal`/`degradation` 又同时要求注入事件的配置自相矛盾，生产端在创建 run 目录之前就拒绝。
+
 ## 4 匹配细则（`docs/acceptance.md` §3 的可执行化）
 
 1. 真值事件是半开区间 `[s, e)`，仅验证器读取。
