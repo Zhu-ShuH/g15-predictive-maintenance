@@ -6,7 +6,7 @@
 
 课程指南第三章给项目课的命令是 `conda create -n pp03 python=3.12 -y`；第七章表格却写 3.10。小组统一选择前述创建命令的 3.12，不采用冲突的 3.10。指南是参考材料，其中改变 PATH、镜像、删除环境和安装其他课程包的命令不属于本项目自动执行指令。
 
-项目仅安装自身声明的依赖：运行依赖 NumPy、PyYAML，开发依赖 Black、Pylint、pytest；SQLite 使用 Python 标准库。不因课程通用清单额外引入 Pandas、Streamlit、PyTorch 或机器学习框架。
+项目仅安装自身声明的依赖：运行依赖 NumPy、PyYAML，开发依赖 Black、Pylint、pytest；SQLite 使用 Python 标准库。不因课程通用清单额外引入 Pandas、Streamlit、PyTorch 或机器学习框架。正式安装与 CI 都使用 `requirements.lock.txt`；其中 NumPy 通过 PEP 508 标记在 Python 3.11 解析为 2.4.6、在 Python 3.12 解析为 2.5.4，两套解释器不混用其他版本。更新依赖需先更新该锁并复审。
 
 ## 2. 在仓库根目录操作
 
@@ -41,17 +41,17 @@ python -m pylint src/g15 --fail-under=8.5
 python -m pytest -q
 ```
 
-成功标志：各命令退出 0；这仅证明当次安装及检查成功，不能代替业务闭环和双 Linux 验收。每次新开终端先 `conda activate pp03`；PyCharm 选择现有 pp03 解释器。
+成功标志：各命令退出 0；这仅证明当次安装及检查成功，不能代替业务闭环和双 Linux 验收。本节命令与 `.github/workflows/ci.yml:20` 是**同一条** `python -m pip install -e . -r requirements-dev.txt`，两者安装同一份 `requirements.lock.txt`，本地与 CI 的最终版本集合一致；`--no-deps --no-build-isolation` 尚未接入 CI（#94 AC2 如实保留为未满足），本文件不把它写成已达成。Python 3.11 兼容性由 CI 的 matrix lane 覆盖；如需本机验证，另建独立 Python 3.11 环境并运行同一份锁定安装命令，不得在 pp03 的 3.12 环境中降级验证。每次新开终端先 `conda activate pp03`；PyCharm 选择现有 pp03 解释器。
 
 ## 3. C6 的脚本实施约束（Issue #10）
 
 - `setup.sh` 检查 Conda；无 Conda 时给清晰安装提示并非零退出。安装 Anaconda 不由项目脚本静默完成。
 - 不存在 pp03 时按 environment.yml 创建；存在时检查 Python 3.12，版本不符即停止并说明原因。重复运行不删除环境。
 - 脚本使用 `conda run --no-capture-output -n pp03 python ...`，避免依赖调用者已激活环境；先检查版本，再安装、导入与运行。
-- 运行阶段不访问网络或 AI API；安装阶段可联网。A/C6 在双系统验证后再提交锁定依赖及备用安装包方案，不把 environment.yml 当作完整依赖锁。
+- 运行阶段不访问网络或 AI API；安装阶段可联网。`environment.yml` 只负责 Conda 的 Python/pip，不是完整 Python 依赖锁；#90 已交付双解释器锁文件，本 PR 将它们接入实际安装路径。CI 已沿 `requirements-dev.txt` 接入同一份带解释器标记的锁，不需要按 matrix 选择另一个文件；本 PR 合并后 3.11 与 3.12 lane 均不得继续使用未固定依赖。
 - Ubuntu 24.04 LTS 与 RHEL 9 各自安装 Conda/创建环境，无需替换操作系统 Python；仍须实际记录 Conda 发行版、版本、软件来源与系统架构。
 
-本文件规定目标行为；当前 scripts 下仍是未实现占位。脚本实现、真实安装、依赖锁定和虚拟机日志由相应 Issue 继续交付。
+本文件规定目标行为；脚本实现已由 #86 合入，锁定清单已由 #90 合入，本 PR 负责把锁定清单接入文档化安装路径。双 Linux 安装验收与虚拟机日志由 #10 继续交付，公开 GitHub 现场全新克隆已由 #10 补证（两机克隆 `2054bb59`，`setup.sh` 与 `benchmark.sh` 退出 0）。CI 已通过现有安装命令读取锁定清单，不再需要单独改 workflow。
 
 ## 4. Windows 本机验证记录（2026-10-16）
 

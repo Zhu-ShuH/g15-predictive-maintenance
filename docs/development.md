@@ -115,7 +115,7 @@ def extract_basic_features(signal: NDArray[np.float64]) -> SignalFeatures:
 ## 4. 工具和依赖门禁
 
 - 本地必跑：`python -m black --check src tests`、`python -m pylint src/g15 --fail-under=8.5`、`python -m pytest -q`；在 CI 使用相同命令。
-- `pyproject.toml` 管包元数据和 Black/Pytest/Pylint 配置；`requirements.txt` 与 `requirements-dev.txt` 使用经验证的**确切版本**，版本升级走 PR。
+- `pyproject.toml` 管包元数据和 Black/Pytest/Pylint 配置；`requirements.txt` 与 `requirements-dev.txt` 指向带解释器标记的 `requirements.lock.txt`；确切版本维护在锁内，版本升级走 PR。
 - README 写 Python 版本范围、Linux 支持、安装命令、运行命令、输入/输出示例、已知限制。不能假定使用者已创建课程 `pp03` 环境。
 - CI 至少覆盖 Python 3.11/3.12 的单测矩阵；Ubuntu 与 RHEL 的真实运行由部署记录证明。若 GitHub Actions 无现成 RHEL Runner，可在本地 RHEL VM 验证并上传命令日志。
 - 性能门禁由固定机器或 VM 作为基准，不因共享 CI Runner 偶发抖动而伪判失败；报告硬件和输入规模。

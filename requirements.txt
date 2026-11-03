@@ -1,3 +1,4 @@
-# TODO: 待锁定。Issue #1 仅为可安装骨架；以下依赖尚未验证、未固定版本。
-numpy
-PyYAML
+# Locked runtime dependencies for Python 3.11 and 3.12.
+# requirements.lock.txt uses PEP 508 markers to select NumPy 2.4.6 on Python 3.11
+# and NumPy 2.5.4 on Python 3.12.
+-r requirements.lock.txt
