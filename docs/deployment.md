@@ -32,16 +32,17 @@ bash scripts/benchmark.sh    # 百万点基准 ×3（结果留档 runs/evidence/
 
 | 脚本/能力 | 状态 | 说明 |
 |---|---|---|
-| `setup.sh` | **可用（已在 RHEL 9.7 实测）** | 建环境/校验版本/装依赖/导入检查 |
+| `setup.sh` | **可用（RHEL 9.7 / Ubuntu 24.04 双机实测）** | 建环境/校验版本/装依赖/导入检查 |
 | `g15 validate` | 可用 | Issue #4 已实现 |
 | `g15 consume` | 可用 | Issue #65/#71 已合入 main（`30ad92b`） |
-| `g15 simulate/report/verify/benchmark/doctor` | 待实现 | 接口已冻结（interface.md §10），对应模块在途 |
+| `g15 consume/benchmark` | 可用 | consume #71、benchmark #92 已合入 main |
+| `g15 simulate/report/verify/doctor` | 待实现 | 接口已冻结（interface.md §10），对应模块在途 |
 | `verify.sh` G1–G3 | 可用 | black/pylint/pytest/validate |
 | `verify.sh` G4 | 阻塞于 simulate | consume 已可用；G4 当前先阻塞在 simulate（CLI 退出 5） |
 | `demo.sh` | 部分可用 | 推进到仿真步骤诚实失败（CLI 报子命令未实现，退出 3） |
-| `benchmark.sh` | 待模块合并 | 配置/前置检查可用，基准本身待 `g15 benchmark` |
+| `benchmark.sh` | **可用（双机实测 3/3 成功）** | 百万点 production_window 三轮 0.12–0.15 s（预算 60 s），10 分片 shape 9×102400+78400，verification passed，日志留档 runs/evidence/ |
 
-> 诚实声明：在 simulate/report/benchmark 等对应模块合并前（consume 已于 #71 合入），demo 与 benchmark 不得宣称任何闭环或性能结论；verify.sh 整体保持非零是预期行为，不是脚本缺陷。
+> 诚实声明：simulate/report 合并前，demo 不得宣称任何闭环结论（G4 阻塞于 simulate，退出 4 是预期行为，不是脚本缺陷）；benchmark 已随 #92 可用并完成双机取证（见 §5），但其数字仅覆盖生产基准口径，不构成检出率、误报或闭环结论。
 
 ## 4. RHEL 9.7 实测记录（2026-11-01，C6）
 
@@ -62,18 +63,18 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 3. 手工创建 `~/.ssh/authorized_keys` 后需 `restorecon -R -v ~/.ssh` 修正 SELinux 标签，否则 sshd 公钥认证被拒（部署跳板机时相关）。
 4. 网络受限环境（GitHub 直连重置）：可在宿主机代理开启"允许局域网连接"后为 git 配置 `http.proxy`，或在可信网络内用 `git bundle`/受控拷贝中转；正式验收仍须按 acceptance.md §1 从公开仓库全新克隆。
 
-## 5. 双系统实测状态（Issue #10，2026-11-01 双机实测，绑定 head `60fc6b4`）
+## 5. 双系统实测状态（Issue #10，2026-11-01/02/03 双机实测，绑定 main `2054bb5`）
 
 | 命令 | RHEL 9.7（实测） | Ubuntu 24.04.4（实测） |
 |---|---|---|
 | `setup.sh` | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） | ✅ 退出 0（首装 + 幂等重跑，Python 3.12.16） |
-| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 738 passed, 6 skipped；15 配置 validate 全过） | ✅ 全过（pylint 9.91/10；pytest 738 passed, 6 skipped；15 配置 validate 全过） |
+| `verify.sh` G1–G3 | ✅ 全过（pylint 9.91/10；pytest 752 passed, 14 skipped；15 配置 validate 全过） | ✅ 全过（pylint 9.91/10；pytest 752 passed, 14 skipped；15 配置 validate 全过） |
 | `verify.sh` G4 | ❌ 阻塞于 simulate（模块在途），按设计非零 | ❌ 同 RHEL：阻塞于 simulate，按设计非零 |
 | `demo.sh` | validate ✅ → simulate 诚实失败，退出 3 | validate ✅ → simulate 诚实失败，退出 3 |
-| `benchmark.sh` | 前置 ✅ → benchmark 未实现，退出 3，日志留档 | 前置 ✅ → benchmark 未实现，退出 3，日志留档 |
+| `benchmark.sh` | ✅ 3/3 成功，production_window 0.1201/0.1262/0.1314 s（中位 0.1262，预算 60 s），verification passed | ✅ 3/3 成功，production_window 0.1279/0.1396/0.1458 s（中位 0.1396，预算 60 s），verification passed |
 | `clean.sh` | ✅ 退出 0，clean 后 editable 安装复测无损 | ✅ 退出 0，clean 后 editable 安装复测无损 |
 
-本表所有数字在 head `60fc6b4`（main `0a637fc` + Issue #10 五提交）上实测得出，两列均为 2026-11-01 真实执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机各自独立，Conda 26.9.4 / Python 3.12.16 一致）；证据日志由 C6 分别留档于两台虚拟机 `~/g15-evidence/issue10-{rhel97,ubuntu2404}-60fc6b4-*.log`。**遗留说明**：部署到两台虚拟机当前经受控 bundle 中转（GitHub 直连在 C6 网络环境受限）；acceptance.md §1 要求的「从公开 GitHub 仓库现场全新克隆」演示待网络条件满足后按同脚本补充留证。simulate/report/benchmark 模块合并后，同一脚本在两系统重跑即为 G4 闭环与性能取证。
+本表在 main `2054bb5`（含 #86 脚本、#90 依赖锁、#92 benchmark 实现、#85 并发用例）上实测得出，两列均为真实独立执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机，Conda 26.9.4 / Python 3.12.16 一致）；验证/演示证据日志留档 `~/g15-evidence/issue10-*-2054bb5-*.log`，基准轮次日志留存于两机 `runs/evidence/benchmark_Linux-x86_64_*_20261102T15*.log`（三轮原始数值见上表）。表内 benchmark 数字取自 11-02 那次双机实测；2026-11-03 公开仓库现场全新克隆轮的基准数字（RHEL 0.1315/0.1491/0.1996 s、Ubuntu 0.2721/0.2486/0.2757 s）见 #10 评论 `6582119780`。历史版本（2026-11-01，head `60fc6b4`，pytest 738 passed）的记录由本轮取代。**遗留说明**：两台虚拟机已从公开 GitHub 仓库现场全新克隆 `2054bb59` 并跑通 `setup.sh` 与 `benchmark.sh`（#10 评论 6582119780；两机 `clone_exit=0` / `setup_exit=0` / `benchmark_exit=0`、3/3 成功、verification passed，未使用代理或 bundle 中转）。仍未完成的是：`simulate`/`report` 合并后的 G4 闭环取证、双 Linux 正式验收、检出率与峰值内存结论。
 
 ## 6. 双 Linux 验收记录模板（acceptance.md §1）
 
