@@ -63,7 +63,7 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 3. 手工创建 `~/.ssh/authorized_keys` 后需 `restorecon -R -v ~/.ssh` 修正 SELinux 标签，否则 sshd 公钥认证被拒（部署跳板机时相关）。
 4. 网络受限环境（GitHub 直连重置）：可在宿主机代理开启"允许局域网连接"后为 git 配置 `http.proxy`，或在可信网络内用 `git bundle`/受控拷贝中转；正式验收仍须按 acceptance.md §1 从公开仓库全新克隆。
 
-## 5. 双系统实测状态（Issue #10，2026-11-01/02 双机实测，绑定 main `2054bb5`）
+## 5. 双系统实测状态（Issue #10，2026-11-01/02/03 双机实测，绑定 main `2054bb5`）
 
 | 命令 | RHEL 9.7（实测） | Ubuntu 24.04.4（实测） |
 |---|---|---|
@@ -74,7 +74,7 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 | `benchmark.sh` | ✅ 3/3 成功，production_window 0.1201/0.1262/0.1314 s（中位 0.1262，预算 60 s），verification passed | ✅ 3/3 成功，production_window 0.1279/0.1396/0.1458 s（中位 0.1396，预算 60 s），verification passed |
 | `clean.sh` | ✅ 退出 0，clean 后 editable 安装复测无损 | ✅ 退出 0，clean 后 editable 安装复测无损 |
 
-本表在 main `2054bb5`（含 #86 脚本、#90 依赖锁、#92 benchmark 实现、#85 并发用例）上实测得出，两列均为真实独立执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机，Conda 26.9.4 / Python 3.12.16 一致）；验证/演示证据日志留档 `~/g15-evidence/issue10-*-2054bb5-*.log`，基准轮次日志留存于两机 `runs/evidence/benchmark_Linux-x86_64_*_20261102T15*.log`（三轮原始数值见上表）。历史版本（2026-11-01，head `60fc6b4`，pytest 738 passed）的记录由本轮取代。**遗留说明**：部署到两台虚拟机当前经受控 bundle 中转（GitHub 直连在 C6 网络环境受限）；acceptance.md §1 要求的「从公开 GitHub 仓库现场全新克隆」演示待网络条件满足后按同脚本补充留证。simulate/report 模块合并后，同一脚本在两系统重跑即为 G4 闭环取证。
+本表在 main `2054bb5`（含 #86 脚本、#90 依赖锁、#92 benchmark 实现、#85 并发用例）上实测得出，两列均为真实独立执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机，Conda 26.9.4 / Python 3.12.16 一致）；验证/演示证据日志留档 `~/g15-evidence/issue10-*-2054bb5-*.log`，基准轮次日志留存于两机 `runs/evidence/benchmark_Linux-x86_64_*_20261102T15*.log`（三轮原始数值见上表）。表内 benchmark 数字取自 11-02 那次双机实测；2026-11-03 公开仓库现场全新克隆轮的基准数字（RHEL 0.1315/0.1491/0.1996 s、Ubuntu 0.2721/0.2486/0.2757 s）见 #10 评论 `6582119780`。历史版本（2026-11-01，head `60fc6b4`，pytest 738 passed）的记录由本轮取代。**遗留说明**：两台虚拟机已从公开 GitHub 仓库现场全新克隆 `2054bb59` 并跑通 `setup.sh` 与 `benchmark.sh`（#10 评论 6582119780；两机 `clone_exit=0` / `setup_exit=0` / `benchmark_exit=0`、3/3 成功、verification passed，未使用代理或 bundle 中转）。仍未完成的是：`simulate`/`report` 合并后的 G4 闭环取证、双 Linux 正式验收、检出率与峰值内存结论。
 
 ## 6. 双 Linux 验收记录模板（acceptance.md §1）
 
