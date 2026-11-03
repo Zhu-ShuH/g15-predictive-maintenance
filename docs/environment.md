@@ -1,5 +1,7 @@
 # G15 环境规范与首次安装
 
+> 2026-11-03 修订（PR #102，C2 提交、A/C4 待复评）：§2 与 §3 的安装口径改为「先装锁、再装项目」两步，并把 `--no-deps --no-build-isolation` 接入 CI（#94 AC2）。**§4 的历史验证记录原样保留，未改写。**
+>
 > 2026-10-16；A 根据组长决定与课程 Anaconda 指南制定。正式开发及演示：Conda `pp03`、Python 3.12；CI 的 Python 3.11 保留为兼容性检查。已完成 Windows pp03 创建与骨架检查（见 §4）；双 Linux 和业务验收仍待实测。
 
 ## 1. 来源与选择
@@ -34,14 +36,15 @@ python -c "import sys; print(sys.executable)"
 必须显示 Python 3.12.x，且解释器属于 pp03。若已有 pp03 为 3.10/3.11，先保留课程环境及依赖清单，把版本结果交 A/C6 协调迁移；不要删除、覆盖或在其中再建 .venv。安装命令仅在确认正确环境后执行：
 
 ```sh
-python -m pip install -e . -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt
+python -m pip install -e . --no-deps --no-build-isolation
 python -c "import g15, numpy, yaml; print('G15 package imports OK')"
 python -m black --check src tests
 python -m pylint src/g15 --fail-under=8.5
 python -m pytest -q
 ```
 
-成功标志：各命令退出 0；这仅证明当次安装及检查成功，不能代替业务闭环和双 Linux 验收。本节命令与 `.github/workflows/ci.yml:20` 是**同一条** `python -m pip install -e . -r requirements-dev.txt`，两者安装同一份 `requirements.lock.txt`，本地与 CI 的最终版本集合一致；`--no-deps --no-build-isolation` 尚未接入 CI（#94 AC2 如实保留为未满足），本文件不把它写成已达成。Python 3.11 兼容性由 CI 的 matrix lane 覆盖；如需本机验证，另建独立 Python 3.11 环境并运行同一份锁定安装命令，不得在 pp03 的 3.12 环境中降级验证。每次新开终端先 `conda activate pp03`；PyCharm 选择现有 pp03 解释器。
+成功标志：各命令退出 0；这仅证明当次安装及检查成功，不能代替业务闭环和双 Linux 验收。本节的两条安装命令与 `.github/workflows/ci.yml` 的 `skeleton` job 的两条安装步骤**逐条对应**：第 1 条 `python -m pip install -r requirements-dev.txt` 间接安装 `requirements.lock.txt`；第 2 条 `python -m pip install -e . --no-deps --no-build-isolation` 对本项目显式使用这两个开关。本地与 CI 的最终版本集合一致，且都不引入锁外依赖。**必须拆成两条**：pip 对本地目录项目先构建再安装，`--no-build-isolation` 要求构建后端 `setuptools.build_meta` 已经在环境中就位，而 `setuptools` 本身在锁内（第 21 项）只能由第 1 条命令装上；把两个开关直接加在原来那一条命令后面会以 `BackendUnavailable: Cannot import 'setuptools.build_meta'` 失败。`--no-deps --no-build-isolation` 已在 CI 接入（#94 AC2，由 PR #102 落地；#94 尚未关闭，CI 结果待 Actions 跑出）。Python 3.11 兼容性由 CI 的 matrix lane 覆盖；如需本机验证，另建独立 Python 3.11 环境并运行同一份锁定安装命令，不得在 pp03 的 3.12 环境中降级验证。每次新开终端先 `conda activate pp03`；PyCharm 选择现有 pp03 解释器。
 
 ## 3. C6 的脚本实施约束（Issue #10）
 
@@ -51,7 +54,7 @@ python -m pytest -q
 - 运行阶段不访问网络或 AI API；安装阶段可联网。`environment.yml` 只负责 Conda 的 Python/pip，不是完整 Python 依赖锁；#90 已交付双解释器锁文件，本 PR 将它们接入实际安装路径。CI 已沿 `requirements-dev.txt` 接入同一份带解释器标记的锁，不需要按 matrix 选择另一个文件；本 PR 合并后 3.11 与 3.12 lane 均不得继续使用未固定依赖。
 - Ubuntu 24.04 LTS 与 RHEL 9 各自安装 Conda/创建环境，无需替换操作系统 Python；仍须实际记录 Conda 发行版、版本、软件来源与系统架构。
 
-本文件规定目标行为；脚本实现已由 #86 合入，锁定清单已由 #90 合入，本 PR 负责把锁定清单接入文档化安装路径。双 Linux 安装验收与虚拟机日志由 #10 继续交付，公开 GitHub 现场全新克隆已由 #10 补证（两机克隆 `2054bb59`，`setup.sh` 与 `benchmark.sh` 退出 0）。CI 已通过现有安装命令读取锁定清单，不再需要单独改 workflow。
+本文件规定目标行为；脚本实现已由 #86 合入，锁定清单已由 #90 合入，本 PR 负责把锁定清单接入文档化安装路径。双 Linux 安装验收与虚拟机日志由 #10 继续交付，公开 GitHub 现场全新克隆已由 #10 补证（两机克隆 `2054bb59`，`setup.sh` 与 `benchmark.sh` 退出 0）。CI 已通过 `requirements-dev.txt` 读取锁定清单；显式的 `--no-deps --no-build-isolation` 由 PR #102 接入 workflow（须拆成「先装锁、再装项目」两条命令，原因见 §2）。**`scripts/setup.sh` 目前仍用单条 `python -m pip install -e . -r requirements-dev.txt`，与上述两步口径不一致**；#94 明确禁止改 `scripts/*.sh`，故该差异未在 PR #102 处理，需另开单据由 C6 处理，本文件不把它写成已达成。
 
 ## 4. Windows 本机验证记录（2026-10-16）
 
