@@ -3,6 +3,8 @@
 # repo tree at main 1098ae5, excluding the editable project itself.
 # Includes direct, transitive and build dependencies (setuptools, wheel) so that
 # `pip install --no-deps --no-build-isolation` of this project works in a clean env.
+# Python 3.12 resolves NumPy 2.5.4; Python 3.11 resolves NumPy 2.4.6 via PEP 508
+# markers, so CI and local installs do not need a second lock file.
 astroid==4.3.4
 black==26.10.1
 click==8.5.0
@@ -11,7 +13,8 @@ iniconfig==2.3.1
 isort==9.0.2
 mccabe==0.7.0
 mypy_extensions==1.1.0
-numpy==2.5.4
+numpy==2.5.4; python_version >= "3.12"
+numpy==2.4.6; python_version < "3.12"
 packaging==26.3
 pathspec==1.1.1
 platformdirs==4.14.2
