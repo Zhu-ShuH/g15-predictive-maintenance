@@ -19,7 +19,7 @@
 ```sh
 conda env create -f environment.yml
 conda activate pp03
-python -m pip install --no-deps --no-build-isolation -e . -r requirements.lock.txt
+python -m pip install -e . -r requirements-dev.txt
 python -c "import g15"
 python -m black --check src tests
 python -m pylint src/g15 --fail-under=8.5
