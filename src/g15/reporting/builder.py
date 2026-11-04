@@ -560,11 +560,15 @@ def _scenario_kind(
     stated when the run carries the evidence for it.  Three sources are
     consulted, in this order:
 
-    1. ``manifest.scenario_kind`` -- what the producer wrote down (schema 2.0).
-       A declared kind is a statement the author made about the scenario, so it
-       wins over everything else.
-    2. The truth file -- injected events are evidence in their own right and
-       decide ``fault`` even when the manifest predates the field.
+    1. The truth file -- injected events are evidence in their own right and
+       decide ``fault`` whatever the manifest says.  Evidence outranks a
+       declaration: a run whose truth file carries events is a fault run even
+       when the manifest was hand-edited to claim otherwise.  A contradiction
+       is not silently resolved by this order -- it is reported as a blocker,
+       because the failure then belongs to the declaration (ruling of
+       Issue #106, comment 6634044429).
+    2. ``manifest.scenario_kind`` -- what the producer wrote down (schema 2.0),
+       consulted only for a run whose truth file carries no event.
     3. The reviewed list of acceptance profile ids -- the migration fallback
        for runs produced before schema 2.0.
 
@@ -583,10 +587,10 @@ def _scenario_kind(
         listed kind for a reviewed acceptance profile id, or ``None`` when
         the run does not say which kind it is.
     """
-    if declared_kind is not None:
-        return declared_kind
     if has_events:
         return SCENARIO_FAULT
+    if declared_kind is not None:
+        return declared_kind
     return ACCEPTANCE_SCENARIO_KINDS.get(scenario_id)
 
 
@@ -613,9 +617,9 @@ def _kind_and_source(
         return None, None, None
     kind = _scenario_kind(str(facts.manifest.scenario_id), bool(events), declared_kind)
     if events and kind == SCENARIO_FAULT:
-        # Even when the manifest declares it, the evidence is the truth file:
-        # the producer only derives ``fault`` from injected events, so the
-        # source named here is the one an operator can re-check.
+        # The evidence outranks the declaration, so a fault run always names
+        # the truth file as its source -- including a run whose manifest also
+        # declares ``fault``, because the file is what an operator re-checks.
         return kind, KIND_SOURCE_FAULT_EVENTS, KIND_SCOPE_FAULT_EVENTS
     if declared_kind is not None:
         return kind, KIND_SOURCE_MANIFEST, KIND_SCOPE_MANIFEST
@@ -648,6 +652,17 @@ def _kind_blockers(
             f"{declared_kind!r}（来源 manifest），但 private_truth/faults.json "
             f"有 {len(events)} 个注入事件；场景类型来源与真值不一致，"
             "本次不套用任何一套场景判据"
+        )
+    if declared_kind == SCENARIO_FAULT and events is not None and not events:
+        # The mirror image: the manifest claims a fault run while the truth
+        # file carries nothing.  Scoring it against the fault criterion would
+        # report a detection failure ("detection_rate must be 1.0, observed
+        # None") for a run that never injected anything -- the declaration is
+        # what is wrong, so the run is not verifiable either way.
+        blockers.append(
+            "run 自相矛盾：manifest.scenario_kind 声明为 'fault'（来源 "
+            "manifest），但 private_truth/faults.json 没有任何注入事件；"
+            "场景类型来源与真值不一致，本次不套用任何一套场景判据"
         )
     if events is not None and kind is None:
         blockers.append(

@@ -67,9 +67,11 @@
 | 优先级 | 来源 | `scenario_kind_source` | 何时生效 |
 |---|---|---|---|
 | 1 | `private_truth/faults.json` 有注入事件 | `fault_events` | 事件本身就是证据，即使 manifest 也声明了 |
-| 2 | `manifest.json` 的 `scenario_kind` | `manifest` | schema 2.0 生产端写下声明 |
+| 2 | `manifest.json` 的 `scenario_kind` | `manifest` | schema 2.0 生产端写下声明，且真值没有事件 |
 | 3 | 受审验收清单 `ACCEPTANCE_SCENARIO_KINDS` | `acceptance_manifest` | 仅作 schema 1.0 历史 run 的迁移回退 |
 | — | 三者都没有 | `null` | 判据不套用，`verifiable=false`、`passed=null` |
+
+来源与真值冲突时不按上表静默取一个：两种情况都记 blocker，`verifiable=false`、`passed=null`，责任写进 `verdict_reasons`。① 声明 `normal`/`degradation` 而真值有事件；② 声明 `fault` 而真值零事件（后者若照 fault 判据打分会报出「检测率不达标」，但根本没有事件可漏，错的是声明不是检测器）。guard 见 `tests/integration/test_validation_report.py` 的两个矛盾档用例。
 
 manifest 侧的版本窗口：生产端只写 `2.0`；读入端接受 `{1.0, 2.0}`，窗口外（如 `3.0`）在键集校验**之前**就点名拒收。`scenario_kind` 是可选键，缺键 = 未声明（不是 `normal`），显式 `null` 与非法取值都会被读入侧拒收。1.0 的 run 仍可长期读入，`scenario_kind` 缺失时走第 3 条回退。
 
