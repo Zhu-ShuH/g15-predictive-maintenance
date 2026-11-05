@@ -183,7 +183,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 消费者只读取公开 Manifest、NPZ 和该消费配置；`sample_rate_hz` 从 Manifest 取得。C3 与 B2/C2/C4 在接口评审时确认上述键名、路径解析与默认行为，增加测试证明消费配置没有故障位置。
 
-**场景类型声明 `scenario.kind`（可选键，schema 2.0 起）**：`scenario` 块可带一个 `kind` 键，取值只能是 `normal` 或 `degradation` 两个——**`fault` 不在配置侧取值域内**，因为故障类型只能由真实注入事件得出，不能让配置自述「这次是故障 run」。键**缺失**表示「本次运行不声明类型」，与 `normal` 不是同一件事，任何情况下都不得由配置名、`scenario.id`、退化率或噪声水平推断类型。显式 `null`、非字符串与拼错取值一律点名拒收（`ConfigError`）。声明 `normal`/`degradation` 的同时又要求注入故障事件的配置自相矛盾，生产端在**创建 run 目录之前**就拒绝（`ValueError`），不写出任何分片或清单。此键只交给生产者；`consume` 不接收整份场景 YAML（见本节末尾）。
+**场景类型声明 `scenario.kind`（可选键，Manifest schema 2.0 起）**：`scenario` 块可带一个 `kind` 键，取值只能是 `normal` 或 `degradation` 两个——**`fault` 不在配置侧取值域内**，因为故障类型只能由真实注入事件得出，不能让配置自述「这次是故障 run」。键**缺失**表示「本次运行不声明类型」，与 `normal` 不是同一件事，任何情况下都不得由配置名、`scenario.id`、退化率或噪声水平推断类型。显式 `null`、非字符串与拼错取值一律点名拒收（`ConfigError`）。声明 `normal`/`degradation` 的同时又要求注入故障事件的配置自相矛盾，生产端在**创建 run 目录之前**就拒绝（`ValueError`），不写出任何分片或清单。此键只交给生产者；`consume` 不接收整份场景 YAML（见本节末尾）。
 
 注意区分两个同名但不同含义的版本号：**配置契约版本**（本节 YAML 的 `schema_version`，仍为 `'1.0'`）与 **Manifest 契约版本**（§5.2 的 `schema_version`，见 §5.2.1）互不相干；配置版本不随 Manifest 升版而变。
 
@@ -297,7 +297,10 @@ Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留�
    - **清单的 `scenario_kind` 声明**（schema 2.0，生产端写下） → 取其声明值，来源记 `manifest`。
    - **受审验收配置的精确 id 匹配**（`docs/acceptance.md` §3，`acceptance_healthy_*` → `normal`，`acceptance_degradation_*` → `degradation`） → 来源记 `acceptance_manifest`。这是 schema 1.0 历史 run 的**迁移回退**，不是长期口径。
    三个来源都不命中时 `scenario_kind` 必须是 `null`，不得按 id 子串、前缀或「没有事件就算正常」之类的默认值推断场景类型。
-   **另外两种情况同样不套用判据**，必须写进 `verdict_reasons`：其一，**真值文件不可读**（缺失，且生产端的完成行没有声明注入事件数为零）时无法判定有无事件，本次不套用任何场景判据；其二，**清单声明与真值互相矛盾**（声明 `normal`/`degradation` 而真值文件带有注入事件）时，是**这次运行自相矛盾**，责任在声明，不归因于分析算法，本次同样不套用任何场景判据。
+   **另外三种情况同样不套用判据**，必须写进 `verdict_reasons`：其一，**真值文件不可读**（缺失，且生产端的完成行没有声明注入事件数为零）时无法判定有无事件，本次不套用任何场景判据；其二、其三是**清单声明与真值互相矛盾**——是**这次运行自相矛盾**，责任在声明，不归因于分析算法，本次同样不套用任何场景判据。两档矛盾的对外取值如下，不得混为一档：
+   - **其二：声明 `normal`/`degradation`，而真值文件带有注入事件。** 按上面的顺序，真值事件是证据，取 `scenario_kind = fault`、`scenario_kind_source = fault_events`；但 `verifiable = false`、`passed = null`，理由须同时点名 `manifest.scenario_kind` 与 `private_truth/faults.json`。
+   - **其三：声明 `fault`，而真值文件没有任何注入事件。** 此时没有事件证据可取，取 `scenario_kind = fault`、`scenario_kind_source = manifest`（声明是唯一来源，故来源记 `manifest`）；同样 `verifiable = false`、`passed = null`，理由须同时点名 `manifest.scenario_kind` 与 `private_truth/faults.json`，并且**不得**按检测率给出失败理由——没有事件就没有可漏报的检测器，错的是声明不是检测器。
+   两档都不得产出 `passed = false`：矛盾不是「不通过」，是**判不了**。
 2. `scenario_kind = null` ⇒ `verifiable = false` ⇒ `passed = null`，并在 `verdict_reasons` 里写明无法确定场景类型的原因。反过来，`passed` 只有在 `verifiable = true` 时才出现布尔值。
 3. `detection_lag_windows` 报本次匹配实际使用的时延窗口数，`detection_lag_source` 报它的取值出处（当前为 `metrics.MAX_DETECTION_LAG_WINDOWS_DEFAULT`）。报告不得只写数字而不交代来源。
 
