@@ -183,6 +183,10 @@ health_rules_file: 'configs/health_rules.yaml'
 
 消费者只读取公开 Manifest、NPZ 和该消费配置；`sample_rate_hz` 从 Manifest 取得。C3 与 B2/C2/C4 在接口评审时确认上述键名、路径解析与默认行为，增加测试证明消费配置没有故障位置。
 
+**场景类型声明 `scenario.kind`（可选键，Manifest schema 2.0 起）**：`scenario` 块可带一个 `kind` 键，取值只能是 `normal` 或 `degradation` 两个——**`fault` 不在配置侧取值域内**，因为故障类型只能由真实注入事件得出，不能让配置自述「这次是故障 run」。键**缺失**表示「本次运行不声明类型」，与 `normal` 不是同一件事，任何情况下都不得由配置名、`scenario.id`、退化率或噪声水平推断类型。显式 `null`、非字符串与拼错取值一律点名拒收（`ConfigError`）。声明 `normal`/`degradation` 的同时又要求注入故障事件的配置自相矛盾，生产端在**创建 run 目录之前**就拒绝（`ValueError`），不写出任何分片或清单。此键只交给生产者；`consume` 不接收整份场景 YAML（见本节末尾）。
+
+注意区分两个同名但不同含义的版本号：**配置契约版本**（本节 YAML 的 `schema_version`，仍为 `'1.0'`）与 **Manifest 契约版本**（§5.2 的 `schema_version`，见 §5.2.1）互不相干；配置版本不随 Manifest 升版而变。
+
 **参数约束**：`total_points > 0`，`sample_rate_hz > 0` 且 `sample_rate_hz <= 1_000_000_000`（上界依据见 5.1「采样率上界」），`chunk_points > 0`，消费配置中 `window_points > 0`，并且 `chunk_points % window_points == 0`（非末尾分片按整窗口切分，避免崩溃时遗失跨片缓存）；退化率和噪声标准差应为有限非负数；故障概率 `0 ≤ p ≤ 1`；事件区间必须在总点数内，`start_seq ≥ 0` 且 `duration_points > 0`；不支持的故障类型必须明确报错；未知字段默认拒绝。生产与消费配置各自加载为经校验的不可变对象，不在各模块里重复读 YAML。配置配对必须保证**名义分片尺寸** `chunk_points % window_points == 0`；消费端在业务结果写入前核对公开 Manifest 中所有非末片 `rows` 一致且可被 `window_points` 整除。**单片责任采用方案 C 提案**：单片只有末片，现有 Manifest 没有名义 `chunk_points`，消费者不能据公开输入验证该名义值的整除关系；配置配对检查由调用方保证，消费者不得将不可执行的检查报告为“已通过”。消费者仍只读公开 Manifest、NPZ 与独立消费配置，不加载生产场景 YAML 或 `fault_generation`。末片实际长度不要求被 `window_points` 整除；真实末片余数按 `drop/error` 处理，少于一窗且 `drop` 时可成功而没有特征/告警。
 
 **多片末片上界校验现状（#76 已集成）**：主线`b3daf15ee8d53d7515f32b13b57de149f6767561`已包含C2的#76修复。消费端由一致非末片rows推断名义片长，在业务结果写入前拒收`last.rows > inferred_chunk_points`，错误点名part、rows与推断上界；等长整除末片允许，单片仍按方案C，不凭空反推名义片长。该上界预检失败时本次调用不新增业务提交；对新数据库实测五张业务表均为0行，既有数据库的历史提交不删除；此结论不扩大为任何消费失败都会全run回滚，合法短尾的drop/error仍沿既有策略。§5.1含等号的生产契约继续保持；本次只同步已集成实现，不新增Manifest字段、配置键或公开签名。
@@ -229,7 +233,7 @@ health_rules_file: 'configs/health_rules.yaml'
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "run_id": "20261014T100000Z-bearing_001-a1b2c3",
   "scenario_id": "bearing_001",
   "device_id": "DEV-001",
@@ -239,6 +243,7 @@ health_rules_file: 'configs/health_rules.yaml'
   "total_points": 1000000,
   "units": {"vibration": "g", "temperature": "degC"},
   "status": "complete",
+  "scenario_kind": "normal",
   "parts": [
     {"part_id": 0, "path": "raw/part-000000.npz", "rows": 102400, "sha256": "<64位十六进制摘要>"}
   ]
@@ -247,9 +252,11 @@ health_rules_file: 'configs/health_rules.yaml'
 
 上面 `parts` 为**结构示意**，完整百万点运行应列出全部分片，且各 `rows` 之和与 `total_points` 一致。`status=complete` 才允许消费者开始；Manifest 最后原子发布。校验 SHA-256 与采样序号连续性。将分片先写入同目录 `.tmp` 文件，通过 `os.replace` 原子更名，随后发布清单；对于 `np.savez`，应传入打开的二进制文件句柄，以免其自动附加 `.npz` 扩展名。写入失败不得发布 complete 状态。
 
+**键集（schema 2.0）**：必填键仍是 11 个（`schema_version`、`run_id`、`scenario_id`、`device_id`、`seed`、`sample_rate_hz`、`start_time_utc`、`total_points`、`units`、`status`、`parts`），另加**一个可选键** `scenario_kind`。它记录生产端对本次运行场景类型的声明，取值域为 `normal` / `degradation` / `fault` 三个字面量；`fault` 只能由真实注入事件推出，不来自配置声明（见 §4）。**未声明时该键不写进清单**——不是写成 `null`——因此历史 1.0 清单的键集保持原样，读入侧把「键缺失」读作「未声明」，不据此推断 `normal`。未知键仍一律拒收（不是忽略）：多写一个键就是契约变更，不因读入侧宽容而放行。
+
 #### 5.2.1 读入侧校验规则（Manifest 是不可信输入）
 
-Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留在半成品状态，因此读入侧**不得以“能解析”推断“可信”**。以下四条为冻结规则，`g15.pipeline.schema` 与 `g15.pipeline.serialization` 是它们的可执行形式（Issue #34 收口）。
+Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留在半成品状态，因此读入侧**不得以“能解析”推断“可信”**。以下五条为冻结规则，`g15.pipeline.schema` 与 `g15.pipeline.serialization` 是它们的可执行形式（Issue #34 收口；第 5 条为 Issue #83 的方案 A 收口）。
 
 1. **`start_time_utc` 是完整且锚定 UTC 的时刻。** 形如 `YYYY-MM-DDThh:mm:ss[.ffffff]`，其后必须带时区（`Z` 或 `±hh:mm`）且偏移为 **0**。`Z` 与 `+00:00` 等价，**两者都接受**——生产者会把配置文本原样写入清单，而配置校验接受零偏移，读入侧比生产者更严会让一次运行被自己的读者拒绝。**`-00:00` 一律拒绝**：按 RFC 3339，它的含义是「本地偏移**未知**」，与「确认是 UTC」不是同一件事；清单声明的是运行开始时刻，偏移未知的时刻支撑不了这个声明。仅日期（`2026-10-14`）、无时区、非零偏移（如 `+08:00`）、非法日历值（如 `2026-13-45T99:99:99Z`）以及任意文本一律拒绝。不要只检查结尾的 `Z`，也不要只调用 `fromisoformat`：后者会把 `2026-10-14` 静默当成当日零点，且会把 `-00:00` 与 `+00:00` 一视同仁。
 
@@ -258,6 +265,11 @@ Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留�
 3. **`status` 决定 `parts` 的下限。** 只有 `complete` 可被消费，且必须**至少列出一个分片**、`rows` 之和恰好等于 `total_points`；`failed` **允许零分片**（表达“第一个分片落盘前就失败”），也允许部分分片，但分片仍须从 0 连续编号。任何情况下都不得把 `failed` 当 `complete` 消费。
 
 4. **分片归属由 `run_dir` 决定，不由文件名决定。** `read_chunk(path, entry)` 只比对文件名与 SHA-256，字节完全相同的副本可以通过；因此**消费入口必须传 `run_dir=`**，此时解析后的分片必须恰好位于 `run_dir / entry.path`，越界（含符号链接逃逸）一律拒绝。省略 `run_dir` 的调用仅做文件身份/摘要/字段校验，只可用于已知归属的上下文。
+
+5. **`schema_version` 决定可读窗口，`scenario_kind` 是可选键。** 写端只写 `"2.0"`；读端接受窗口 `{"1.0", "2.0"}`。**窗口外的版本（如 `"3.0"`）在键集校验之前就被点名拒收**，报「不支持的 schema version」而不是「这串键我不认识」——前者是操作者能直接照做的结论，后者会把「读不了」误报成「数据坏了」。`1.0` 永久可读：历史运行没有 `scenario_kind`，不能因为写端前进了就让旧运行目录失效。`scenario_kind` **不在必填键集内**，它的三种状态必须分清：
+   - **键缺失** = 本次运行**未声明**，读入侧按未声明继续处理（1.0 清单因此照常可读）；
+   - **键存在且值合法** = 声明，取值必须是字符串且属于 `{normal, degradation, fault}`；
+   - **键存在但值非法**（显式 `null`、非字符串、其它字面量）= **点名拒收**。写出该键就是做出了声明，而 `null` 不是三种类型之一，不能拿它当「未声明」的表示法——否则「没写」与「写了但是空」会被读成同一件事，而这两种 run 的可信度并不相同。
 
 ### 5.3 故障真值（只对验证器开放）
 
@@ -276,13 +288,25 @@ Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留�
 
 上面的清单是「最少包括」，不是全部。判定层另有固定字段，一并属于 `reports/summary.json` 的公开结构：`scenario_kind`、`scenario_kind_source`、`scenario_kind_scope`、`verifiable`、`passed`、`verdict_reasons`、`detection_lag_windows`、`detection_lag_source`。这些是报告层字段，不是 §5 的输入契约，增加它们不构成公共输入字段变更。
 
+`scenario_kind` 的取值域是 `normal` / `degradation` / `fault` / `null`；`scenario_kind_source` 记的是**证据出处**，取值域为 `fault_events` / `manifest` / `acceptance_manifest` / `null` 四个（`null` 表示三个来源都不命中，本次不套用任何一套场景判据）；`scenario_kind_scope` 用一句话复述该出处，使操作者能按它自行复核，不必反推代码。
+
 三条约束写死在这里：
 
-1. `scenario_kind` 只能来自证据。run 目录的 `private_truth/faults.json` 至少有 1 个注入事件时取 `fault`，来源记 `fault_events`；没有事件时只按 `docs/acceptance.md` §3 受审验收配置的**精确 id** 匹配（`acceptance_healthy_*` → `normal`，`acceptance_degradation_*` → `degradation`），来源记 `acceptance_manifest`。两条都不命中时 `scenario_kind` 必须是 `null`，不得按 id 子串、前缀或「没有事件就算正常」之类的默认值推断场景类型。
+1. `scenario_kind` 只能来自证据，按**三个来源依次取第一个可用的**，并在 `scenario_kind_source` 里点名出处：
+   - **`private_truth/faults.json` 至少有 1 个注入事件** → 取 `fault`，来源记 `fault_events`。事件本身就是证据；**即使清单也声明了 `fault`，来源仍记这里**，因为这是操作者能复核的那一份，声明只是对它的转述。
+   - **清单的 `scenario_kind` 声明**（schema 2.0，生产端写下） → 取其声明值，来源记 `manifest`。
+   - **受审验收配置的精确 id 匹配**（`docs/acceptance.md` §3，`acceptance_healthy_*` → `normal`，`acceptance_degradation_*` → `degradation`） → 来源记 `acceptance_manifest`。这是 schema 1.0 历史 run 的**迁移回退**，不是长期口径。
+   三个来源都不命中时 `scenario_kind` 必须是 `null`，不得按 id 子串、前缀或「没有事件就算正常」之类的默认值推断场景类型。
+   **另外三种情况同样不套用判据**，必须写进 `verdict_reasons`：其一，**真值文件不可读**（缺失，且生产端的完成行没有声明注入事件数为零）时无法判定有无事件，本次不套用任何场景判据；其二、其三是**清单声明与真值互相矛盾**——是**这次运行自相矛盾**，责任在声明，不归因于分析算法，本次同样不套用任何场景判据。两档矛盾的对外取值如下，不得混为一档：
+   - **其二：声明 `normal`/`degradation`，而真值文件带有注入事件。** 按上面的顺序，真值事件是证据，取 `scenario_kind = fault`、`scenario_kind_source = fault_events`；但 `verifiable = false`、`passed = null`，理由须同时点名 `manifest.scenario_kind` 与 `private_truth/faults.json`。
+   - **其三：声明 `fault`，而真值文件没有任何注入事件。** 此时没有事件证据可取，取 `scenario_kind = fault`、`scenario_kind_source = manifest`（声明是唯一来源，故来源记 `manifest`）；同样 `verifiable = false`、`passed = null`，理由须同时点名 `manifest.scenario_kind` 与 `private_truth/faults.json`，并且**不得**按检测率给出失败理由——没有事件就没有可漏报的检测器，错的是声明不是检测器。
+   两档都不得产出 `passed = false`：矛盾不是「不通过」，是**判不了**。
 2. `scenario_kind = null` ⇒ `verifiable = false` ⇒ `passed = null`，并在 `verdict_reasons` 里写明无法确定场景类型的原因。反过来，`passed` 只有在 `verifiable = true` 时才出现布尔值。
 3. `detection_lag_windows` 报本次匹配实际使用的时延窗口数，`detection_lag_source` 报它的取值出处（当前为 `metrics.MAX_DETECTION_LAG_WINDOWS_DEFAULT`）。报告不得只写数字而不交代来源。
 
 字段是新增的，但 `report_schema_version` 保持 `"1.0"` 不升版：既有消费方按「未知键忽略」读报告，不会因为多出这几个键而失败；等 §5.4 的键集本身发生破坏性调整时再升版。
+
+**schema 2.0 落地后的取值域变化**：判定层的**键集**没有变（仍是上列八个字段），所以不升版；变的是 `scenario_kind_source` 的**取值域**——因新增 `manifest` 一支而由两支扩为三支（`fault_events` / `manifest` / `acceptance_manifest`）。既有消费方按「未知取值」处理即可，不构成破坏性调整。**取值域扩张是否仍需重新评估升版，由 A 依 §13 裁定**；本段只如实记录当前实现口径，不代拍板。
 
 ## 6. Python 模块公开接口契约
 
