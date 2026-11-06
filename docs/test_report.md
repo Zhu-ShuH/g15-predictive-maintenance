@@ -12,9 +12,9 @@
 | 正常场景误报 | **0**（两个 seed 各 0） |
 | 退化场景判定 | **通过**（两 seed 后半段中位数均低于前半段） |
 | 三类独立故障注入 | 业务故障 ✔　文件损坏/SHA ✔　Linux `kill -9` ✔（C6 于 #51 在 Ubuntu 24.04.4 与 RHEL 9.7 各跑出 9 passed、无 skip；本机 Windows 仍按平台 skip，留证与边界见 §4.3） |
-| Issue 验收命令 | `pytest -q tests/integration tests/fault_injection` → **155 passed, 6 skipped，退出码 0**（main `2054bb5`） |
-| 工程门禁 | black ✔（53 files）　pylint **9.91/10** ✔　全量 pytest **752 passed, 14 skipped** ✔（main `2054bb5`） |
-| 双 Linux 实测 | 部分完成：`kill -9`（§4.3）与百万点基准（§5.3 A 表）已有 Ubuntu 24.04.4 / RHEL 9.7 双系统留证；**公开仓库现场全新克隆**仍属 Issue #10，未完成。§3 的检出率数据全部来自 Windows |
+| Issue 验收命令 | `pytest -q tests/integration tests/fault_injection` → **155 passed, 6 skipped，退出码 0**（main `195f5aa`，2026-11-04 复跑，与 `2054bb5` 一致） |
+| 工程门禁 | black ✔（53 files）　pylint **9.91/10** ✔　全量 pytest **755 passed, 14 skipped** ✔（main `195f5aa`） |
+| 双 Linux 实测 | 部分完成：`kill -9`（§4.3）、百万点基准（§5.3 A 表）、**公开仓库现场全新克隆**（`2054bb59`，两机 `clone_exit=0`/`setup_exit=0`/`benchmark_exit=0`，#10 评论 6582119780）已有 Ubuntu 24.04.4 / RHEL 9.7 双系统留证。**仍未完成**的是 G4 闭环（`simulate`/`report` 合并后）的双系统取证与检出率结论；§3 的检出率数据全部来自 Windows |
 
 ## 2 被测身份与环境
 
@@ -197,6 +197,23 @@ manifest 升到 2.0 并新增可选键 `scenario_kind` 之后，这条链路按�
 
 百万点那一行是 **`verify_run` 自己的耗时**，不是生产窗口，也不是 CLI 总墙钟。同一 run 的生产计时窗口是 0.160 s（本机单次，非验收口径）。CLI 总墙钟归 C3 的 `benchmark` 子命令、进程峰值 RSS 归 C6 的进程外工具，本报告不代填。
 
+### 5.1.1 当前 main `195f5aa` 门禁复跑（2026-11-04）
+
+本次只在 `195f5aa` 上补数字，不改任何口径：被测链路、配置、规则与 §2 相同（`configs/health_rules.yaml`、`configs/consumer.yaml`、`configs/benchmark_1m.yaml` 三份文件的 CRLF 工作树摘要与 LF blob 摘要，在 `2054bb5..195f5aa` 之间没有任何变化，已用 `sha256sum` 逐份复核）。环境 Windows 11 / Python 3.12.15 / NumPy 2.5.4，干净 worktree。
+
+| 命令 | 退出码 | 结果 |
+|---|---|---|
+| `pytest -q tests/integration tests/fault_injection`（Issue 验收） | 0 | **155 passed, 6 skipped in 20.11s** |
+| `pytest -q` | 0 | **755 passed, 14 skipped in 25.72s** |
+| `G15_RUN_STRESS=1 pytest -q` | 0 | **759 passed, 10 skipped in 28.29s** |
+| `G15_RUN_STRESS=1 pytest -q -s tests/integration/test_stress_repeatability.py` | 0 | **4 passed in 3.24s** |
+| `pytest -q tests/performance` | 0 | **6 skipped**（opt-in，需显式开启） |
+| `pytest --collect-only -q` | 0 | **769 collected**（分目录见 §6） |
+| `black --check src tests` | 0 | **53 files would be left unchanged** |
+| `pylint src/g15 --fail-under=8.5` | 0 | **9.91/10** |
+
+14 条 skip 的构成与 §5 一致：6 条性能 opt-in + 4 条压力用例 + 1 条 Linux `kill -9` + 3 条符号链接权限用例。§5 与 §5.1 那两张表分别是历史基线 `75b11945` 与主线 `8eee3ca` 的输出，保留原样，不和本表混用。
+
 ### 5.2 压力测试实测（重复执行、并发与中断恢复，2026-10-31）
 
 口径见 `docs/test_plan.md` §5.2。用例已入库为 `tests/integration/test_stress_repeatability.py`（4 个测试函数，`G15_RUN_STRESS=1` 才跑），不再是脚本。
@@ -216,7 +233,7 @@ G15_RUN_STRESS=1 python -m pytest -q -s tests/integration/test_stress_repeatabil
 | `test_racing_consumers_never_duplicate_rows` | 3 个 spawn 消费者：典型结果是一个 `written/256` + 两个失败（`IntegrityError` 唯一键冲突或 `DatabaseError` 锁），也出现过两个成功（先跑完的写 256，后进来的写 0）；四轮最终库内容都等于单进程跑一遍的结果，无重复行 |
 | `test_abruptly_stopped_consumption_replays_to_the_same_content` | `benchmark_1m` 10 分片，第 1 片事务提交后 kill，停在 `processed_chunks=1/10`；重放写 3506 窗口 / 9 告警、处理 9 片跳过 1 片，最终 `runs 1 / chunks 10 / windows 3906 / alarms 9 / alarm_states 1`，五表全量行与未中断对照库逐行相同 |
 
-**B. 默认门禁不受影响**：不设 `G15_RUN_STRESS` 时这 4 条全部 skip。main `2054bb5` 上实测 `pytest -q` = **752 passed, 14 skipped in 24.87s**（14 条 skip = 6 性能 opt-in + 4 压力用例 + 1 Linux `kill -9` + 3 符号链接）；设 `G15_RUN_STRESS=1` 后全量是 **756 passed, 10 skipped in 28.15s**。
+**B. 默认门禁不受影响**：不设 `G15_RUN_STRESS` 时这 4 条全部 skip。main `195f5aa` 上实测 `pytest -q` = **755 passed, 14 skipped in 25.72s**（14 条 skip = 6 性能 opt-in + 4 压力用例 + 1 Linux `kill -9` + 3 符号链接）；设 `G15_RUN_STRESS=1` 后全量是 **759 passed, 10 skipped in 28.29s**；同一 SHA 上单跑该文件复跑一轮 4 passed in 3.24 s（`2054bb5` 那轮是 2.86 / 5.03 / 4.31 s）。
 
 **补充：一次性探针的历史数字（2026-10-31 早前，未入库）**
 
@@ -285,18 +302,18 @@ Windows 上没有 `/usr/bin/time -v` 等价物，**峰值 RSS 未测**，如实�
 
 ## 6 用例规模汇总（`docs/acceptance.md` §4 的 ≥15 单测 / ≥20 用例）
 
-| 目录 | 基线 `75b11945` | 主线 `8eee3ca` | 当前 main `2054bb5` |
-|---|---|---|---|
-| `tests/unit/` | 521 | **543** | **598** |
-| `tests/integration/` | 0 | **118** | **152**（含 `test_stress_repeatability.py` 4 条，默认 skip） |
-| `tests/fault_injection/` | 0 | **9** | **9** |
-| `tests/performance/` | 6 | **6** | **6** |
-| `tests/test_package_import.py` | 1 | **1** | **1** |
-| **合计** | **528** | **677** | **766** |
+| 目录 | 基线 `75b11945` | 主线 `8eee3ca` | `2054bb5` | 当前 main `195f5aa` |
+|---|---|---|---|---|
+| `tests/unit/` | 521 | **543** | **598** | **601** |
+| `tests/integration/` | 0 | **118** | **152**（含 `test_stress_repeatability.py` 4 条，默认 skip） | **152**（同上） |
+| `tests/fault_injection/` | 0 | **9** | **9** | **9** |
+| `tests/performance/` | 6 | **6** | **6** | **6** |
+| `tests/test_package_import.py` | 1 | **1** | **1** | **1** |
+| **合计** | **528** | **677** | **766** | **769** |
 
 基线 `75b11945` 上 `tests/integration/` 与 `tests/fault_injection/` 只有 `.gitkeep`，各 0 个测试文件，实测 `pytest --collect-only -q` 为 `528 tests collected`。基线列按此更正（C4 在 #84 指出原 53/9/590 有误，A 于 `5b1e315e` 一并修正）。
 
-单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5、§5.1、§5.2）。各列都是 `pytest --collect-only -q` 的收集数，不是"通过数"。当前 main `2054bb5` 上默认跑过的是 752 条（766 收集数减 14 条 skip）；4 条压力用例要显式开 `G15_RUN_STRESS=1` 才计入，开了是 756 条。
+单元测试远超 15 条、可执行用例远超 20 条；本报告只统计**实际跑过**的（见 §5、§5.1、§5.2）。各列都是 `pytest --collect-only -q` 的收集数，不是"通过数"。当前 main `195f5aa` 上默认跑过的是 755 条（769 收集数减 14 条 skip）；4 条压力用例要显式开 `G15_RUN_STRESS=1` 才计入，开了是 759 条。`unit` 从 598 增到 601 来自 #103（防漂移断言）与 #104（burst 短时长用例改写）；`integration`/`fault_injection`/`performance` 三条路径在 `2054bb5..195f5aa` 之间没有改动。
 
 ## 6.1 复审整改（A 的 R1–R7，2026-10-26）
 
@@ -316,7 +333,7 @@ A 在 `5646201287` 上给了六条 CHANGES_REQUESTED（R1–R6），第三轮 `5
 
 ## 7 未覆盖与风险（不得在答辩中宣称）
 
-1. **双 Linux 实测**：Ubuntu 24.04 / RHEL 9 的公开仓库全新克隆、安装与端到端运行仍属 Issue #10（C6）；`kill -9` 的双系统留证已由 C6 于 2026-11-02 补齐（见 §4.3），但那是把已有测试树拿到 Linux 上跑，不等于「现场全新克隆」这条验收项完成。本报告 §3 的检出率与受控轮廓数据全部来自 Windows，不能替代。
+1. **双 Linux 实测（部分完成）**：`kill -9` 的双系统留证见 §4.3（C6，2026-11-02，把已有测试树拿到 Linux 上跑）。**公开仓库现场全新克隆**已由 C6 于 2026-11-03 在两台虚拟机上补证：`2054bb59`，`clone_exit=0` / `setup_exit=0` / `benchmark_exit=0`，3/3 成功、verification passed，未用代理或 bundle（#10 评论 `6582119780`，同见 `docs/deployment.md` §5）。所以「没在 Linux 上从公开仓库拉下来跑过」这句已不成立，不能再写。**仍未完成的是两件事**：①G4 闭环（`simulate`/`report` 合并后）的双系统端到端取证；②检出率与误报结论的双系统复现。本报告 §3 的检出率与受控轮廓数据全部来自 Windows，不能替代。
 2. **`kill -9` 恢复**：Linux 侧已有双系统留证（§4.3，Ubuntu 24.04.4 / RHEL 9.7 各 9 passed 无 skip）。本机 Windows 无 POSIX 信号语义，仍按平台 skip，不在 Windows 上伪造该项。
 3. **百万点 60 秒的结论**：生产基准计时方法见 `docs/test_plan.md` §5.3、实测数字见 §5.3（含 C6 的双 Linux 正式留证）。本报告 §3 的受控轮廓只有 65536 点，两套口径不能互换，也不能拿受控轮廓的成绩代替生产基准。
 4. **真实工业准确率**：本报告的"100%"只指 §3 预定义教学测试集上的事件召回率。
