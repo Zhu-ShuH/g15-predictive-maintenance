@@ -32,6 +32,7 @@ import yaml
 
 __all__ = [
     "ALLOWED_UNITS",
+    "CONFIG_SCENARIO_KINDS",
     "FAULT_MODES",
     "FAULT_TYPES",
     "INCOMPLETE_WINDOW_POLICIES",
@@ -50,7 +51,10 @@ __all__ = [
     "validate_config",
 ]
 
-#: Only schema version accepted by this implementation (``docs/interface.md``).
+#: Only schema version accepted by this implementation (``docs/interface.md``
+#: section 4).  This is the *configuration* contract version, not the manifest
+#: one: :data:`g15.pipeline.schema.SCHEMA_VERSION` is a separate constant with a
+#: separate value, because the two documents version independently.
 SCHEMA_VERSION = "1.0"
 
 #: Fault mechanisms of ``docs/interface.md`` section 7.2.
@@ -58,6 +62,14 @@ FAULT_TYPES = frozenset({"spike", "step", "burst"})
 
 #: Fault generation modes of ``docs/interface.md`` section 4.
 FAULT_MODES = frozenset({"manual", "stochastic", "combined"})
+
+#: Scenario kinds a configuration may *declare* (``docs/interface.md`` section 4).
+#:
+#: ``fault`` is deliberately absent: a fault run is defined by the events that
+#: were actually injected, so the producer derives that kind from the truth file
+#: instead of trusting a declaration.  Writing ``fault`` here is a configuration
+#: error rather than a way to force the verdict.
+CONFIG_SCENARIO_KINDS = frozenset({"normal", "degradation"})
 
 #: Policies for a final window shorter than ``window_points``.
 INCOMPLETE_WINDOW_POLICIES = frozenset({"drop", "error"})
@@ -87,7 +99,7 @@ _SCENARIO_FIELDS = (
     "total_points",
     "chunk_points",
 )
-_SCENARIO_OPTIONAL = ("description",)
+_SCENARIO_OPTIONAL = ("description", "kind")
 _SIGNAL_FIELDS = ("baseline", "degradation_rate_per_sample", "noise_std", "unit")
 _FAULT_FIELDS = ("mode", "stochastic_probability_per_window", "events")
 _EVENT_FIELDS = ("event_id", "type", "start_seq", "duration_points", "amplitude")
@@ -164,6 +176,10 @@ class ScenarioBlock:  # pylint: disable=too-many-instance-attributes
         total_points: Declared run length in samples; must be positive.
         chunk_points: Shard size in samples; must be positive and a multiple of
             the consumer ``window_points``.
+        kind: Scenario kind the configuration declares, or ``None`` when the
+            key is absent (an undeclared run).  A declaration is never inferred
+            from the profile name; only :data:`CONFIG_SCENARIO_KINDS` is
+            accepted here.
     """
 
     scenario_id: str
@@ -174,6 +190,7 @@ class ScenarioBlock:  # pylint: disable=too-many-instance-attributes
     sample_rate_hz: int
     total_points: int
     chunk_points: int
+    kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -657,6 +674,8 @@ def _validate_scenario(scenario: ScenarioBlock) -> None:
     """
     _as_str(scenario.scenario_id, "scenario.id")
     _as_str(scenario.description, "scenario.description", allow_empty=True)
+    if scenario.kind is not None:
+        _check_choice(scenario.kind, "scenario.kind", CONFIG_SCENARIO_KINDS)
     _check_non_negative_int(scenario.seed, "scenario.seed")
     _check_utc_datetime(scenario.start_time_utc, "scenario.start_time_utc")
     _as_str(scenario.device_id, "scenario.device_id")
@@ -887,6 +906,29 @@ def _build_signals(data: object) -> SignalsBlock:
     )
 
 
+def _optional_scenario_kind(block: dict[str, object]) -> str | None:
+    """Return the declared ``scenario.kind``, or ``None`` when it is absent.
+
+    An absent key means "this configuration does not declare a kind", which is
+    different from declaring an invalid one: a present but unusable value (a
+    typo, ``fault``, an explicit ``null``) is rejected instead of being read as
+    undeclared.
+
+    Args:
+        block: Raw ``scenario`` mapping.
+
+    Returns:
+        The declared kind, or ``None`` when the key is absent.
+
+    Raises:
+        ConfigError: if the key is present but not one of
+            :data:`CONFIG_SCENARIO_KINDS`.
+    """
+    if "kind" not in block:
+        return None
+    return _check_choice(block["kind"], "scenario.kind", CONFIG_SCENARIO_KINDS)
+
+
 def _build_scenario_block(data: object) -> ScenarioBlock:
     """Build the ``scenario`` block.
 
@@ -924,6 +966,7 @@ def _build_scenario_block(data: object) -> ScenarioBlock:
         chunk_points=_as_int(
             _require(block, "chunk_points", "scenario"), "scenario.chunk_points"
         ),
+        kind=_optional_scenario_kind(block),
     )
 
 

@@ -528,11 +528,17 @@ ACCEPTANCE_SCENARIO_KINDS: Mapping[str, str] = {
     "acceptance_degradation_seed20261016": SCENARIO_DEGRADATION,
 }
 
+#: Report value of ``scenario_kind_source`` when the manifest declared it.
+KIND_SOURCE_MANIFEST: str = "manifest"
+
 #: Report value of ``scenario_kind_source`` when the truth file decided it.
 KIND_SOURCE_FAULT_EVENTS: str = "fault_events"
 
 #: Report value of ``scenario_kind_source`` when the reviewed list decided it.
 KIND_SOURCE_ACCEPTANCE_LIST: str = "acceptance_manifest"
+
+#: Report value of ``scenario_kind_scope`` for the manifest branch.
+KIND_SCOPE_MANIFEST: str = "manifest.json scenario_kind declares the kind (schema 2.0)"
 
 #: Report value of ``scenario_kind_scope`` for the truth-file branch.
 KIND_SCOPE_FAULT_EVENTS: str = (
@@ -545,31 +551,128 @@ KIND_SCOPE_ACCEPTANCE_LIST: str = (
 )
 
 
-def _scenario_kind(scenario_id: str, has_events: bool) -> str | None:
+def _scenario_kind(
+    scenario_id: str, has_events: bool, declared_kind: str | None = None
+) -> str | None:
     """Classify a run into one of the three scenario kinds, or give up.
 
     The kind decides which acceptance criterion applies, so it may only be
-    stated when the run carries the evidence for it.  Injected events are such
-    evidence: they are read from the truth file and decide ``fault`` on their
-    own.  Without events the run directory says nothing about the kind -- the
-    manifest has no field for it and the log declares none -- so the only
-    remaining source is the reviewed list of acceptance profile ids.  A run
-    outside that list is not classifiable; answering ``normal`` for it would
-    turn "the run does not say" into "no alarm was expected", which is the
-    wrong verdict (review of Issue #9, R8).
+    stated when the run carries the evidence for it.  Three sources are
+    consulted, in this order:
+
+    1. The truth file -- injected events are evidence in their own right and
+       decide ``fault`` whatever the manifest says.  Evidence outranks a
+       declaration: a run whose truth file carries events is a fault run even
+       when the manifest was hand-edited to claim otherwise.  A contradiction
+       is not silently resolved by this order -- it is reported as a blocker,
+       because the failure then belongs to the declaration (ruling of
+       Issue #106, comment 6634044429).
+    2. ``manifest.scenario_kind`` -- what the producer wrote down (schema 2.0),
+       consulted only for a run whose truth file carries no event.
+    3. The reviewed list of acceptance profile ids -- the migration fallback
+       for runs produced before schema 2.0.
+
+    A run outside all three is not classifiable; answering ``normal`` for it
+    would turn "the run does not say" into "no alarm was expected", which is
+    the wrong verdict (review of Issue #9, R8).
 
     Args:
         scenario_id: Scenario identifier from the manifest.
         has_events: Whether the run's truth file carries injected events.
+        declared_kind: ``manifest.scenario_kind``, or ``None`` when the
+            manifest does not declare one.
 
     Returns:
-        ``fault`` for a run with injected events, the listed kind for a
-        reviewed acceptance profile id, or ``None`` when the run does not
-        say which kind it is.
+        The declared kind, ``fault`` for a run with injected events, the
+        listed kind for a reviewed acceptance profile id, or ``None`` when
+        the run does not say which kind it is.
     """
     if has_events:
         return SCENARIO_FAULT
+    if declared_kind is not None:
+        return declared_kind
     return ACCEPTANCE_SCENARIO_KINDS.get(scenario_id)
+
+
+def _kind_and_source(
+    facts: "_RunFacts", events: tuple[Any, ...] | None
+) -> tuple[str | None, str | None, str | None]:
+    """Return ``(kind, source, scope)`` for a run, or three ``None``s.
+
+    Split out of :func:`build_report_data` so the three-source order lives in
+    one place: the kind decides which acceptance criterion applies, and the
+    source must name the evidence an operator can re-check (Issue #83).
+
+    Args:
+        facts: Facts gathered for the run.
+        events: Injected events from the truth file, or ``None`` when the
+            truth is unreadable.
+
+    Returns:
+        The kind, the report value of ``scenario_kind_source`` and the report
+        value of ``scenario_kind_scope``.
+    """
+    declared_kind = facts.manifest.scenario_kind
+    if events is None:
+        return None, None, None
+    kind = _scenario_kind(str(facts.manifest.scenario_id), bool(events), declared_kind)
+    if events and kind == SCENARIO_FAULT:
+        # The evidence outranks the declaration, so a fault run always names
+        # the truth file as its source -- including a run whose manifest also
+        # declares ``fault``, because the file is what an operator re-checks.
+        return kind, KIND_SOURCE_FAULT_EVENTS, KIND_SCOPE_FAULT_EVENTS
+    if declared_kind is not None:
+        return kind, KIND_SOURCE_MANIFEST, KIND_SCOPE_MANIFEST
+    if kind is not None:
+        return kind, KIND_SOURCE_ACCEPTANCE_LIST, KIND_SCOPE_ACCEPTANCE_LIST
+    return kind, None, None
+
+
+def _kind_blockers(
+    facts: "_RunFacts", events: tuple[Any, ...] | None, kind: str | None
+) -> list[str]:
+    """Explain why a run cannot be scored against a scenario criterion.
+
+    Args:
+        facts: Facts gathered for the run.
+        events: Injected events from the truth file, or ``None``.
+        kind: Kind established by :func:`_kind_and_source`.
+
+    Returns:
+        Zero, one or two blocker sentences.
+    """
+    declared_kind = facts.manifest.scenario_kind
+    blockers: list[str] = []
+    if declared_kind is not None and events and declared_kind != SCENARIO_FAULT:
+        # The manifest says normal/degradation while the truth file carries
+        # injected events.  Blaming the analysis would be wrong: the run
+        # contradicts itself, and the failure belongs to the declaration.
+        blockers.append(
+            "run 自相矛盾：manifest.scenario_kind 声明为 "
+            f"{declared_kind!r}（来源 manifest），但 private_truth/faults.json "
+            f"有 {len(events)} 个注入事件；场景类型来源与真值不一致，"
+            "本次不套用任何一套场景判据"
+        )
+    if declared_kind == SCENARIO_FAULT and events is not None and not events:
+        # The mirror image: the manifest claims a fault run while the truth
+        # file carries nothing.  Scoring it against the fault criterion would
+        # report a detection failure ("detection_rate must be 1.0, observed
+        # None") for a run that never injected anything -- the declaration is
+        # what is wrong, so the run is not verifiable either way.
+        blockers.append(
+            "run 自相矛盾：manifest.scenario_kind 声明为 'fault'（来源 "
+            "manifest），但 private_truth/faults.json 没有任何注入事件；"
+            "场景类型来源与真值不一致，本次不套用任何一套场景判据"
+        )
+    if events is not None and kind is None:
+        blockers.append(
+            "无法从 run 目录确定场景类型：scenario_id "
+            f"{str(facts.manifest.scenario_id)!r} 不在受审验收清单内，且 "
+            "manifest 与日志均无类型声明；该 run 不套用任何一套场景判据"
+            "（schema 1.0 的 run 需要在 manifest 里写 scenario_kind，"
+            "或改用受审验收清单内的 scenario_id）"
+        )
+    return blockers
 
 
 def _read_truth(
@@ -742,24 +845,8 @@ def build_report_data(run_dir: Path, database_path: Path) -> dict[str, Any]:
         if window_points is not None
         else None
     )
-    kind_source: str | None = None
-    kind_scope: str | None = None
-    if events is None:
-        kind = None
-    else:
-        kind = _scenario_kind(str(facts.manifest.scenario_id), bool(events))
-        if kind == SCENARIO_FAULT:
-            kind_source = KIND_SOURCE_FAULT_EVENTS
-            kind_scope = KIND_SCOPE_FAULT_EVENTS
-        elif kind is not None:
-            kind_source = KIND_SOURCE_ACCEPTANCE_LIST
-            kind_scope = KIND_SCOPE_ACCEPTANCE_LIST
-    if events is not None and kind is None:
-        blockers.append(
-            "无法从 run 目录确定场景类型：scenario_id "
-            f"{str(facts.manifest.scenario_id)!r} 不在受审验收清单内，且 "
-            "manifest 与日志均无类型声明；该 run 不套用任何一套场景判据"
-        )
+    kind, kind_source, kind_scope = _kind_and_source(facts, events)
+    blockers.extend(_kind_blockers(facts, events, kind))
 
     verdict: ScenarioVerdict | None = None
     if not blockers and result is not None and kind is not None:

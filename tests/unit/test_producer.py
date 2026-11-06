@@ -27,7 +27,11 @@ import pytest
 import yaml
 
 from g15.pipeline import producer
-from g15.pipeline.schema import ManifestStatus, manifest_from_dict
+from g15.pipeline.schema import (
+    SCHEMA_VERSION,
+    ManifestStatus,
+    manifest_from_dict,
+)
 from g15.pipeline.serialization import ChunkIOError, read_chunk
 from g15.pipeline.producer import (
     ProductionSummary,
@@ -51,19 +55,23 @@ def scenario_config(
     vibration_unit: str = "g",
     temperature_unit: str = "degC",
     start_time_utc: str = "2026-10-14T00:00:00Z",
+    kind: str | None = None,
 ) -> dict[str, object]:
     """Return a configuration shaped like ``docs/interface.md`` section 4."""
+    scenario: dict[str, object] = {
+        "id": "bearing_001",
+        "seed": seed,
+        "start_time_utc": start_time_utc,
+        "device_id": "DEV-001",
+        "sample_rate_hz": 100,
+        "total_points": total_points,
+        "chunk_points": chunk_points,
+    }
+    if kind is not None:
+        scenario["kind"] = kind
     return {
         "schema_version": "1.0",
-        "scenario": {
-            "id": "bearing_001",
-            "seed": seed,
-            "start_time_utc": start_time_utc,
-            "device_id": "DEV-001",
-            "sample_rate_hz": 100,
-            "total_points": total_points,
-            "chunk_points": chunk_points,
-        },
+        "scenario": scenario,
         "signals": {
             "vibration": {
                 "baseline": 0.5,
@@ -111,7 +119,7 @@ def test_run_publishes_a_complete_manifest(tmp_path: Path) -> None:
     payload, manifest = load_manifest(run_dir)
 
     assert manifest.status is ManifestStatus.COMPLETE
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == SCHEMA_VERSION
     assert manifest.total_points == 1000
     assert [entry.rows for entry in manifest.parts] == [256, 256, 256, 232]
     assert sum(entry.rows for entry in manifest.parts) == 1000
@@ -121,6 +129,103 @@ def test_run_publishes_a_complete_manifest(tmp_path: Path) -> None:
         "raw/part-000002.npz",
         "raw/part-000003.npz",
     ]
+
+
+def test_a_declared_kind_is_published_in_the_manifest(tmp_path: Path) -> None:
+    """A declared ``scenario.kind`` must reach the manifest verbatim."""
+    run_dir = produce_run(
+        scenario_config(total_points=256, kind="degradation"), tmp_path
+    )
+
+    payload, manifest = load_manifest(run_dir)
+
+    assert payload["schema_version"] == "2.0"
+    assert payload["scenario_kind"] == "degradation"
+    assert manifest.scenario_kind == "degradation"
+
+
+def test_an_undeclared_kind_is_omitted_rather_than_written_as_null(
+    tmp_path: Path,
+) -> None:
+    """No declaration means no key: ``null`` would be a claim, not silence."""
+    run_dir = produce_run(scenario_config(total_points=256), tmp_path)
+
+    payload, manifest = load_manifest(run_dir)
+
+    assert "scenario_kind" not in payload
+    assert manifest.scenario_kind is None
+
+
+def test_injected_events_publish_a_fault_kind(tmp_path: Path) -> None:
+    """A fault run is derived from the injection, not from a declaration."""
+    config = scenario_config(
+        total_points=256,
+        events=[
+            {
+                "event_id": "F001",
+                "type": "spike",
+                "start_seq": 40,
+                "duration_points": 8,
+                "amplitude": 5.0,
+            }
+        ],
+    )
+    run_dir = produce_run(config, tmp_path)
+
+    payload, manifest = load_manifest(run_dir)
+
+    assert payload["scenario_kind"] == "fault"
+    assert manifest.scenario_kind == "fault"
+
+
+def test_a_declared_kind_contradicting_injection_publishes_nothing(
+    tmp_path: Path,
+) -> None:
+    """Declaring "normal" while injecting an event is a configuration error."""
+    config = scenario_config(
+        total_points=256,
+        kind="normal",
+        events=[
+            {
+                "event_id": "F001",
+                "type": "spike",
+                "start_seq": 40,
+                "duration_points": 8,
+                "amplitude": 5.0,
+            }
+        ],
+    )
+    output_root = tmp_path / "runs"
+
+    with pytest.raises(ValueError, match="contradicts the requested fault"):
+        produce_run_detailed(config, output_root)
+
+    assert not output_root.exists()
+    assert list(tmp_path.rglob("manifest.json")) == []
+
+
+@pytest.mark.parametrize("kind", ["fault", "healthy", "", "NORMAL"])
+def test_an_undeclarable_kind_publishes_nothing(tmp_path: Path, kind: str) -> None:
+    """``fault`` cannot be declared, and a typo is not silently ignored."""
+    config = scenario_config(total_points=256, kind=kind)
+    output_root = tmp_path / "runs"
+
+    with pytest.raises(ValueError, match="scenario.kind must be one of"):
+        produce_run_detailed(config, output_root)
+
+    assert not output_root.exists()
+
+
+def test_a_non_string_kind_publishes_nothing(tmp_path: Path) -> None:
+    """A non-string kind is refused rather than coerced."""
+    config = scenario_config(total_points=256)
+    config["scenario"]["kind"] = 1  # type: ignore[index]
+    output_root = tmp_path / "runs"
+
+    with pytest.raises(ValueError, match="must be a string"):
+        produce_run_detailed(config, output_root)
+
+    assert not output_root.exists()
 
 
 def test_exact_division_publishes_no_empty_tail(tmp_path: Path) -> None:

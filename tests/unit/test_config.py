@@ -645,6 +645,50 @@ def test_unsupported_fault_mode_is_rejected(tmp_path: Path) -> None:
     expect_invalid(tmp_path, document, "fault_generation.mode", "must be one of")
 
 
+@pytest.mark.parametrize("kind", ["normal", "degradation"])
+def test_a_declarable_scenario_kind_is_accepted(tmp_path: Path, kind: str) -> None:
+    """``scenario.kind`` is optional, but when present it must be declarable."""
+    document = base_document()
+    document["scenario"]["kind"] = kind
+
+    config = load_config(write_document(tmp_path, document))
+
+    assert config.scenario.kind == kind
+    assert validate_config(config) is None
+
+
+def test_an_absent_scenario_kind_stays_undeclared() -> None:
+    """No key means "undeclared", never an inferred default."""
+    config = load_config(CONFIGS / "default.yaml")
+
+    assert config.scenario.kind is None
+
+
+@pytest.mark.parametrize("kind", ["fault", "healthy", "NORMAL", ""])
+def test_an_undeclarable_scenario_kind_is_rejected(tmp_path: Path, kind: str) -> None:
+    """``fault`` is produced by injection, not declared by a configuration."""
+    document = base_document()
+    document["scenario"]["kind"] = kind
+
+    expect_invalid(tmp_path, document, "scenario.kind", "must be one of")
+
+
+def test_an_explicit_null_scenario_kind_is_rejected(tmp_path: Path) -> None:
+    """``kind: null`` is a typo, not a way to say "undeclared"."""
+    document = base_document()
+    document["scenario"]["kind"] = None
+
+    expect_invalid(tmp_path, document, "scenario.kind", "must be one of")
+
+
+def test_a_non_string_scenario_kind_is_rejected(tmp_path: Path) -> None:
+    """``kind: 1`` must not be read as ``"1"``."""
+    document = base_document()
+    document["scenario"]["kind"] = 1
+
+    expect_invalid(tmp_path, document, "scenario.kind", "must be one of")
+
+
 def test_chunk_points_must_be_a_multiple_of_window_points() -> None:
     """The cross-document divisibility rule must name both fields."""
     config = load_config(CONFIGS / "default.yaml")

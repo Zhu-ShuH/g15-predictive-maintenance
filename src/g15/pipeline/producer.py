@@ -77,6 +77,7 @@ from g15.pipeline.schema import (
     ChunkManifestEntry,
     Manifest,
     ManifestStatus,
+    SCENARIO_KINDS,
 )
 from g15.pipeline.serialization import write_chunk_atomic
 from g15.simulation.engine import (
@@ -137,6 +138,11 @@ class _Absent:
 
 
 _ABSENT: Final[object] = _Absent()
+
+#: Kinds a scenario file may declare. ``fault`` is deliberately excluded: a
+#: fault run is one where events were actually injected, so declaring it would
+#: let a configuration claim a result it never produced (Issue #83).
+_DECLARABLE_SCENARIO_KINDS: Final[frozenset[str]] = SCENARIO_KINDS - {"fault"}
 
 
 def _dig(source: object, dotted: str) -> Any:
@@ -584,12 +590,94 @@ def _write_parts(
     return entries, truth
 
 
-def _build_manifest(
+def _declared_scenario_kind(config: object) -> str | None:
+    """Return the scenario kind the configuration declares, if any.
+
+    Absence of ``scenario.kind`` means "undeclared", which is not the same as
+    ``normal``: the kind is never inferred from the profile name, the
+    ``scenario_id`` or the degradation rate, because a run that was never
+    labelled must stay unlabelled rather than be guessed into a verdict.
+
+    Args:
+        config: Scenario configuration.
+
+    Returns:
+        ``normal`` or ``degradation``, or ``None`` when the key is absent.
+
+    Raises:
+        ValueError: if the value is not a string or not declarable.
+    """
+    value = _field(config, "kind", None)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"scenario.kind must be a string, got {value!r}")
+    if value not in _DECLARABLE_SCENARIO_KINDS:
+        raise ValueError(
+            f"scenario.kind must be one of {sorted(_DECLARABLE_SCENARIO_KINDS)}, "
+            f"got {value!r}"
+        )
+    return value
+
+
+def _check_declared_kind(config: object, declared: str | None) -> bool:
+    """Refuse a declaration that contradicts the requested injection.
+
+    A scenario that declares ``normal`` or ``degradation`` and also asks for
+    injected events contradicts itself: the declaration would be published as
+    the kind while the truth file says a fault happened.  Refused before the
+    run directory exists, so nothing is published (Issue #83).
+
+    Args:
+        config: Scenario configuration.
+        declared: Kind from ``scenario.kind``, or ``None``.
+
+    Returns:
+        Whether the configuration requests injected faults.
+
+    Raises:
+        ValueError: if a kind is declared alongside requested injection.
+    """
+    requests_faults = _requires_fault_injection(config)
+    if declared is not None and requests_faults:
+        raise ValueError(
+            f"scenario.kind={declared!r} contradicts the requested fault "
+            "injection; a run with injected events is a fault run, so remove "
+            "scenario.kind or remove the events"
+        )
+    return requests_faults
+
+
+def _resolve_scenario_kind(declared: str | None, fault_events: int) -> str | None:
+    """Combine the declared kind with what was actually injected.
+
+    A declared kind wins, because it is the statement the author made about the
+    scenario.  Without one, ``fault`` is derived from the injection itself --
+    the only case where the manifest can claim a fault run is one that really
+    injected an event.  Everything else stays undeclared (Issue #83).
+
+    Args:
+        declared: Kind from ``scenario.kind``, or ``None``.
+        fault_events: Number of events written to the truth file.
+
+    Returns:
+        The kind to publish, or ``None`` when undeclared.
+    """
+    if declared is not None:
+        return declared
+    if fault_events:
+        return "fault"
+    return None
+
+
+def _build_manifest(  # pylint: disable=too-many-arguments
     config: object,
     params: ScenarioParameters,
     run_id: str,
     entries: list[ChunkManifestEntry],
     units: dict[str, str],
+    *,
+    scenario_kind: str | None,
 ) -> Manifest:
     """Assemble the ``complete`` manifest for a finished run.
 
@@ -599,6 +687,8 @@ def _build_manifest(
         run_id: Identifier of the run directory.
         entries: Shards in publication order.
         units: Already validated unit mapping (section 5.2).
+        scenario_kind: Kind to publish, or ``None`` when the configuration
+            declared nothing and no fault event was injected (Issue #83).
 
     Returns:
         A manifest whose ``parts`` cover ``total_points`` exactly.
@@ -615,6 +705,7 @@ def _build_manifest(
         units=dict(units),
         status=ManifestStatus.COMPLETE,
         parts=tuple(entries),
+        scenario_kind=scenario_kind,
     )
 
 
@@ -693,7 +784,9 @@ class ProductionSummary:
     fault_events: int
 
 
-def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary:
+def produce_run_detailed(  # pylint: disable=too-many-locals
+    config: object, output_root: Path
+) -> ProductionSummary:
     """Generate a complete run and report the official timing window.
 
     Args:
@@ -714,6 +807,7 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
             consumable as complete (Issue #45).
         RuntimeError: if faults are requested but the injection module is
             unavailable; no output directory or complete manifest is published.
+        ValueError: if ``scenario.kind`` is not a declarable kind (Issue #83).
         g15.pipeline.schema.DataContractError: if a shard or the manifest
             violates the contract; no ``complete`` manifest is published then.
     """
@@ -727,9 +821,14 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
     # Validated before the run directory exists: a non-contract unit must fail
     # without publishing anything, not after the shards are already on disk.
     units = _units_from(config)
+    # Read (and validated) before the run directory exists: a configuration
+    # that declares a kind it cannot have must fail without publishing.
+    declared_kind = _declared_scenario_kind(config)
+
+    requests_faults = _check_declared_kind(config, declared_kind)
 
     hook = _fault_hook()
-    if hook is None and _requires_fault_injection(config):
+    if hook is None and requests_faults:
         raise RuntimeError(
             "configuration requires fault injection, but "
             "g15.simulation.faults.inject_faults is unavailable (Issue #6)"
@@ -752,7 +851,12 @@ def produce_run_detailed(config: object, output_root: Path) -> ProductionSummary
     # no manifest, which is exactly the semantics of a failed shard write --
     # the consumer rejects the run because the manifest is absent.
     fault_events = _write_truth(run_dir, run_id, truth)
-    manifest = _build_manifest(config, params, run_id, entries, units)
+    # Resolved after the truth file exists: a run may only be called a fault
+    # run when the injection really happened (Issue #83).
+    scenario_kind = _resolve_scenario_kind(declared_kind, fault_events)
+    manifest = _build_manifest(
+        config, params, run_id, entries, units, scenario_kind=scenario_kind
+    )
     _write_json_atomic(run_dir / "manifest.json", manifest.to_dict())
     elapsed = time.perf_counter() - started
     # --- official measurement window ends here ---

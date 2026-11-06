@@ -97,6 +97,21 @@
 
 演示 id **没有**写进 `ACCEPTANCE_SCENARIO_KINDS`。把「报告产出了」当成「演示配置通过验收」是两回事，混起来等于自欺。
 
+### 3.4 场景类型声明链路的验证（Issue #83）
+
+manifest 升到 2.0 并新增可选键 `scenario_kind` 之后，这条链路按层验证，全部用例在 `pytest -q` 里跑：
+
+| 层 | 验证点 | 用例 |
+|---|---|---|
+| 配置 | `scenario.kind` 取 `normal`/`degradation` 合法；`fault`、拼错、`null`、非字符串被点名拒收 | `tests/unit/test_config.py` 5 条 |
+| 序列化 | 2.0 + 声明往返保留；1.0 无键仍可读；1.0 带新键仍可读；3.0 在键集校验前报版本错；显式 `null`/非法值/非字符串被拒；缺 `schema_version` 时报出真实缺失键与未知键 | `tests/unit/test_serialization.py` 8 条 |
+| 生产 | 声明写进 manifest 且版本为 2.0；未声明时不写该键；有注入事件推出 `fault`；声明与注入冲突时 `ValueError` 且不落盘 | `tests/unit/test_producer.py` 6 条 |
+| 报告 | manifest 声明可分类（来源 `manifest`）；声明与清单一致不改结论；声明 `normal` 而真值有事件记为 blocker（报出的 kind/source 仍取证据）；声明 `fault` 而真值零事件记为 blocker 且不归因检测率 | `tests/integration/test_validation_report.py` 4 条 |
+
+版本窗口是读入侧的事：`{1.0, 2.0}` 之外的版本在键集校验之前拒收，所以 3.0 的 run 拿到的是版本错误而不是「缺键」，避免把「读不了」误报成「数据坏了」。`scenario_kind` 缺键表示未声明，报告层回退到受审验收清单并记 `acceptance_manifest`；显式 `null` 不是「未声明」的表示法，会被拒收。
+
+本分支（`feat/83-manifest-scenario-kind`，base `6375e2e`）实测：全量 `pytest -q` = **784 passed, 14 skipped in 24.84 s**，`--collect-only` = 798；收集数由 base 的 766 升到 798，其中上表四层是 23 个新用例函数（配置 5 / 序列化 8 / 生产 6 / 报告 4），其余 9 条差额来自既有用例的参数化展开；`black --check src tests` = 53 files unchanged；`pylint src/g15 --fail-under=8.5` = **9.92/10**，与 base `6375e2e` 同为 9.92，本轮没有新增告警（builder.py 里 C0302 / R0902 / 两处 R0914 是 base 就有的，本轮把 kind 判定段抽成 `_kind_and_source` / `_kind_blockers` 后分支数与语句数回落到阈值内）。
+
 ## 4 三类独立故障注入证据（`docs/acceptance.md` §4）
 
 ### 4.1 业务故障（已完成）

@@ -767,6 +767,118 @@ def test_a_renamed_healthy_run_is_not_promoted_to_a_degradation_pass(
     assert any("受审验收清单" in reason for reason in payload["verdict_reasons"])
 
 
+def _declared_profile(tmp_path: Path, kind: str, seed: str, declared: str):
+    """Run a committed profile with an explicit ``scenario.kind`` added.
+
+    Only the declaration is added: the id stays outside the reviewed list, so
+    the manifest is the single source that can classify the run.
+    """
+    source = (CONFIGS / f"acceptance_{kind}_{seed}.yaml").read_text(encoding="utf-8")
+    marker = "scenario:\n"
+    assert marker in source
+    text = source.replace(marker, marker + f"  kind: {declared}\n", 1)
+    assert text != source
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    config_path = tmp_path / f"declared_{kind}_{seed}.yaml"
+    config_path.write_text(text, encoding="utf-8")
+    summary = produce_run_detailed(load_config(config_path), tmp_path)
+    database = summary.run_dir / "artifacts" / "results.sqlite"
+    consume_run(summary.run_dir, database, load_consumer_config(CONSUMER_CONFIG))
+    return (summary.run_dir, database)
+
+
+def test_a_manifest_declaration_classifies_a_run_the_list_does_not_know(
+    tmp_path: Path,
+) -> None:
+    """``scenario_kind`` in the manifest is a first-class source, not a hint."""
+    run_dir, database = _declared_profile(tmp_path, "healthy", "seed42", "normal")
+    payload = report_of(run_dir, database)
+
+    assert payload["schema_version"] == "2.0"
+    assert payload["scenario_kind"] == SCENARIO_NORMAL
+    assert payload["scenario_kind_source"] == "manifest"
+    assert payload["scenario_kind_scope"] == (
+        "manifest.json scenario_kind declares the kind (schema 2.0)"
+    )
+    assert payload["verifiable"] is True
+    assert payload["passed"] is True
+
+
+def test_a_declaration_matching_the_reviewed_list_keeps_the_verdict(
+    tmp_path: Path,
+) -> None:
+    """Declaring what the list already says must not change the outcome."""
+    run_dir, database = _declared_profile(
+        tmp_path, "degradation", "seed42", "degradation"
+    )
+    payload = report_of(run_dir, database)
+
+    assert payload["scenario_kind"] == SCENARIO_DEGRADATION
+    assert payload["scenario_kind_source"] == "manifest"
+    assert payload["verifiable"] is True
+    assert payload["passed"] is True
+
+
+def test_a_declaration_that_contradicts_the_truth_file_is_a_blocker(
+    tmp_path: Path,
+) -> None:
+    """A run that says "normal" and injected an event cannot be judged.
+
+    The failure belongs to the declaration, not to the analysis: the report
+    must say so instead of blaming the detector for missing (or matching) an
+    event the scenario claimed not to have.
+    """
+    # The producer refuses to write such a run (see test_producer.py), so the
+    # contradiction is built by hand: this is the shape a hand-edited or
+    # third-party manifest would have, and the validator must not judge it.
+    run_dir, database = run_profile(tmp_path, "spike", "seed42")
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["scenario_kind"] = "normal"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    payload = report_of(run_dir, database)
+
+    # Evidence outranks the declaration, so the reported kind is the fault the
+    # truth file proves -- not the "normal" the manifest was edited to claim.
+    assert payload["scenario_kind"] == SCENARIO_FAULT
+    assert payload["scenario_kind_source"] == "fault_events"
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    reasons = " ".join(payload["verdict_reasons"])
+    assert "manifest.scenario_kind" in reasons
+    assert "private_truth/faults.json" in reasons
+    # The alarm the data produced is still reported as a fact.
+    assert payload["alarm_count"] >= 1
+
+
+def test_a_declared_fault_without_any_injected_event_is_a_blocker(
+    tmp_path: Path,
+) -> None:
+    """The mirror of the previous case: a fault declaration with no event.
+
+    Judging this run against the fault criterion would report a detection
+    failure the analysis never committed -- nothing was ever injected to be
+    missed.  The declaration is what is wrong, so the run is not verifiable
+    either way.
+    """
+    run_dir, database = run_profile(tmp_path, "healthy", "seed42")
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["scenario_kind"] = SCENARIO_FAULT
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    payload = report_of(run_dir, database)
+
+    assert payload["scenario_kind"] == SCENARIO_FAULT
+    assert payload["scenario_kind_source"] == "manifest"
+    assert payload["verifiable"] is False
+    assert payload["passed"] is None
+    reasons = " ".join(payload["verdict_reasons"])
+    assert "manifest.scenario_kind" in reasons
+    assert "private_truth/faults.json" in reasons
+    # Nothing is blamed on the detector: no detection-rate reason is emitted.
+    assert "detection_rate" not in reasons
+
+
 def test_a_fault_run_keeps_its_kind_whatever_its_id_says(tmp_path: Path) -> None:
     """An injected event is evidence, so an unlisted id is still a fault run."""
     run_dir, database = _renamed_profile(
