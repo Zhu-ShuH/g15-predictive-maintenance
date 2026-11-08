@@ -25,7 +25,7 @@
 ## 2. 系统结构与模块依赖
 
 ```text
-YAML 配置 → validate/config → Simulation Engine ─┬─> private_truth/faults.json（仅验证器）
+YAML 配置 → validate/config → Simulation Engine ─┬─> private_truth/faults.json（仅报告层真值对账）
                                                │
                                                └─> run/raw/part-000000.npz…
                                                        + manifest.json (SHA256, schema, status)
@@ -39,14 +39,14 @@ YAML 配置 → validate/config → Simulation Engine ─┬─> private_truth/f
                                                    └─ SQLite（幂等事务）
                                                                  │
                                                                  ▼
-                                                   Report Builder / Validator
+                                                   Report Builder / Truth Matcher
                                                    ├─ JSON / Markdown
                                                    ├─ 故障真值匹配（仅测试）
                                                    ├─ 延迟/漏报/误报
                                                    └─ 性能/恢复证据
 ```
 
-**依赖方向**：`cli → config/pipeline/report`；`simulation → common`；`pipeline → common/schema/serialization/analysis/storage`；`analysis → common`；`reporting → storage`。`simulation` **不得 import `analysis` 或 `storage`**；`analysis` **不得访问** `private_truth`。CLI 只能编排模块，不放业务公式。
+**依赖方向**：`cli → config/pipeline/report`；`simulation → common`；`pipeline → common/schema/serialization/analysis/storage`；`analysis → common`；`reporting → storage`。`simulation` **不得 import `analysis` 或 `storage`**；`analysis` 与 `reporting.verifier` **不得访问** `private_truth`，真值只由 `reporting.builder` / `reporting.metrics` 报告层读取。CLI 只能编排模块，不放业务公式。
 
 ## 3. 工程目录（唯一基线）
 
@@ -271,7 +271,7 @@ Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留�
    - **键存在且值合法** = 声明，取值必须是字符串且属于 `{normal, degradation, fault}`；
    - **键存在但值非法**（显式 `null`、非字符串、其它字面量）= **点名拒收**。写出该键就是做出了声明，而 `null` 不是三种类型之一，不能拿它当「未声明」的表示法——否则「没写」与「写了但是空」会被读成同一件事，而这两种 run 的可信度并不相同。
 
-### 5.3 故障真值（只对验证器开放）
+### 5.3 故障真值（只对报告层真值对账开放）
 
 `runs/<run_id>/private_truth/faults.json`（小组暂定路径，非权限边界）：
 
@@ -279,8 +279,8 @@ Manifest 可能被手工编辑、由旧版本写出，或被中断的进程留�
 {"run_id":"...","events":[{"event_id":"F001","device_id":"DEV-001","type":"spike","start_seq":600000,"end_seq_exclusive":600256,"amplitude":5.0}]}
 ```
 
-消费者不接收此文件路径、不读取 `private_truth`、不通过配置加载故障答案。真值与预测只在 `g15 verify` 阶段匹配，防止“看过答案”造成虚假的 100% 检出率。
-如果验收要求实际访问权限隔离，则将真值移至独立根目录并调整 `verify` 参数与文件权限；迁移须先经接口评审。无论路径如何，增加测试证明消费流程仅使用公开数据和规则配置。
+消费者不接收此文件路径、不读取 `private_truth`、不通过配置加载故障答案。真值与预测只由 `reporting.builder` / `reporting.metrics` 报告层在 `g15 report` 阶段匹配；`reporting.verifier.verify_run` 只做 Manifest/NPZ 完整性校验，不读取真值，防止“看过答案”造成虚假的 100% 检出率。
+如果验收要求实际访问权限隔离，则将真值移至独立根目录并调整 `report` 参数与文件权限；迁移须先经接口评审。无论路径如何，增加测试证明消费流程、analysis 与 `reporting.verifier` 仅使用公开数据和规则配置。
 
 ### 5.4 输出报告结构
 
@@ -466,7 +466,7 @@ C2 保证状态与窗口、告警和 `processed_chunks` 按片同事务提交，
 
 `detection_rate = matched_injected_fault_events / total_injected_fault_events`。
 
-事件匹配及受控配置按 docs/acceptance.md；验证器按 `device_id` 和事件区间进行匹配；允许的检测时延 `max_detection_lag_windows` 必须测试前写明。正常场景的误报数量同时报告。应准备至少正常、缓慢退化、突发冲击、阶跃故障四种场景，并预留未参与调参的验证 seed。**“100%”只指预设受控注入测试集**，不能宣称真实工业环境无漏报。
+事件匹配及受控配置按 docs/acceptance.md；报告层按 `device_id` 和事件区间进行匹配；允许的检测时延 `max_detection_lag_windows` 必须测试前写明。正常场景的误报数量同时报告。应准备至少正常、缓慢退化、突发冲击、阶跃故障四种场景，并预留未参与调参的验证 seed。**“100%”只指预设受控注入测试集**，不能宣称真实工业环境无漏报。
 
 ## 9. SQLite 数据库契约
 
@@ -551,6 +551,8 @@ python -m g15 doctor
 
 输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上表是统一接口规格，不代表每个子命令都已实现；其中 `consume` 已由 #71 合入主线，其余命令按各自实现与验收记录判断。**
 
+`verify` 与 `report` 的职责不得互换。`g15 verify` 未来薄接 `verify_run`，只读 Manifest/NPZ，不读 SQLite 或 `private_truth/`、不写报告；完整性校验实际执行后 `passed=True` 返回 `0`、`passed=False` 返回 `4`，无法执行的 Manifest/Schema/I/O/路径错误返回 `3`，未预期异常返回 `5`。`g15 report` 调用 `build_report(run_dir, run_dir/artifacts/results.sqlite)`，负责真值对账并生成 JSON/Markdown；两份产物成功生成即返回 `0`，即使报告字段为 `passed=false` 或 `passed=null`，因为这些是报告数据而非普通生成命令的进程失败。`ReportError`、`DataContractError` 家族及数据库/文件 I/O 返回 `3`，未预期异常返回 `5`；不得把 `EXIT_ACCEPTANCE=4` 扩到普通 `report`。
+
 ### 10.1 consume 的编排与可见性
 
 数据库路径沿用 §11 的 `run_dir/artifacts/results.sqlite`，不新增 `--database` 或生产场景输入参数。参数/消费配置错误映射 2，Manifest/分片/数据库 I/O 或兼容错误映射 3，未预期错误映射 5，正常完成与同配置幂等重放返回 0；#71 当前实现已由 C2/C3 对当前 head 确认公开签名与实际异常集合适配，不能再宽泛捕获后返回成功。
@@ -565,7 +567,7 @@ python -m g15 doctor
 runs/<run_id>/
 ├── manifest.json
 ├── raw/part-000000.npz ...
-├── private_truth/faults.json     # 仅验证使用
+├── private_truth/faults.json     # 仅 reporting.builder/metrics 真值对账使用
 ├── artifacts/results.sqlite
 ├── reports/summary.json
 ├── reports/summary.md
@@ -603,7 +605,7 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 | R04 | 100 万点 <60 秒 | simulation + pipeline | benchmark 机器实测 |
 | R05 | 消费端与仿真器独立 | pipeline | 分开进程调用 |
 | R06 | 特征→健康分→告警 | analysis | 特征/评分/告警测试 |
-| R07 | 受控故障 100% 检出 | verify | 真值对账+误报统计 |
+| R07 | 受控故障 100% 检出 | reporting | `g15 report` 真值对账+误报统计 |
 | R08 | 闭环联调报告 | reporting | JSON+MD 报告 |
 | R09 | 重复消费不重复入库、kill 后恢复 | storage/consumer | 重放测试 |
 | R10 | 新环境 GitHub 克隆，两种 Linux 可运行 | scripts/CI | 双 Linux 安装运行记录 |
