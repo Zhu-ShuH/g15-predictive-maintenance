@@ -94,20 +94,43 @@ Issue #101 记录了一个概率性失败：消费端建表时报
 结论按受限环境表述：
 
 - 在两台 Windows 11 机器上实测：**触发源是另一个进程持有该库的读写句柄**；
-- 只读句柄不构成冲突——这正是 `connect_readonly()` 存在的理由；
+- 只读句柄显著降低失败率，但**未观测到归零**——这正是 `connect_readonly()`
+  存在的理由；
 - **「与 WAL 无关」只在本机成立**：本机把库切到 DELETE 模式反而更糟（9/15 失败），
   但文件锁语义在 Linux 与 Windows 上不同，**Linux（#10 目标环境）尚未做同款对照**，
   因此该条不写成跨平台结论。
 
-对照验证：观察者改用只读入口后，写者 0/20、0/30 轮全部通过；
-观察者仍用读写连接时，写者 10/20 轮失败。
+**失败率下降，不等于归零。** C2 在本机测得观察者改用只读入口后写者 0/20、0/30
+轮通过，对照组（观察者仍用读写连接）为 10/20 轮失败；但 **C4 在同一 head 上
+以完整压力用例时序复测，只读入口一格仍失败 2/60（3.3%）**，另两批为 1/20
+与 1/40。失败堆栈与修复前同形（写侧 `initialize_database` 的 `CREATE TABLE`）。
+
+C4 的**同批次三格对照**（各 60 轮，同机同环境）：
+
+| 格 | 存储侧 | 观察者形态 | 失败 | 失败率 |
+|---|---|---|---|---|
+| 修复前基线 | main `6f07bb43` | 读写 `connect()` | 9/60 | 15.0% |
+| 仅换存储侧 | `7efd0f08` | 读写 `connect()` | 4/60 | 6.7% |
+| 存储侧 + 测试侧 | `7efd0f08` | 只读 `connect_readonly()` | 2/60 | 3.3% |
+
+⇒ **方向成立（失败率降约 1/4），但未归零。** 本节不写「只读入口 ⇒ 观察者 0 失败」。
+剩余失败已定位在写侧 `initialize_database`，属另一个竞态窗口（疑为 WAL 附属文件
+清理与 `CREATE TABLE` 交错），与「只读观察者是否抢锁」不是同一件事，
+其判定归 #101 完成条件 2，由 A 拍板。
+
+**探针局限（如实记录）**：C4 试过的最小复现探针（父进程只做
+`connect_readonly` + 查一行 + close，子进程建表）三格各 0/30 全通过，
+**未能复现失败**。因此该探针**不能**支撑「只读入口不致失败」的结论；
+失败依赖压力用例里更完整的时序（`shutil.copytree` 后另起子进程 + 120s
+deadline 轮询）。这是探针的局限，不是「已排除」的结论。
 
 #### 只读入口的边界
 
 `mode=ro` 只保证**不写数据库文件**。若该库处于 WAL 模式，
 SQLite 仍会创建 `-shm` / `-wal` 附属文件（WAL 的共享内存索引所需），
-这是 SQLite 的设计，无法在只读模式下回避。但附属文件的创建**不会**
-让写者失败——上表中「持只读连接」一栏即为证据。
+这是 SQLite 的设计，无法在只读模式下回避。附属文件的创建**不是**写者失败的
+直接原因——上表中「持只读连接」一栏的失败率为 0/12 即是证据；
+但**不能据此断言只读入口下写者永不失败**（见上节 2/60 与残余边界）。
 
 **已知的残余边界（如实记录）**：极高频的「打开→查询→关闭」循环（2ms 间隔）
 在 Windows 上出现过一次写者失败（约 90 个对照轮中的 1 轮，主码仍为 8，
@@ -150,13 +173,21 @@ SQLite 仍会创建 `-shm` / `-wal` 附属文件（WAL 的共享内存索引所�
 - **另一个连接持有该库**——竞争问题，重试或改用只读连接可以化解；
 - **路径本身不可写**——权限或部署问题，重试没有意义。
 
-本模块按**路径自身可写性**给出最可能的那一种，并明确标注这是启发式：
+本模块按**路径自身可写性**给出最可能的那一种，并明确标注这是启发式。
+以下为**代码实际输出**（前缀随出错的那一步变化，`...` 表示具体路径与原始错误）：
 
 ```
-cannot write database <path>: the path is not writable by this process (...)
-cannot write database <path>: another connection most likely holds <path> and refused
+cannot write to the database: <path> is not writable by this process (...)
+cannot write to the database: another connection most likely holds <path> and refused
   the write -- that is the likeliest cause when the path itself is writable, not a determination (...)
 ```
+
+同一条错误在不同写路径上，前缀取自那一步的动作名：
+`cannot write to the database:`（事务内写）、`cannot initialise the database schema:`（建表）、
+`cannot start a transaction:`（开事务）、`cannot commit the transaction:`（提交）。
+路径可写性判定的那一支，句式是 `<path> is not writable by this process`——
+**不是** `the path is not writable`，后者读起来像在谈论一个抽象的路径，
+而实际消息里出现的是具体路径本身。
 
 **为什么不能写成断言**：路径可写但被他进程持读写句柄时，`os.access()` 仍返回
 True；而 `mode=ro` 连接在**无第二持有者**的情况下写库，同样报主码 8。
