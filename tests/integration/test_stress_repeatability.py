@@ -50,7 +50,7 @@ import pytest
 from g15.config import load_config, load_consumer_config
 from g15.pipeline.consumer import consume_run
 from g15.pipeline.producer import produce_run_detailed
-from g15.storage.database import DatabaseError, connect
+from g15.storage.database import DatabaseError, connect_readonly
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = REPOSITORY_ROOT / "configs"
@@ -148,7 +148,7 @@ def _counts(database: Path) -> dict[str, int]:
 
 def _read_counts(database: Path) -> dict[str, int]:
     """Read the row counts once; ``_counts`` retries this while WAL recovers."""
-    connection = connect(database)
+    connection = connect_readonly(database)
     try:
         return {
             table: int(
@@ -190,7 +190,7 @@ def _read_snapshot(database: Path) -> dict[str, Any]:
             "FROM alarm_states ORDER BY device_id, rule_id"
         ),
     }
-    connection = connect(database)
+    connection = connect_readonly(database)
     try:
         return {
             name: [tuple(row) for row in connection.execute(sql).fetchall()]
@@ -421,7 +421,7 @@ def test_abruptly_stopped_consumption_replays_to_the_same_content(
             if time.monotonic() > deadline:
                 pytest.fail("the consumer never committed its first shard")
             try:
-                connection = connect(database)
+                connection = connect_readonly(database)
                 try:
                     row = connection.execute(
                         "SELECT COUNT(*) FROM processed_chunks"

@@ -56,6 +56,148 @@
 
 `foreign_keys` 在事务内设置是**无效操作**，所以连接建立后、任何写入前就设好。
 
+### 连接的三种入口：写、读、以及「打开 ≠ 只读」
+
+`connect()` 返回的连接**可以写**。这一点容易被忽略，因为名字里没有「写」，
+但它做的两件事都是写操作：`sqlite3.connect` 在文件不存在时**创建**它，
+`PRAGMA journal_mode = WAL` 会**改写数据库头**。
+
+因此「只想看一眼这个库」这件事，**不能**用 `connect()` 干。
+本模块为此另开一个入口：
+
+| 入口 | 用途 | 是否写 | 文件不存在时 |
+|---|---|---|---|
+| `connect(path)` | 消费端写入 | 是（建 schema、写行） | 创建 |
+| `connect_readonly(path)` | 只读观察（报表、测试轮询） | **否** | 报错，不创建 |
+| `initialize_database(conn)` | 建 §9 五张表 | 是 | — |
+
+`connect_readonly()` 用 `file:...?mode=ro` URI 打开既有文件：既不创建文件，
+也不改日志模式，更不与写者抢写锁。
+
+#### 为什么只读入口是必需的（#101 实测）
+
+Issue #101 记录了一个概率性失败：消费端建表时报
+`attempt to write a readonly database`。C2 在**本机**（Windows 11）复现后做的
+对照实验（每格 12 轮，记写者失败轮数）：
+
+| 另一个进程对同一个库做的事 | 失败（C2 本机） | C4 独立复现 |
+|---|---|---|
+| 从不打开这个库 | 0/12 | 0/12 |
+| 持**只读**连接（`mode=ro`） | 0/12 | 0/12 |
+| 持**读写**连接 | 7/12 | 3/12 |
+| 反复开关读写连接 | 3/12 | 2/12 |
+| 只用操作系统碰这个文件（不经 SQLite） | 0/12 | 0/12 |
+| 读写连接开在**别的**文件上 | 0/12 | 0/12 |
+
+**定性方向一致**（C4 独立复现同样得到「读写句柄致失败、只读句柄不冲突」——指本组
+12 轮对照的**定性方向**；完整用例时序下只读入口仍有 2/60 失败，见下节），
+**量级不同**（7/12 vs 3/12），说明这是概率性现象，单次轮次不能当指标。
+结论按受限环境表述：
+
+- 在两台 Windows 11 机器上实测：**触发源是另一个进程持有该库的读写句柄**；
+- 只读句柄显著降低失败率，但**未观测到归零**——这正是 `connect_readonly()`
+  存在的理由；
+- **「与 WAL 无关」只在本机成立**：本机把库切到 DELETE 模式反而更糟（9/15 失败），
+  但文件锁语义在 Linux 与 Windows 上不同，**Linux（#10 目标环境）尚未做同款对照**，
+  因此该条不写成跨平台结论。
+
+**失败率下降，不等于归零。** C2 在本机测得观察者改用只读入口后写者 0/20、0/30
+轮通过，对照组（观察者仍用读写连接）为 10/20 轮失败；但 **C4 在同一 head 上
+以完整压力用例时序复测，只读入口一格仍失败 2/60（3.3%）**，另两批为 1/20
+与 1/40。失败堆栈与修复前同形（写侧 `initialize_database` 的 `CREATE TABLE`）。
+
+C4 的**同批次三格对照**（各 60 轮，同机同环境）：
+
+| 格 | 存储侧 | 观察者形态 | 失败 | 失败率 |
+|---|---|---|---|---|
+| 修复前基线 | main `6f07bb43` | 读写 `connect()` | 9/60 | 15.0% |
+| 仅换存储侧 | `7efd0f08` | 读写 `connect()` | 4/60 | 6.7% |
+| 存储侧 + 测试侧 | `7efd0f08` | 只读 `connect_readonly()` | 2/60 | 3.3% |
+
+⇒ **方向成立（失败率降约 1/4），但未归零。** 本节不写「只读入口 ⇒ 观察者 0 失败」。
+剩余失败已定位在写侧 `initialize_database`，属另一个竞态窗口（疑为 WAL 附属文件
+清理与 `CREATE TABLE` 交错），与「只读观察者是否抢锁」不是同一件事，
+其判定归 #101 完成条件 2，由 A 拍板。
+
+**探针局限（如实记录）**：C4 试过的最小复现探针（父进程只做
+`connect_readonly` + 查一行 + close，子进程建表）三格各 0/30 全通过，
+**未能复现失败**。因此该探针**不能**支撑「只读入口不致失败」的结论；
+失败依赖压力用例里更完整的时序（`shutil.copytree` 后另起子进程 + 120s
+deadline 轮询）。这是探针的局限，不是「已排除」的结论。
+
+#### 只读入口的边界
+
+`mode=ro` 只保证**不写数据库文件**。若该库处于 WAL 模式，
+SQLite 仍会创建 `-shm` / `-wal` 附属文件（WAL 的共享内存索引所需），
+这是 SQLite 的设计，无法在只读模式下回避。附属文件的创建**不是**写者失败的
+直接原因——上表中「持只读连接」一栏的失败率为 0/12 即是证据；
+但**不能据此断言只读入口下写者永不失败**（见上节 2/60 与残余边界）。
+
+**已知的残余边界（如实记录）**：极高频的「打开→查询→关闭」循环（2ms 间隔）
+在 Windows 上出现过一次写者失败（约 90 个对照轮中的 1 轮，主码仍为 8，
+疑似 `-shm` 在写者尚未映射时被最后一个连接清理所致，未能在后续 15 轮中复现）。
+两个实用建议：
+
+- 长驻的观察方（报表、监控）**持有连接**、在句柄上轮询，而不是每拍开关一次；
+  空闲的只读连接不持锁，不妨碍写者。
+- 短周期轮询方（如压力测试的 abrupt-stop 父进程）保持现有 2ms 开/关节奏
+  实测安全（20/20 轮通过），但该残余风险在 Linux（#10 目标环境）上尚未验证，
+  归 #10 的双 Linux 证据一并覆盖。
+
+`connect_readonly()` 打开的是**既有**文件；文件不存在时抛
+`DatabaseError`，而不是创建一个空库。这与 `connect()` 的语义相反，
+是刻意的：观察一个不存在的库，正确答案是「没有」，不是「造一个空的」。
+
+### 只读错误必须点名（#101 完成条件 4）
+
+#### 先按错误码分流，不按措辞猜
+
+**只有主错误码 `SQLITE_READONLY`（8）才进 `DatabaseReadOnlyError`。**
+`sqlite3.Error.sqlite_errorcode` 给的是扩展码（例如
+`SQLITE_READONLY_ROLLBACK`），取低字节（`code & 0xFF`）得到主码再判断。
+其余 `OperationalError` 保留自身语义、抛普通 `DatabaseError` 并带上原始上下文：
+
+| 注入的错误 | 主码 | 抛出的异常 |
+|---|---|---|
+| `no such table`（SQL 写错表名） | `SQLITE_ERROR` = 1 | `DatabaseError: cannot write to the database: no such table: ...` |
+| `database is locked`（他连接持写锁） | `SQLITE_BUSY` = 5 | `DatabaseError: cannot start a transaction: database is locked` |
+| `attempt to write a readonly database` | `SQLITE_READONLY` = 8 | `DatabaseReadOnlyError`（见下） |
+
+早期版本把所有 `OperationalError` 一律包装成只读错误，结果一条**纯读**语句
+写错表名也会报「另一连接持有数据库」——把排障引向并发，而真因是拼写。
+按错误码分流就是为了堵住这种误导。
+
+#### 成因是「最可能」，不是判定
+
+在主码为 8 的前提下，两种成因需要不同处置：
+
+- **另一个连接持有该库**——竞争问题，重试或改用只读连接可以化解；
+- **路径本身不可写**——权限或部署问题，重试没有意义。
+
+本模块按**路径自身可写性**给出最可能的那一种，并明确标注这是启发式。
+以下为**代码实际输出**（前缀随出错的那一步变化，`...` 表示具体路径与原始错误）：
+
+```
+cannot write to the database: <path> is not writable by this process (...)
+cannot write to the database: another connection most likely holds <path> and refused
+  the write -- that is the likeliest cause when the path itself is writable, not a determination (...)
+```
+
+同一条错误在不同写路径上，前缀取自那一步的动作名：
+`cannot write to the database:`（事务内写）、`cannot initialise the database schema:`（建表）、
+`cannot start a transaction:`（开事务）、`cannot commit the transaction:`（提交）。
+路径可写性判定的那一支，句式是 `<path> is not writable by this process`——
+**不是** `the path is not writable`，后者读起来像在谈论一个抽象的路径，
+而实际消息里出现的是具体路径本身。
+
+**为什么不能写成断言**：路径可写但被他进程持读写句柄时，`os.access()` 仍返回
+True；而 `mode=ro` 连接在**无第二持有者**的情况下写库，同样报主码 8。
+两种情形的措辞因此都留有余地——`os.access()` 只是线索，不是判定。
+
+该错误在 `connect()`、`initialize_database()` 与 `transaction()`
+三条写路径上都会抛出——事务是本模块唯一的写入口，
+所以在事务里统一点名，覆盖面最完整。
+
 ---
 
 ## 二、两个 JSON 列的内部格式
