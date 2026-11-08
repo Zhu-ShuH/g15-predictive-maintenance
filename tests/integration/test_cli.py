@@ -144,6 +144,31 @@ def test_top_level_help_lists_every_command() -> None:
         assert command in result.stdout
 
 
+def test_verify_help_describes_independent_shard_verification() -> None:
+    """``verify`` help must not claim a comparison against ``private_truth/``.
+
+    ``g15.reporting.verifier.verify_run`` reads only the manifest and the
+    shards it names: it never opens the SQLite database and never reads
+    ``private_truth/``.  The old wording ("match detections against fault
+    truth") described the opposite of that public entry point (C4 P3-5 on
+    #106).  The CLI subcommand is still deliberately unimplemented, so the
+    ``(not implemented)`` marker stays honest and must not be dropped.
+    """
+    result = run_cli("--help")
+
+    assert result.returncode == 0
+    verify_lines = [
+        line
+        for line in result.stdout.splitlines()
+        if line.strip().startswith("verify ")
+    ]
+    assert len(verify_lines) == 1
+    help_line = verify_lines[0]
+    assert "shards and manifest" in help_line
+    assert "fault truth" not in help_line
+    assert "not implemented" in help_line
+
+
 def test_consume_help_documents_its_arguments() -> None:
     """The frozen arguments of section 10 must be visible without a run."""
     result = run_cli("consume", "--help")
