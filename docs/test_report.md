@@ -110,7 +110,7 @@ manifest 升到 2.0 并新增可选键 `scenario_kind` 之后，这条链路按�
 
 版本窗口是读入侧的事：`{1.0, 2.0}` 之外的版本在键集校验之前拒收，所以 3.0 的 run 拿到的是版本错误而不是「缺键」，避免把「读不了」误报成「数据坏了」。`scenario_kind` 缺键表示未声明，报告层回退到受审验收清单并记 `acceptance_manifest`；显式 `null` 不是「未声明」的表示法，会被拒收。
 
-本分支（`feat/83-manifest-scenario-kind`，base `6375e2e`）实测：全量 `pytest -q` = **784 passed, 14 skipped in 24.84 s**，`--collect-only` = 798；收集数由 base 的 766 升到 798，其中上表四层是 23 个新用例函数（配置 5 / 序列化 8 / 生产 6 / 报告 4），其余 9 条差额来自既有用例的参数化展开；`black --check src tests` = 53 files unchanged；`pylint src/g15 --fail-under=8.5` = **9.92/10**，与 base `6375e2e` 同为 9.92，本轮没有新增告警（builder.py 里 C0302 / R0902 / 两处 R0914 是 base 就有的，本轮把 kind 判定段抽成 `_kind_and_source` / `_kind_blockers` 后分支数与语句数回落到阈值内）。
+本分支（`feat/83-manifest-scenario-kind`，base `6375e2e`）实测：全量 `pytest -q` = **784 passed, 14 skipped in 24.84 s**，`--collect-only` = 798；收集数由 base 的 766 升到 798，其中上表四层是 23 个新用例函数（配置 5 / 序列化 8 / 生产 6 / 报告 4），其余 9 条差额来自既有用例的参数化展开；`black --check src tests` = 53 files unchanged；`pylint src/g15 --fail-under=8.5` = **9.92/10**，base `6375e2e` 隔离复测为 9.91/10（+0.01）；本轮没有新增告警，且 base 的一条 R0912 too-many-branches (14/12) 被消除（kind 判定段抽成 `_kind_and_source` / `_kind_blockers` 后分支数回落阈值内），其余告警逐条一致。
 
 ## 4 三类独立故障注入证据（`docs/acceptance.md` §4）
 
