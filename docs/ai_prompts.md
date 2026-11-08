@@ -133,7 +133,7 @@ python -m pytest -q
 你是 G15 的 C1。只做 Issue #6「故障注入（spike/step/burst）」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C1/AGENT.md、Issue #6、docs/interface.md §4、§5.3、§6、§7 和现有 faults.py；无法访问请我粘贴。
 本次只允许修改：src/g15/simulation/faults.py、tests/unit/test_faults*.py。
 你的角色长期白名单见 members/C1/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
-输入/输出契约：§4 events 的 event_id/type/start_seq/duration_points/amplitude；§6 inject_faults 的拟定签名；§7 的 spike、step、burst/叠加策略；§5.3 真值按半开区间且仅供验证器，不得塞进公开 NPZ/Manifest 供消费者读。
+输入/输出契约：§4 events 的 event_id/type/start_seq/duration_points/amplitude；§6 inject_faults 的拟定签名；§7 的 spike、step、burst/叠加策略；§5.3 真值按半开区间且仅供报告层对账读取，不得塞进公开 NPZ/Manifest 供消费者读。
 边界：起点、时长、幅度可指定；首尾点/跨片/事件重叠/空事件/非法类型均明确处理；跨片同 event_id 在一次 run 的真值清单里不能重复。不能改 B1 仿真公式或 B2 阈值，也不能写死事件一定产生告警。
 必须补测试：spike/step/burst 数值断言和事件区间、跨片、叠加、非法事件；tests/unit/test_faults*.py 已授权，可在本 Issue 内新建。额外的独立 fixtures 路径若不在 Issue 范围，再向 A 申请。
 本地验收命令：本手册 §0 的所属平台 Black/Pylint/pytest；真值写盘由 C4 生产入口负责，未联调则标未运行。
@@ -233,7 +233,7 @@ python -m pytest -q
 你是 G15 的 C4，本次只做 Issue #11「仿真生产入口 producer」；不要把 #3 的文件带进本次提交，先回报不要修改。读 AGENTS.md、docs/development.md、members/C4/AGENT.md、Issue #11、docs/interface.md §4–§7、§11，以及已合并的 #3/#5 实际代码；看不到就请求粘贴。
 本次只允许修改：src/g15/pipeline/producer.py、tests/unit/test_producer*.py。
 你的角色长期白名单见 members/C4/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
-输入/输出契约：§6 produce_run(config, output_root) -> run_dir 拟定接口；§4 生产者配置/seed；§5 NPZ、完整 Manifest 与仅供验证器的 private_truth；§7 调用 B1 仿真及 C1 故障，§11 run_dir。依赖 #3、#5；#6 对突发场景也要联调，不在 producer 重写别人的算法。
+输入/输出契约：§6 produce_run(config, output_root) -> run_dir 拟定接口；§4 生产者配置/seed；§5 NPZ、完整 Manifest 与仅供报告层对账的 private_truth；§7 调用 B1 仿真及 C1 故障，§11 run_dir。依赖 #3、#5；#6 对突发场景也要联调，不在 producer 重写别人的算法。
 边界：全分片生成后才原子发布完整 Manifest；parts 行数合计与 total_points 一致；真值去重并单独存放；写入失败不得留下被误认为 complete 的状态；不能改 schema.py/serialization.py、CLI 或任何他人模块。
 必须补测试：成功 run_dir、末尾不满分片、失败不发布、真值不进公开数据；恢复后的 Issue #11 已授权 tests/unit/test_producer*.py，可在本 Issue 内新建，不改 #3 的测试。生产入口调用 C1 的场景还依赖 #6，正常无故障场景可先联通。
 本地验收命令：本手册 §0 的所属平台 Black/Pylint/pytest；依赖模块未合并则写“未运行/阻塞”，不可声称链路已通。
@@ -258,7 +258,7 @@ python -m pytest -q
 你是 G15 的 C5。只处理 Issue #9「独立验证与报告」；先回报不要修改。读 AGENTS.md、docs/development.md、members/C5/AGENT.md、Issue #9、docs/interface.md §5.3–§5.4、§8.5、§9、§11、§14 和现有 reporting/tests/docs；看不到请我粘贴。
 本次只允许修改：src/g15/reporting/builder.py、src/g15/reporting/metrics.py、tests/integration/*、tests/fault_injection/*、docs/test_plan.md、docs/test_report.md。
 你的角色长期白名单见 members/C5/AGENT.md；本次不要碰白名单里与本次任务无关的文件。
-输入/输出契约：仅独立验证器在计算预设故障事件检出率时读 §5.3 真值；§5.4/§11 要输出 reports/summary.json 和 summary.md；§8.5 按事先确定的事件匹配窗口统计检出率、漏报/误报；§9 的消费数据由 C2 提供。未知值写 null，不写假 0/100%。
+输入/输出契约：仅报告层（`reporting.metrics`/`reporting.builder`）在计算预设故障事件检出率时读 §5.3 真值进行对账；§5.4/§11 要输出 reports/summary.json 和 summary.md；§8.5 按事先确定的事件匹配窗口统计检出率、漏报/误报；§9 的消费数据由 C2 提供。未知值写 null，不写假 0/100%。
 边界：消费者与分析层绝不能看到真值；健康样本须计误报；未经实测不填耗时与系统证明；不能删失败测试、私调阈值或改别人模块。≥15 单元测试由全组实现者共同提供，C5 汇总而非代写全部。
 必须补测试：正常/退化/突发的独立生产消费报告、业务故障匹配、坏 SHA 拒收、Linux kill -9 恢复；tests/integration/* 和 tests/fault_injection/* 当前仅 .gitkeep，具体用例在本 Issue 内新建。≥20 用例、≥3 独立故障注入均需真实结果、不可用测试列表冒充通过。
 本地验收命令：本手册 §0 的所属平台 Black/Pylint/pytest；全链未通时报告相关测试未运行。性能与双 Linux 结果需 B1/C6 原始证据，不能由 AI 推算。

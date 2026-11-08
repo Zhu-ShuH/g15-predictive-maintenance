@@ -20,13 +20,13 @@ flowchart LR
     CC[消费配置与评分规则] --> CONS
     CONS --> ANALYSIS[特征 健康分 告警 B2]
     ANALYSIS --> DB[SQLite 结果与恢复状态]
-    DB -. 待报告集成 .-> REPORT[JSON 与 Markdown 报告]
-    TRUTH -. 仅供独立验证 .-> VERIFY[事件匹配与验证]
-    DB -. 待验证集成 .-> VERIFY
+    DB --> REPORT[报告与真值对账 C5]
+    TRUTH -. 仅供报告层对账 .-> REPORT
+    DB --> VERIFY[完整性校验 C5]
     VERIFY -.-> REPORT
 ```
 
-实线表达已合入模块之间的数据职责，不代替本次执行记录；虚线部分为尚待集成的验证/报告路径。真值分目录属于代码访问约定，不是操作系统权限隔离。consumer/analysis 不能用真值决定预测结果。
+实线表达已合入模块之间的数据职责，不代替本次执行记录；虚线部分为尚待集成的验证/报告路径。真值分目录属于代码访问约定，不是操作系统权限隔离。真值只由报告层（`reporting.builder` / `reporting.metrics`）读取用于真值对账；`reporting.verifier` / `g15 verify` 只做 Manifest/NPZ 完整性校验，不读真值；consumer/analysis 不能用真值决定预测结果。
 
 ## 2. 模块、证据与接线状态
 
@@ -37,7 +37,7 @@ flowchart LR
 | schema / serialization / producer | C4 | [#29](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29)、[#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)、[#43](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/43)、[#48](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/48) | Manifest/四数组/完整发布语义按契约，不自行增加字段或改计时范围 |
 | analysis | B2 | 特征、健康评分、告警，[#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54) | #73 数值边界整改已合入 `0a637fc2`，A/B1/C4/C2 均在 `e4814b65` 批准；#82 已由 #91 合入 `51cd99ad`，1.0/1.1 时期 `np.ma.MaskedArray` 掩码被静默使用的历史行为，已在 1.2 改为掩码非空即 `ValueError` 拒收，空掩码继续接受。`load_health_rules(path)` 实际读取规则 YAML，是 interface §6 文件 I/O 分层约束的已知例外；不读取运行数据或真值 |
 | consumer / storage | C2 | 公开文件消费、窗口结果、恢复状态与事务，[#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) | [#76](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/76) 末片上界预检已集成；真实强杀与公共契约仍待收口 |
-| reporting / verify | 原分工 C5；#9/#51 当前相关实现由 B1 接手 | 候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)、[#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 主线模块仍空；#70场景类型依赖名称的判定问题已由B2提出、A复证并请求修改，待B1方案/修复；原始分片校验不等于真值匹配、检出率或完整时间轴验证 |
+| reporting / verify | 原分工 C5；#9/#51 当前相关实现由 B1 接手 | 候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)、[#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 主线模块仍空；#70场景类型依赖名称的判定问题已由B2提出、A复证并请求修改，待B1方案/修复；真值只由 `reporting.builder` / `reporting.metrics` 做对账，`reporting.verifier` / `g15 verify` 只做 Manifest/NPZ 完整性校验且不读真值；原始分片校验不等于真值匹配、检出率或完整时间轴验证 |
 | scripts / environment | C6；A 协调依赖与验收 | [#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) 修正执行位；[environment](environment.md) | setup/demo/verify/benchmark 仍是占位；[#10](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/10)、[#28](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/28) 保留 |
 
 ## 3. 文件交换与持久化责任
