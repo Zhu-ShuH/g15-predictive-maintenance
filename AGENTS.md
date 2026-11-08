@@ -16,7 +16,7 @@
 ## 禁止偏离的系统契约
 
 - 项目 G15 预测性维护场景沙盘；9 人，D1–D14 相对排期模板；完整链：YAML → NumPy 退化与故障 → NPZ/Manifest → 独立消费 → 窗口特征 → 0–100 健康分 → 告警 → SQLite → JSON/Markdown 报告。
-- `schema_version=1.0`；分片固定 `seq:int64`、`timestamp_ns:int64`、`vibration:float64`、`temperature:float64`；Manifest 必须 SHA 校验且只有 `complete` 状态可消费。
+- `schema_version=2.0`；分片固定 `seq:int64`、`timestamp_ns:int64`、`vibration:float64`、`temperature:float64`；Manifest 必须 SHA 校验且只有 `complete` 状态可消费。
 - `private_truth/faults.json` 只能由报告层（`reporting.builder` / `reporting.metrics`）用于真值对账读取；`reporting.verifier` / `g15 verify`、消费者及 analysis 禁止读真值。不得作弊伪造 100% 检出、忽略误报或捏造性能/测试结果。
 - 消费 SQLite 写入使用同一事务，重放必须幂等；禁止在 CLI 实现业务公式；公共字段/签名/退出码修改必须 A 审核并更新 `docs/interface.md`。
 - 教师 G15 指标：100 万点仿真 <60 秒、受控注入事件 100% 被检出、配置不改代码、接口完整；**生成+落盘**是小组组长确认的计时口径，具体点数和计时范围见 docs/acceptance.md。工程交付还需 ≥8 用户故事、≥15 单测、≥20 用例、≥3 故障注入；两种 Linux 实测是组长补充要求。
