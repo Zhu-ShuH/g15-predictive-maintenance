@@ -34,7 +34,7 @@
 
 匹配细则：
 
-1. 真值事件为半开区间 [s,e)，仅独立验证器读取；consumer/analysis 不读取故障配置、位置或 private_truth。
+1. 真值事件为半开区间 [s,e)，仅报告层（`reporting.builder`/`reporting.metrics`）读取用于真值对账；consumer/analysis 及 `reporting.verifier` 不读取故障配置、位置或 private_truth。
 2. 窗口长 W=256；事件允许告警窗口起点区间为 [floor(s/W)×W, ceil(e/W)×W + 2W)。即覆盖事件相交窗口，并允许结束后最多 2 个窗口的宽限；max_detection_lag_windows=2。使用告警数据窗口 start_seq，不用机器当前时间。
 3. 必须同 device_id；有效黄/红告警按 (device_id,rule_id,start_seq) 去重。事件与告警一对一匹配，先求最大匹配数，多解按事件起点、event_id、告警起点、rule_id 排序选择；一条告警不能算检出多个事件。
 4. detection_rate=TP/事件总数；零事件返回 null。列出逐事件匹配、漏报、首次告警窗口、数据时延和宽限。检测输出不得填入真值 event_id，匹配由验证器产生。

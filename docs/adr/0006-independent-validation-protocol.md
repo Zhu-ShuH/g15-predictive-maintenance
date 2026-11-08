@@ -50,7 +50,7 @@ C5须本人说明：验证器版本与文件、开发期间接触过的数据范
 
 现行标准的W=256、受控N=1、原三类故障各两个seed共6事件、正常零告警、TP=6/FN=0均保留为原集的口径；N>1去抖/升级/恢复需单独边界测试。独立补充集规模及成绩与原集分开列，不能把已暴露原集的6/6改称独立验证。
 
-- 真值事件是[s,e)；只由独立验证器读取，consumer/analysis不读private_truth或故障位置。
+- 真值事件是[s,e)；只由报告层（`reporting.builder`/`reporting.metrics`）读取用于真值对账，consumer/analysis及`reporting.verifier`不读private_truth或故障位置。
 - 允许告警起点区间为[floor(s/W)×W,ceil(e/W)×W+2W)，右端开，宽限2窗；按数据seq，不按机器时钟。
 - 同device的有效黄/红告警按device/rule/start去重；事件与告警一对一最大匹配，多解按现行事件/告警排序规则固定选择；一条告警不能检出多个事件。
 - 零事件detection_rate=null；正常场景所有告警计误报。TP/FN、false_alarm_count、redundant_alarm_count、unmatched_alarm_count分别报告，不能用AlarmState.alarm_windows代替实际告警匹配。
