@@ -54,20 +54,25 @@ class DatabaseError(Exception):
 
 
 class DatabaseReadOnlyError(DatabaseError):
-    """Raised when a write was refused because the database was read-only.
+    """Raised when a write was refused with ``SQLITE_READONLY``.
 
-    SQLite reports this as a single ``SQLITE_READONLY`` code that covers two
-    situations a caller must be able to tell apart:
+    This type is reserved for that one primary result code (8). Every other
+    ``OperationalError`` -- a missing table, a lock conflict, a corrupt file --
+    keeps its own meaning and is raised as plain :class:`DatabaseError`; folding
+    them into "the database is read-only" points the reader at contention when
+    the real cause may be a typo in a table name (see the review of #118).
 
-    * another connection holds the database, and the write was refused while
-      that connection was changing the journal mode;
-    * the path itself cannot be written to.
+    Within ``SQLITE_READONLY`` itself, two situations want different responses:
 
-    The two need different responses -- the first is a contention problem that
-    a retry or a read-only connection resolves, the second is a permissions or
-    deployment problem that no retry resolves. They are therefore raised as
-    this dedicated type, and the message says which one it was (Issue #101,
-    completion condition 4).
+    * another connection holds the database and the write was refused;
+    * the path itself cannot be written to -- a permissions or deployment
+      problem, where a retry never helps.
+
+    The path's own writability suggests which is more likely, but it is a
+    heuristic, not a determination: a writable path can still be held by
+    another process, and a read-only connection with no second holder reports
+    the same code. The message therefore says "most likely" instead of
+    asserting a cause (Issue #101, completion condition 4).
     """
 
 
@@ -165,7 +170,8 @@ def connect(database_path: Path | str) -> sqlite3.Connection:
         DatabaseError: if the database cannot be opened or the pragmas cannot
             be applied.
         DatabaseReadOnlyError: if the write that asserts WAL journalling was
-            refused because the database was read-only.
+            refused with ``SQLITE_READONLY``. Other operational failures are
+            reported as :class:`DatabaseError` with their original context.
     """
     path = Path(database_path)
     try:
@@ -195,7 +201,7 @@ def connect(database_path: Path | str) -> sqlite3.Connection:
             )
     except sqlite3.OperationalError as exc:
         connection.close()
-        raise _readonly_error(path, exc) from exc
+        raise _write_error(path, exc, f"configure database {path}") from exc
     except sqlite3.Error as exc:
         connection.close()
         raise DatabaseError(f"cannot configure database {path}: {exc}") from exc
@@ -235,29 +241,59 @@ def connect_readonly(database_path: Path | str) -> sqlite3.Connection:
     return connection
 
 
-def _readonly_error(path: Path, exc: sqlite3.OperationalError) -> DatabaseError:
-    """Return the error that names why a write was refused as read-only.
+#: Primary SQLite result code for "attempt to write a readonly database".
+#: ``sqlite3.Error.sqlite_errorcode`` reports the *extended* code (for example
+#: ``SQLITE_READONLY_ROLLBACK``), so the low byte identifies the primary one.
+_SQLITE_READONLY = 8
 
-    SQLite reports "attempt to write a readonly database" for two different
-    situations, and they need different answers: another connection holding
-    the file is contention, while a path that cannot be written is a
-    deployment problem. The path's own writability tells them apart.
+
+def _primary_error_code(exc: sqlite3.Error) -> int | None:
+    """Return the primary result code behind a SQLite error, if any.
 
     Args:
-        path: The database the write was refused on.
         exc: The error SQLite raised.
 
     Returns:
-        A :class:`DatabaseReadOnlyError` naming the cause.
+        The primary result code (``sqlite_errorcode & 0xFF``), or ``None`` when
+        the exception does not carry one.
     """
-    if not os.access(path, os.W_OK):
+    code = getattr(exc, "sqlite_errorcode", None)
+    if code is None:
+        return None
+    return int(code) & 0xFF
+
+
+def _write_error(
+    path: Path | None, exc: sqlite3.OperationalError, action: str
+) -> DatabaseError:
+    """Return the error that names a failed write without guessing too much.
+
+    Only ``SQLITE_READONLY`` (primary code 8) means "read-only". Anything else
+    -- ``SQLITE_ERROR`` for a missing table, ``SQLITE_BUSY`` for a lock
+    conflict, ``SQLITE_NOTADB`` for a corrupt file -- keeps its own meaning and
+    is reported as a plain :class:`DatabaseError` carrying the original
+    context. Classifying by code rather than by wording is what keeps
+    "another connection holds it" from being blamed on an unrelated bug.
+
+    Args:
+        path: The database behind the connection, or ``None`` if unknown.
+        exc: The error SQLite raised.
+        action: What the caller was trying to do, used in the message.
+
+    Returns:
+        A :class:`DatabaseReadOnlyError` when the code is ``SQLITE_READONLY``,
+        otherwise a :class:`DatabaseError`.
+    """
+    if _primary_error_code(exc) != _SQLITE_READONLY:
+        return DatabaseError(f"cannot {action}: {exc}")
+    if path is not None and not os.access(path, os.W_OK):
         return DatabaseReadOnlyError(
-            f"cannot write database {path}: the path is not writable by this "
-            f"process ({exc})"
+            f"cannot {action}: {path} is not writable by this process ({exc})"
         )
     return DatabaseReadOnlyError(
-        f"cannot write database {path}: another connection is holding the "
-        f"database and refused the write ({exc})"
+        f"cannot {action}: another connection most likely holds {path} and "
+        f"refused the write -- that is the likeliest cause when the path "
+        f"itself is writable, not a determination ({exc})"
     )
 
 
@@ -269,18 +305,19 @@ def initialize_database(connection: sqlite3.Connection) -> None:
 
     Raises:
         DatabaseError: if the schema cannot be created.
-        DatabaseReadOnlyError: if the write was refused because the database
-            was read-only, either because another connection holds it or
-            because the path is not writable.
+        DatabaseReadOnlyError: if the write was refused with
+            ``SQLITE_READONLY`` -- another connection most likely holds the
+            database, or the path itself is not writable. Other operational
+            failures keep their own meaning and are raised as
+            :class:`DatabaseError`.
     """
     try:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
     except sqlite3.OperationalError as exc:
-        path = _database_path(connection)
-        if path is not None:
-            raise _readonly_error(path, exc) from exc
-        raise DatabaseError(f"cannot initialise the database schema: {exc}") from exc
+        raise _write_error(
+            _database_path(connection), exc, "initialise the database schema"
+        ) from exc
     except sqlite3.Error as exc:
         raise DatabaseError(f"cannot initialise the database schema: {exc}") from exc
 
@@ -313,19 +350,22 @@ def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         The same connection, for statements to be issued against.
 
     Raises:
-        DatabaseError: if the transaction cannot be started or committed.
-        DatabaseReadOnlyError: if a write inside the block was refused
-            because the database was read-only. The cause is named, so that
-            "another connection holds it" is not confused with "the path is
-            not writable" (Issue #101, completion condition 4).
+        DatabaseError: if the transaction cannot be started or committed, or
+            if a statement inside the block fails. A ``SQLITE_READONLY``
+            failure is raised as the subclass below; every other operational
+            failure keeps its own meaning instead of being reported as
+            read-only.
+        DatabaseReadOnlyError: if a write was refused with
+            ``SQLITE_READONLY``. The most likely cause is named, so that
+            "another connection most likely holds it" is not confused with
+            "the path is not writable" (Issue #101, completion condition 4).
     """
     try:
         connection.execute("BEGIN IMMEDIATE")
     except sqlite3.OperationalError as exc:
-        path = _database_path(connection)
-        if path is not None:
-            raise _readonly_error(path, exc) from exc
-        raise DatabaseError(f"cannot start a transaction: {exc}") from exc
+        raise _write_error(
+            _database_path(connection), exc, "start a transaction"
+        ) from exc
     except sqlite3.Error as exc:
         raise DatabaseError(f"cannot start a transaction: {exc}") from exc
 
@@ -333,10 +373,9 @@ def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         yield connection
     except sqlite3.OperationalError as exc:
         _rollback(connection)
-        path = _database_path(connection)
-        if path is not None:
-            raise _readonly_error(path, exc) from exc
-        raise DatabaseError(f"cannot write to the database: {exc}") from exc
+        raise _write_error(
+            _database_path(connection), exc, "write to the database"
+        ) from exc
     except Exception:
         _rollback(connection)
         raise
@@ -344,10 +383,9 @@ def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     try:
         connection.execute("COMMIT")
     except sqlite3.OperationalError as exc:
-        path = _database_path(connection)
-        if path is not None:
-            raise _readonly_error(path, exc) from exc
-        raise DatabaseError(f"cannot commit the transaction: {exc}") from exc
+        raise _write_error(
+            _database_path(connection), exc, "commit the transaction"
+        ) from exc
     except sqlite3.Error as exc:
         raise DatabaseError(f"cannot commit the transaction: {exc}") from exc
 

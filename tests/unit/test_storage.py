@@ -58,22 +58,37 @@ def _child_writes(database: str, ready, stop) -> None:  # type: ignore[no-untype
         connection.close()
 
 
-def _child_observes(database: str, stop) -> None:  # type: ignore[no-untyped-def]
-    """Observe the database without ever writing to it."""
+def _child_observes(database: str, successes, stop) -> None:  # type: ignore[no-untyped-def]
+    """Observe the database read-only, and report how often that worked.
+
+    The connection is opened as soon as the file exists and then *held*: an
+    idle read-only connection holds no locks, so the writer can proceed, while
+    the observer still overlaps the schema-creation window. Errors are
+    expected until the schema exists, so they are retried on the same handle.
+    The count of successful reads goes back to the parent, because "the
+    observer never failed" is only meaningful if it actually read something.
+    """
+    reads = 0
+    connection = None
     while not stop.is_set():
-        try:
-            connection = connect_readonly(Path(database))
+        if connection is None:
             try:
-                connection.execute("SELECT COUNT(*) FROM processed_chunks").fetchone()
-            except sqlite3.Error:
-                pass
-            finally:
-                connection.close()
-        except DatabaseError:
-            # The database does not exist yet; that is expected and is not an
-            # error for an observer.
+                connection = connect_readonly(Path(database))
+            except DatabaseError:
+                # The database does not exist yet; that is expected and is not
+                # an error for an observer.
+                time.sleep(0.002)
+                continue
+        try:
+            connection.execute("SELECT COUNT(*) FROM processed_chunks").fetchone()
+            reads += 1
+        except sqlite3.Error:
+            # The schema may not exist yet; keep polling on the same handle.
             pass
         time.sleep(0.002)
+    if connection is not None:
+        connection.close()
+    successes.put(reads)
 
 
 # --------------------------------------------------------------------------
@@ -173,6 +188,57 @@ def test_a_refused_write_names_the_reason(tmp_path: Path) -> None:
     assert "not writable" in str(caught.value)
 
 
+def test_a_missing_table_is_not_reported_as_read_only(tmp_path: Path) -> None:
+    """A plain SQL error keeps its own meaning instead of becoming read-only.
+
+    ``SQLITE_ERROR`` (code 1) inside a transaction means the statement was
+    wrong -- a misspelt table here. Reporting it as "another connection most
+    likely holds the database" sends the reader hunting for concurrency bugs.
+    """
+    database = tmp_path / "g15.db"
+    connection = connect(database)
+    try:
+        initialize_database(connection)
+        with pytest.raises(DatabaseError) as caught:
+            with transaction(connection):
+                connection.execute("SELECT * FROM no_such_table").fetchall()
+    finally:
+        connection.close()
+
+    assert not isinstance(caught.value, DatabaseReadOnlyError)
+    assert "no_such_table" in str(caught.value)
+
+
+def test_a_locked_database_is_not_reported_as_read_only(tmp_path: Path) -> None:
+    """``SQLITE_BUSY`` is contention, not a read-only database.
+
+    A held write lock makes the next writer fail with code 5. The two need
+    different answers (retry versus fix permissions), so they must not collapse
+    into one exception type.
+    """
+    database = tmp_path / "g15.db"
+    holder = connect(database)
+    try:
+        initialize_database(holder)
+        holder.execute("BEGIN IMMEDIATE")
+
+        blocked = sqlite3.connect(str(database), isolation_level=None, timeout=0.05)
+        try:
+            with pytest.raises(DatabaseError) as caught:
+                with transaction(blocked):
+                    blocked.execute(
+                        "INSERT INTO runs VALUES ('r','s','2.0','v','c','t')"
+                    )
+        finally:
+            blocked.close()
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+
+    assert not isinstance(caught.value, DatabaseReadOnlyError)
+    assert "locked" in str(caught.value).lower()
+
+
 def test_the_read_only_error_is_a_database_error(tmp_path: Path) -> None:
     """The new error keeps the exit code the CLI maps it to.
 
@@ -188,12 +254,17 @@ def test_the_read_only_error_is_a_database_error(tmp_path: Path) -> None:
 
 
 def test_a_read_only_observer_cannot_break_the_writer(tmp_path: Path) -> None:
-    """Issue #101: an observer must not make the writer fail.
+    """Issue #101 completion condition 3: an observer must not break the writer.
 
-    One process creates the schema and keeps writing; another observes the
-    same file read-only. The writer must complete without error. Before the
-    fix, an observer that opened the database the write path opens could make
-    the writer fail with ``SQLITE_READONLY`` roughly one round in four.
+    This is the case the original guard missed: the observer has to be running
+    *while* the writer creates the schema. Starting the observer only after the
+    writer signalled ``ready`` (which happens after ``initialize_database``)
+    tested "observe a finished schema", not the race itself, so the observer is
+    started first here and the writer joins it.
+
+    Two exit codes are not enough to prove anything: an observer that swallows
+    every error also exits 0 after reading nothing. The observer therefore
+    reports how many reads succeeded, and at least one is required.
     """
     database = tmp_path / "artifacts" / "results.sqlite"
     database.parent.mkdir(parents=True, exist_ok=True)
@@ -201,13 +272,19 @@ def test_a_read_only_observer_cannot_break_the_writer(tmp_path: Path) -> None:
     context = multiprocessing.get_context("spawn")
     ready = context.Event()
     stop = context.Event()
+    successes = context.Queue()
     writer = context.Process(target=_child_writes, args=(str(database), ready, stop))
-    observer = context.Process(target=_child_observes, args=(str(database), stop))
+    observer = context.Process(
+        target=_child_observes, args=(str(database), successes, stop)
+    )
 
-    writer.start()
+    # The observer goes first: the race is between creating the schema and
+    # observing the file, so the two windows must overlap.
+    observer.start()
     try:
+        time.sleep(0.2)
+        writer.start()
         assert ready.wait(60), "the writer never created the schema"
-        observer.start()
         time.sleep(1.0)
     finally:
         stop.set()
@@ -216,6 +293,9 @@ def test_a_read_only_observer_cannot_break_the_writer(tmp_path: Path) -> None:
 
     assert writer.exitcode == 0, f"the writer failed: exit code {writer.exitcode}"
     assert observer.exitcode == 0, f"the observer failed: exit code {observer.exitcode}"
+
+    reads = successes.get(timeout=10)
+    assert reads >= 1, "the observer never read the database successfully"
 
 
 def test_the_schema_is_created_once_and_is_idempotent(tmp_path: Path) -> None:
