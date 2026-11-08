@@ -18,9 +18,9 @@ flowchart LR
     CC[消费配置与评分规则] --> CONS
     CONS --> ANALYSIS[特征/健康分/告警 B2]
     ANALYSIS --> DB[SQLite 结果与恢复状态]
-    DB --> REPORT[报告 C5]
-    TRUTH --> VERIFY[独立验证器 C5]
-    DB --> VERIFY
+    DB --> REPORT[报告与真值对账 C5]
+    TRUTH -. 仅供报告层对账 .-> REPORT
+    DB --> VERIFY[完整性校验 C5]
     VERIFY --> REPORT
 ```
 
