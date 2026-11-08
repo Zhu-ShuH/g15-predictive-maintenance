@@ -100,7 +100,8 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--run-dir", required=True, help="path to runs/<run_id>")
 
     verify = subparsers.add_parser(
-        "verify", help="match detections against fault truth (not implemented)"
+        "verify",
+        help="verify a published run's shards and manifest (not implemented)",
     )
     verify.add_argument("--run-dir", required=True, help="path to runs/<run_id>")
 
