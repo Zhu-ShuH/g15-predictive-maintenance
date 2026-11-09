@@ -54,7 +54,7 @@ python -m pytest -q
 - 运行阶段不访问网络或 AI API；安装阶段可联网。`environment.yml` 只负责 Conda 的 Python/pip，不是完整 Python 依赖锁；#90 已交付双解释器锁文件，本 PR 将它们接入实际安装路径。CI 已沿 `requirements-dev.txt` 接入同一份带解释器标记的锁，不需要按 matrix 选择另一个文件；本 PR 合并后 3.11 与 3.12 lane 均不得继续使用未固定依赖。
 - Ubuntu 24.04 LTS 与 RHEL 9 各自安装 Conda/创建环境，无需替换操作系统 Python；仍须实际记录 Conda 发行版、版本、软件来源与系统架构。
 
-本文件规定目标行为；脚本实现已由 #86 合入，锁定清单已由 #90 合入，本 PR 负责把锁定清单接入文档化安装路径。双 Linux 安装验收与虚拟机日志由 #10 继续交付，公开 GitHub 现场全新克隆已由 #10 补证（两机克隆 `2054bb59`，`setup.sh` 与 `benchmark.sh` 退出 0）。CI 已通过 `requirements-dev.txt` 读取锁定清单；显式的 `--no-deps --no-build-isolation` 由 PR #102 接入 workflow（须拆成「先装锁、再装项目」两条命令，原因见 §2）。**`scripts/setup.sh` 目前仍用单条 `python -m pip install -e . -r requirements-dev.txt`，与上述两步口径不一致**；#94 明确禁止改 `scripts/*.sh`，故该差异未在 PR #102 处理，需另开单据由 C6 处理，本文件不把它写成已达成。
+本文件规定目标行为；脚本实现已由 #86 合入，锁定清单已由 #90 合入，本 PR 负责把锁定清单接入文档化安装路径。双 Linux 安装验收与虚拟机日志由 #10 继续交付，公开 GitHub 现场全新克隆已由 #10 补证（两机克隆 `2054bb59`，`setup.sh` 与 `benchmark.sh` 退出 0）。CI 已通过 `requirements-dev.txt` 读取锁定清单；显式的 `--no-deps --no-build-isolation` 由 PR #102 接入 workflow（须拆成「先装锁、再装项目」两条命令，原因见 §2）。**`scripts/setup.sh` 的安装口径已按 §2 与 CI 对齐**：改为「① `pip install -r requirements-dev.txt` → ② `pip install -e . --no-deps --no-build-isolation` → ③ `pip check`」三步，与 CI `skeleton` job 逐条对应（原先的单条 `pip install -e . -r requirements-dev.txt` 已移除）；#94 曾禁止在那一单改 `scripts/*.sh`，该差异由后续单据单独处理，脚本与本文件现已一致。
 
 ## 4. Windows 本机验证记录（2026-10-16）
 
