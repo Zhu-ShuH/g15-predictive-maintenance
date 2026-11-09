@@ -1,10 +1,11 @@
 """Command line entry point for the G15 sandbox.
 
-``validate`` has been implemented since Issue #4, ``consume`` since Issue #65
-and ``benchmark`` since Issue #51; the remaining subcommands of
-``docs/interface.md`` section 10 are registered with their frozen arguments so
-that ``--help`` stays honest, and they exit non-zero with an explicit message
-instead of pretending to succeed.
+``validate`` has been implemented since Issue #4, ``simulate`` and ``report``
+since Issue #110, ``consume`` since Issue #65 and ``benchmark`` since Issue
+#51; the remaining subcommands of ``docs/interface.md`` section 10 (``verify``
+and ``doctor``) are registered with their frozen arguments so that ``--help``
+stays honest, and they exit non-zero with an explicit message instead of
+pretending to succeed.
 
 Exit codes (``docs/interface.md`` section 10):
 
@@ -29,8 +30,9 @@ from pathlib import Path
 
 from .config import ConfigError, load_config, load_consumer_config
 from .pipeline.consumer import ConsumptionError, consume_run
-from .pipeline.producer import produce_run_detailed
+from .pipeline.producer import produce_run, produce_run_detailed
 from .pipeline.schema import DataContractError
+from .reporting.builder import SUMMARY_MD, ReportError, build_report
 from .reporting.verifier import VerificationError, verify_run
 from .storage.database import DatabaseError
 from .storage.repository import StorageError
@@ -81,7 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     simulate = subparsers.add_parser(
-        "simulate", help="generate NPZ shards for a scenario (not implemented)"
+        "simulate",
+        help="generate a complete run for a scenario (Issue #110)",
     )
     simulate.add_argument("--config", required=True, help="path to the scenario YAML")
     simulate.add_argument(
@@ -95,7 +98,8 @@ def build_parser() -> argparse.ArgumentParser:
     consume.add_argument("--config", required=True, help="path to consumer.yaml")
 
     report = subparsers.add_parser(
-        "report", help="build JSON and Markdown reports (not implemented)"
+        "report",
+        help="build JSON and Markdown reports for a run (Issue #110)",
     )
     report.add_argument("--run-dir", required=True, help="path to runs/<run_id>")
 
@@ -152,6 +156,47 @@ def _run_validate(path: Path) -> int:
         f"chunk_points={scenario.chunk_points}, "
         f"events={len(config.fault_generation.events)})"
     )
+    return EXIT_OK
+
+
+def _run_simulate(config_path: Path, output_root: Path) -> int:
+    """Publish one complete simulated run.
+
+    The CLI only loads the configuration and hands it to the frozen producer
+    entry :func:`~g15.pipeline.producer.produce_run`; simulation, sharding and
+    manifest publication stay in the producer (Issue #110).
+
+    Args:
+        config_path: Scenario YAML to load.
+        output_root: Directory receiving the new ``<run_id>`` sub-directory.
+
+    Returns:
+        ``0`` on success, ``2`` for an invalid configuration, ``3`` for an I/O
+        or schema failure.  Unexpected errors propagate to :func:`main`, which
+        maps them to ``5``.
+    """
+    try:
+        config = load_config(config_path)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+    except OSError as exc:
+        print(f"error: cannot read {config_path}: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+
+    try:
+        run_dir = produce_run(config, output_root)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+    except (DataContractError, OSError) as exc:
+        print(f"error: cannot publish the simulated run: {exc}", file=sys.stderr)
+        return EXIT_IO
+
+    print(f"run_dir={run_dir}")
     return EXIT_OK
 
 
@@ -213,6 +258,38 @@ def _run_consume(run_dir: Path, config_path: Path) -> int:
             file=sys.stderr,
         )
 
+    return EXIT_OK
+
+
+def _run_report(run_dir: Path) -> int:
+    """Write the JSON and Markdown reports for one consumed run.
+
+    Issue #110 freezes success as "the report artefacts were produced".
+    :func:`~g15.reporting.builder.build_report` may legitimately emit a
+    diagnostic report whose ``passed`` is ``False`` or ``None``; that is still
+    a successful generation and returns ``0``.  Exit code ``4`` belongs to
+    ``verify`` or another explicit acceptance entry, never to this command.
+
+    Args:
+        run_dir: Directory holding the manifest and ``artifacts/results.sqlite``.
+
+    Returns:
+        ``0`` when both artefacts were written, ``3`` when the run, manifest,
+        database, truth or output could not be used.  Unexpected errors
+        propagate to :func:`main`, which maps them to ``5``.
+    """
+    database_path = run_dir / DATABASE_RELATIVE_PATH
+    try:
+        summary_path = build_report(run_dir, database_path)
+    except ReportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_IO
+    except OSError as exc:
+        print(f"error: cannot build the report for {run_dir}: {exc}", file=sys.stderr)
+        return EXIT_IO
+
+    print(f"report_json={summary_path}")
+    print(f"report_markdown={summary_path.parent / SUMMARY_MD}")
     return EXIT_OK
 
 
@@ -313,8 +390,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "validate":
             return _run_validate(Path(args.config))
+        if args.command == "simulate":
+            return _run_simulate(Path(args.config), Path(args.output_root))
         if args.command == "consume":
             return _run_consume(Path(args.run_dir), Path(args.config))
+        if args.command == "report":
+            return _run_report(Path(args.run_dir))
         if args.command == "benchmark":
             return _run_benchmark(Path(args.config))
     except Exception as exc:  # pylint: disable=broad-except
@@ -325,7 +406,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"error: subcommand {args.command!r} is not implemented yet; "
-        "'validate', 'consume' and 'benchmark' are available so far",
+        "'validate', 'simulate', 'consume', 'report' and 'benchmark' "
+        "are available so far",
         file=sys.stderr,
     )
     return EXIT_UNEXPECTED
