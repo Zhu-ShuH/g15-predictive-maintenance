@@ -217,7 +217,21 @@ def connect(database_path: Path | str) -> sqlite3.Connection:
                 raise
             time.sleep(_CONNECT_RETRY_DELAY)
             continue
-        if _wal_handle_is_read_only(connection):
+        try:
+            degraded = _wal_handle_is_read_only(connection)
+        except _ProbeRollbackError as exc:
+            # The probe could not roll its transaction back, so the connection
+            # is still inside a transaction nobody asked for.  Handing it out
+            # would break the caller's next ``BEGIN``; close it and report
+            # the failure with its original context.
+            connection.close()
+            cause = exc.__cause__ if isinstance(exc.__cause__, sqlite3.Error) else None
+            raise DatabaseError(
+                f"cannot open database {path}: the write-capability probe could "
+                f"not be rolled back"
+                f"{f' ({cause})' if cause is not None else ''}"
+            ) from cause
+        if degraded:
             if not os.access(path, os.W_OK):
                 # The path itself is read-only. That is a permission problem,
                 # not a degraded handle, and it is reported when the write
@@ -233,7 +247,6 @@ def connect(database_path: Path | str) -> sqlite3.Connection:
                 time.sleep(_CONNECT_RETRY_DELAY)
             continue
         return connection
-
     # Every attempt produced a degraded handle.  Report it as the read-only
     # refusal it is, with the diagnostics that say why.
     raise _write_error(
@@ -317,28 +330,97 @@ def _wal_handle_is_read_only(connection: sqlite3.Connection) -> bool:
     the write lock and gives it straight back, so it writes nothing and
     leaves the database exactly as it found it.
 
+    The probe runs with ``busy_timeout = 0`` so that a *concurrent writer*
+    cannot make it wait: ``BEGIN IMMEDIATE`` would otherwise block for the
+    connection's busy timeout (5 seconds by default) before SQLite reports
+    ``SQLITE_BUSY``.  That wait buys nothing -- ``SQLITE_BUSY`` is lock
+    contention, not a degraded handle, so the probe would answer "writable"
+    anyway after paying five seconds for it.  With the timeout at zero the
+    contention is reported immediately and the detection is unchanged.
+
     Args:
         connection: An open connection.
 
     Returns:
         ``True`` when the connection cannot start a write transaction.
+
+    Raises:
+        _ProbeRollbackError: if the probe transaction could not be rolled
+            back.  The connection is then in an unknown transaction state and
+            must not be handed to a caller.
+    """
+    previous_timeout = _probe_timeout(connection, 0)
+    try:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            # Only a read-only refusal means "the handle is degraded".  A busy
+            # database or a locked file is contention, and must not be reported
+            # as a degraded handle.
+            return _primary_error_code(exc) == _SQLITE_READONLY
+        except sqlite3.Error:
+            return False
+        try:
+            connection.execute("ROLLBACK")
+        except sqlite3.Error as exc:
+            # The transaction was started, so the handle *is* writable; failing
+            # to roll it back is a different problem and not this one.  But the
+            # connection is still inside the probe transaction, so it must not
+            # be returned to a caller: report the failure instead.
+            raise _ProbeRollbackError(exc) from exc
+        return False
+    finally:
+        _restore_timeout(connection, previous_timeout)
+
+
+class _ProbeRollbackError(DatabaseError):
+    """Raised when the write-capability probe cannot roll its transaction back.
+
+    The probe opens a transaction to test whether the handle can write.  If
+    the matching ``ROLLBACK`` fails, the connection is left inside a
+    transaction nobody asked for, and a later ``BEGIN`` on it fails with
+    "cannot start a transaction within a transaction".  Returning such a
+    connection would hand the caller a broken handle, so the failure is
+    reported instead of being swallowed.
+    """
+
+
+def _probe_timeout(connection: sqlite3.Connection, timeout_ms: int) -> int:
+    """Set the busy timeout for a probe and return the previous value.
+
+    Args:
+        connection: The connection to configure.
+        timeout_ms: The busy timeout to apply, in milliseconds.
+
+    Returns:
+        The busy timeout that was in effect before, or ``0`` when it could not
+        be read.
+    """
+    previous = 0
+    try:
+        row = connection.execute("PRAGMA busy_timeout").fetchone()
+        if row is not None:
+            previous = int(row[0])
+    except (sqlite3.Error, TypeError, ValueError, IndexError):
+        previous = 0
+    try:
+        connection.execute(f"PRAGMA busy_timeout = {timeout_ms}")
+    except sqlite3.Error:  # pragma: no cover - the pragma is optional
+        pass
+    return previous
+
+
+def _restore_timeout(connection: sqlite3.Connection, timeout_ms: int) -> None:
+    """Restore a busy timeout that :func:`_probe_timeout` changed.
+
+    Args:
+        connection: The connection to configure.
+        timeout_ms: The busy timeout to restore, in milliseconds.
     """
     try:
-        connection.execute("BEGIN IMMEDIATE")
-    except sqlite3.OperationalError as exc:
-        # Only a read-only refusal means "the handle is degraded".  A busy
-        # database or a locked file is contention, and must not be reported
-        # as a degraded handle.
-        return _primary_error_code(exc) == _SQLITE_READONLY
-    except sqlite3.Error:
-        return False
-    try:
-        connection.execute("ROLLBACK")
-    except sqlite3.Error:
-        # The transaction was started, so the handle *is* writable; failing
-        # to roll it back is a different problem and not this one.
-        return False
-    return False
+        connection.execute(f"PRAGMA busy_timeout = {timeout_ms}")
+    except sqlite3.Error:  # pragma: no cover - the pragma is optional
+        pass
 
 
 def connect_readonly(database_path: Path | str) -> sqlite3.Connection:
@@ -374,8 +456,9 @@ def connect_readonly(database_path: Path | str) -> sqlite3.Connection:
 
 
 #: Primary SQLite result code for "attempt to write a readonly database".
-#: ``sqlite3.Error.sqlite_errorcode`` reports the *extended* code (for example
-#: ``SQLITE_READONLY_ROLLBACK``), so the low byte identifies the primary one.
+#: ``sqlite3.Error.sqlite_errorcode`` reports the *full* result code -- the
+#: primary code in the low byte and the extended code in the upper bits -- so
+#: the low byte identifies the primary one.
 _SQLITE_READONLY = 8
 
 
@@ -393,6 +476,29 @@ def _primary_error_code(exc: sqlite3.Error) -> int | None:
     if code is None:
         return None
     return int(code) & 0xFF
+
+
+def _extended_error_code(exc: sqlite3.Error) -> int | None:
+    """Return the extended result code behind a SQLite error, if any.
+
+    ``sqlite3.Error.sqlite_errorcode`` carries the **full** result code: the
+    primary code in the low byte and the extended code in the upper bits.  The
+    extended code is therefore the full code shifted down by eight bits, and
+    it is what separates the flavours of a read-only refusal from each other:
+    a bare ``SQLITE_READONLY`` is primary 8 / extended 0, while
+    ``SQLITE_READONLY_CANTINIT`` is primary 8 / extended 3.
+
+    Args:
+        exc: The error SQLite raised.
+
+    Returns:
+        The extended result code (``sqlite_errorcode >> 8``), or ``None`` when
+        the exception does not carry one.
+    """
+    code = getattr(exc, "sqlite_errorcode", None)
+    if code is None:
+        return None
+    return int(code) >> 8
 
 
 def _write_error(
@@ -464,7 +570,7 @@ def describe_read_only_context(
     parts: list[str] = []
     if exc is not None:
         primary = _primary_error_code(exc)
-        extended = getattr(exc, "sqlite_errorcode", None)
+        extended = _extended_error_code(exc)
         name = getattr(exc, "sqlite_errorname", None)
         parts.append(f"sqlite primary={primary} extended={extended} name={name}")
     if connection is not None:

@@ -163,10 +163,49 @@ C4 独立复核抓到的失败现场是：主码 8、**扩展码 0**（既非
 
 `connect()` 打开后用 `BEGIN IMMEDIATE` / `ROLLBACK` 探测一次（**不写任何数据**，
 取写锁后立即归还）。发现句柄已降级就**关闭并重开**——重开让 SQLite 重新走一遍
-自己的打开逻辑，从而重新决定句柄是否可写。重试有界（12 次 × 50ms）。
+自己的打开逻辑，从而**在持有者放手之后**重新决定句柄是否可写；退避负责给持有者
+放手的时间。重试有界（12 次 × 50ms，约 600ms 窗口）。
 
 > **检测是主因、重开是手段。** 退避只给持有者让出文件的时间，不是靠 sleep 掩盖。
 > 探测只把 `SQLITE_READONLY` 判为降级，`SQLITE_BUSY`（锁竞争）保持原义，不误报。
+>
+> **重开与退避缺一不可**：只有重开没有退避，持有者不让就永远失败；只有退避没有
+> 重开，原句柄不会自愈（降级确实粘在句柄上）。
+
+**探测在 `busy_timeout = 0` 下进行（#124 修订）。**
+
+探测用 `BEGIN IMMEDIATE` 取写锁。当**另一个连接正持有该库的写锁**时，这一句会走
+SQLite 的 busy timeout（默认 5000ms）才返回 `SQLITE_BUSY`。这段等待买不到任何东西：
+`SQLITE_BUSY` 恰好就是「有并发写者」，而它**不被判为降级**，所以探测等到的正是它
+等不到的那把锁——实测白等 5.6 秒后照样返回一个连接。因此探测期间把
+`busy_timeout` 临时置 0（探测完恢复原值），`SQLITE_BUSY` 立即返回，**检测语义完全
+不变**。
+
+| 场景 | 探测前 | 探测后 |
+|---|---|---|
+| 另一连接持有写锁时 `connect()` | 5.593s | **0.016s** |
+| 持有 0.2s / 0.4s | 成功 0.062s / 0.282s | 成功 0.047s / 0.282s（不变） |
+| 持有 0.8s / 1.2s / 2.0s | 失败 0.625s | 失败 0.609s / 0.625s / 0.610s（不变） |
+
+**探测回滚失败时不交出连接（#124 修订）。**
+
+若 `ROLLBACK` 失败，连接仍留在探测事务里。此时把它交给调用方，会让调用方的下一个
+`BEGIN` 以「cannot start a transaction within a transaction」失败——错误点离真正
+的原因太远。因此探测回滚失败会被**明确报告**：关闭该连接、保留原始错误上下文，
+抛 `DatabaseError`。
+
+**扩展码必须真的取扩展码（#124 修订）。**
+
+`sqlite3.Error.sqlite_errorcode` 给的是**完整**结果码（主码在低字节、扩展码在高位），
+不是扩展码本身。此前诊断把完整码直接当作扩展码输出，等于**丢掉了正是用来区分只读
+种类的那一个数**：裸 `SQLITE_READONLY`（完整码 8 → 扩展码 **0**）会被误读成
+「扩展码 8」。现按 `extended = code >> 8` 提取，本机实测：
+
+| 情形 | `sqlite_errorcode` | primary（`& 0xFF`） | extended（`>> 8`） |
+|---|---|---|---|
+| 裸 `SQLITE_READONLY` | 8 | 8 | **0** |
+| `SQLITE_READONLY_CANTINIT` | 776 | 8 | **3** |
+| `SQLITE_CONSTRAINT_PRIMARYKEY` | 1555 | 19 | **6** |
 
 **实测效果**（同一口径、同机、Python 3.12.15 / SQLite 3.53.4）：
 
@@ -180,7 +219,9 @@ C4 独立复核抓到的失败现场是：主码 8、**扩展码 0**（既非
 
 **诊断**：`describe_read_only_context()` 给出主码 / 扩展码 / 错误名、数据库
 **绝对路径**、`journal_mode`、`-wal` / `-shm` / `-journal` 的存在与大小，
-只读拒绝的错误消息自带这份上下文。
+只读拒绝的错误消息自带这份上下文。扩展码按 `code >> 8` 取真实扩展码，
+因此「裸 `SQLITE_READONLY`（扩展码 0）」与「`SQLITE_READONLY_CANTINIT`
+（扩展码 3）」在诊断里分得开。
 
 **边界（如实记录）**：降级判定基于 **Windows VFS 行为**，只在本机 Windows 11
 实测；**Linux（#10 目标环境）未做同款对照**，Windows 专属回归测试在非 Windows
@@ -203,8 +244,8 @@ C4 独立复核抓到的失败现场是：主码 8、**扩展码 0**（既非
 #### 先按错误码分流，不按措辞猜
 
 **只有主错误码 `SQLITE_READONLY`（8）才进 `DatabaseReadOnlyError`。**
-`sqlite3.Error.sqlite_errorcode` 给的是扩展码（例如
-`SQLITE_READONLY_ROLLBACK`），取低字节（`code & 0xFF`）得到主码再判断。
+`sqlite3.Error.sqlite_errorcode` 给的是**完整**结果码：主码在低字节、扩展码在
+高位（`primary = code & 0xFF`，`extended = code >> 8`）。取低字节得到主码再判断。
 其余 `OperationalError` 保留自身语义、抛普通 `DatabaseError` 并带上原始上下文：
 
 | 注入的错误 | 主码 | 抛出的异常 |

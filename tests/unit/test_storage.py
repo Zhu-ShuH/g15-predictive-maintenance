@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pytest
 
+from g15.storage import database as database_module
 from g15.storage.database import (
     SCHEMA_STATEMENTS,
     DatabaseError,
@@ -551,7 +552,13 @@ def test_a_refused_write_names_the_diagnostic_context(tmp_path: Path) -> None:
 
 
 def test_the_diagnostic_context_reports_the_sqlite_codes(tmp_path: Path) -> None:
-    """The diagnostic context names the SQLite primary and extended codes."""
+    """The diagnostic context names the SQLite primary and extended codes.
+
+    ``sqlite_errorcode`` carries the *full* result code, so the primary code
+    sits in the low byte and the extended code in the upper bits.  Reporting
+    the full code as the extended one would lose exactly the number that
+    tells the flavours of a read-only refusal apart.
+    """
     database = tmp_path / "g15.db"
     connection = connect(database)
     try:
@@ -563,4 +570,104 @@ def test_the_diagnostic_context_reports_the_sqlite_codes(tmp_path: Path) -> None
         connection.close()
 
     assert "primary=8" in context
-    assert "extended=8" in context
+    assert "extended=0" in context
+
+
+def test_the_diagnostic_context_tells_the_readonly_flavours_apart(
+    tmp_path: Path,
+) -> None:
+    """The extended code separates the read-only refusals from each other.
+
+    A bare ``SQLITE_READONLY`` (full code 8) and
+    ``SQLITE_READONLY_CANTINIT`` (full code 776) share the primary code 8 and
+    differ only in the extended code -- 0 against 3.  The diagnostic context
+    has to report that difference, because it is what tells "the handle was
+    downgraded" apart from "the database could not be initialised at all".
+    """
+    database = tmp_path / "g15.db"
+    connection = connect(database)
+    try:
+        initialize_database(connection)
+        error = sqlite3.OperationalError("attempt to write a readonly database")
+        error.sqlite_errorcode = 776  # type: ignore[attr-defined]
+        error.sqlite_errorname = "SQLITE_READONLY_CANTINIT"  # type: ignore[attr-defined]
+        context = describe_read_only_context(database, error, connection=connection)
+    finally:
+        connection.close()
+
+    assert "primary=8" in context
+    assert "extended=3" in context
+    assert "SQLITE_READONLY_CANTINIT" in context
+
+
+def test_a_probe_that_cannot_roll_back_does_not_return_a_broken_connection(
+    tmp_path: Path,
+) -> None:
+    """A failed probe rollback must not hand out a connection in a transaction.
+
+    The write-capability probe opens a transaction and rolls it back.  If the
+    rollback fails, the connection is left inside a transaction that nobody
+    asked for, and the caller's next ``BEGIN`` fails with "cannot start a
+    transaction within a transaction".  Returning such a connection would move
+    the failure from the probe to a place that cannot explain it, so the
+    refusal has to happen here instead.
+    """
+    database = tmp_path / "g15.db"
+    connection = connect(database)
+    try:
+        initialize_database(connection)
+    finally:
+        connection.close()
+
+    original = database_module._open_and_configure
+
+    def refusing_open(path: Path) -> sqlite3.Connection:
+        opened = original(path)
+        opened.set_authorizer(
+            lambda action, arg1, _arg2, _database, _trigger: (
+                sqlite3.SQLITE_DENY
+                if action == sqlite3.SQLITE_TRANSACTION and arg1 == "ROLLBACK"
+                else sqlite3.SQLITE_OK
+            )
+        )
+        return opened
+
+    monkeypatch_target = database_module
+    monkeypatch_target._open_and_configure = refusing_open
+    try:
+        with pytest.raises(DatabaseError) as caught:
+            connect(database)
+    finally:
+        monkeypatch_target._open_and_configure = original
+
+    assert "could not be rolled back" in str(caught.value)
+
+
+def test_the_probe_does_not_wait_for_a_concurrent_writer(tmp_path: Path) -> None:
+    """The probe must not block for the busy timeout under a concurrent writer.
+
+    Probing with ``BEGIN IMMEDIATE`` used to wait for the connection's busy
+    timeout -- five seconds by default -- before SQLite reported
+    ``SQLITE_BUSY``.  The wait bought nothing: ``SQLITE_BUSY`` is lock
+    contention rather than a degraded handle, so the probe answered "writable"
+    either way, just five seconds later and on every concurrent consumer.
+    """
+    database = tmp_path / "g15.db"
+    holder = connect(database)
+    try:
+        initialize_database(holder)
+        holder.execute("BEGIN IMMEDIATE")
+        holder.execute("INSERT INTO runs VALUES ('r','s','2.0','v','c','2026-01-01')")
+
+        started = time.monotonic()
+        connection = connect(database)
+        elapsed = time.monotonic() - started
+        try:
+            assert not connection.in_transaction
+        finally:
+            connection.close()
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+
+    assert elapsed < 1.0, f"the probe waited {elapsed:.3f}s for the busy timeout"
