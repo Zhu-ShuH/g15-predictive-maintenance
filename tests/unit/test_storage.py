@@ -16,6 +16,8 @@ reintroduces the race fails here rather than in a flaky stress round.
 
 from __future__ import annotations
 
+import ctypes
+import ctypes.wintypes as wintypes
 import multiprocessing
 import os
 import sqlite3
@@ -24,17 +26,28 @@ from pathlib import Path
 
 import pytest
 
+from g15.storage import database as database_module
 from g15.storage.database import (
     SCHEMA_STATEMENTS,
     DatabaseError,
     DatabaseReadOnlyError,
     connect,
     connect_readonly,
+    describe_read_only_context,
     initialize_database,
     transaction,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: Win32 constants for the sidecar hold that reproduces the Issue #123
+#: trigger.  ``FILE_SHARE_READ`` alone denies write access to every other
+#: handle, which is what makes the writer's own open of the file fail and
+#: get silently downgraded to read-only by SQLite's VFS.
+_GENERIC_READ = 0x80000000
+_FILE_SHARE_READ = 0x00000001
+_OPEN_ALWAYS = 4
+_FILE_ATTRIBUTE_NORMAL = 0x80
 
 
 # --------------------------------------------------------------------------
@@ -56,6 +69,94 @@ def _child_writes(database: str, ready, stop) -> None:  # type: ignore[no-untype
             time.sleep(0.002)
     finally:
         connection.close()
+
+
+def _child_holds_sidecars(database: str, ready, stop, hold_seconds: float = 0.3) -> None:  # type: ignore[no-untyped-def]
+    """Hold the WAL sidecar files open without write sharing.
+
+    This is the deterministic form of the Issue #123 trigger.  On Windows,
+    SQLite's VFS silently downgrades a read/write open of the ``-wal`` and
+    ``-shm`` files to a read-only one when another process holds them
+    without write sharing, and it caches that decision on the WAL handle.
+    The writer then fails its first write with a bare ``SQLITE_READONLY``
+    (primary code 8, extended code 0).
+
+    The files are opened with ``CreateFileW`` and a share mode of
+    ``FILE_SHARE_READ``, which denies write access to any other handle --
+    that is what makes the writer's own open fail and get downgraded.  On
+    other platforms the trigger does not exist and this helper waits.
+
+    Args:
+        database: The database whose sidecar files to hold.
+        ready: Set once the files are held.
+        stop: Set to end the hold early.
+        hold_seconds: How long to hold the files when ``stop`` is not set.
+    """
+    if os.name != "nt":
+        ready.set()
+        stop.wait(30)
+        return
+    path = Path(database)
+    handles = []
+    try:
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(str(path) + suffix)
+            handle = _open_without_write_sharing(sidecar)
+            if handle is not None:
+                handles.append(handle)
+        ready.set()
+        # Hold the files only briefly by default.  A real reader holds them
+        # for the duration of one query, so the writer's re-open has to be
+        # able to succeed once the holder lets go.
+        stop.wait(hold_seconds)
+    finally:
+        for handle in handles:
+            _close_handle(handle)
+
+
+def _open_without_write_sharing(path: Path) -> int | None:
+    """Open ``path`` so that no other handle may write to it.
+
+    Args:
+        path: The file to open.
+
+    Returns:
+        The Win32 handle, or ``None`` when the file could not be opened.
+    """
+    if os.name != "nt":  # pragma: no cover - the guard is Windows-only
+        return None
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.CreateFileW.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    handle = kernel32.CreateFileW(
+        ctypes.c_wchar_p(str(path)),
+        _GENERIC_READ,
+        _FILE_SHARE_READ,
+        None,
+        _OPEN_ALWAYS,
+        _FILE_ATTRIBUTE_NORMAL,
+        None,
+    )
+    if handle == wintypes.HANDLE(-1).value:
+        return None
+    return int(handle)
+
+
+def _close_handle(handle: int) -> None:
+    """Close a Win32 handle opened by :func:`_open_without_write_sharing`."""
+    if os.name != "nt":  # pragma: no cover - the guard is Windows-only
+        return
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle(wintypes.HANDLE(handle))
 
 
 def _child_observes(database: str, successes, stop) -> None:  # type: ignore[no-untyped-def]
@@ -328,3 +429,245 @@ def test_every_schema_statement_is_repeatable(tmp_path: Path) -> None:
     """The schema statements carry IF NOT EXISTS, so re-running them is safe."""
     for statement in SCHEMA_STATEMENTS:
         assert "IF NOT EXISTS" in statement.upper(), statement
+
+
+# --------------------------------------------------------------------------
+# the Issue #123 guard: a degraded WAL handle must not reach the consumer
+# --------------------------------------------------------------------------
+
+
+def test_the_writer_survives_a_degraded_wal_handle(tmp_path: Path) -> None:
+    """Issue #123: the writer must not inherit a read-only WAL handle.
+
+    On Windows, SQLite's VFS silently downgrades a read/write open of the
+    ``-wal`` and ``-shm`` files to a read-only one when another process holds
+    them without write sharing, and it caches that decision on the WAL
+    handle.  The writer then fails its first write with a bare
+    ``SQLITE_READONLY`` -- primary code 8, extended code 0 -- which is
+    exactly what the independent review measured.
+
+    The storage layer therefore checks that the handle it got back can
+    write, and re-opens the database when it cannot.  This test reproduces
+    the boundary deterministically: another process holds the sidecar files
+    without write sharing while the writer opens the database, then lets go
+    shortly afterwards -- the shape of a short-lived reader.
+
+    Without the check, the writer keeps the degraded handle and fails.
+    """
+    if os.name != "nt":
+        pytest.skip("the WAL handle degradation is a Windows VFS behaviour")
+
+    database = tmp_path / "artifacts" / "results.sqlite"
+    database.parent.mkdir(parents=True, exist_ok=True)
+
+    # The schema has to exist before the writer can write a row into it.
+    seed = connect(database)
+    try:
+        initialize_database(seed)
+    finally:
+        seed.close()
+
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    stop = context.Event()
+    holder = context.Process(
+        target=_child_holds_sidecars, args=(str(database), ready, stop, 0.3)
+    )
+    holder.start()
+    try:
+        assert ready.wait(30), "the holder never took the sidecar files"
+        # The writer opens the database while the sidecar files are held
+        # without write sharing.  It must still end up with a writable
+        # handle: it re-opens until the holder lets go.
+        connection = connect(database)
+        try:
+            with transaction(connection):
+                connection.execute(
+                    "INSERT INTO runs VALUES ('r','s','2.0','v','c','2026-01-01')"
+                )
+        finally:
+            connection.close()
+    finally:
+        stop.set()
+        holder.join(30)
+
+    assert holder.exitcode == 0, f"the holder failed: exit code {holder.exitcode}"
+
+
+def test_a_degraded_handle_is_reported_with_its_diagnostics(tmp_path: Path) -> None:
+    """A permanently held sidecar file is named, with the context.
+
+    When the sidecar files are held for good, no re-open can succeed and the
+    writer has to fail.  The failure must then say what refused the write --
+    the codes, the path, the journal mode and the sidecar state -- so that
+    the cause is determinable from the log rather than guessed at.
+    """
+    if os.name != "nt":
+        pytest.skip("the WAL handle degradation is a Windows VFS behaviour")
+
+    database = tmp_path / "artifacts" / "results.sqlite"
+    database.parent.mkdir(parents=True, exist_ok=True)
+
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    stop = context.Event()
+    holder = context.Process(
+        target=_child_holds_sidecars, args=(str(database), ready, stop, 30.0)
+    )
+    holder.start()
+    try:
+        assert ready.wait(30), "the holder never took the sidecar files"
+        with pytest.raises(DatabaseReadOnlyError) as caught:
+            connect(database)
+    finally:
+        stop.set()
+        holder.join(30)
+
+    message = str(caught.value)
+    assert "sqlite primary=8" in message
+    assert "database=" in message
+    assert "-shm=" in message
+
+
+def test_a_refused_write_names_the_diagnostic_context(tmp_path: Path) -> None:
+    """A read-only refusal carries the context Issue #123 asked for.
+
+    The bare ``SQLITE_READONLY`` says only that a write was refused.  The
+    review asked for the primary and extended codes, the absolute path, the
+    journal mode and the state of the WAL sidecar files, so that a failure
+    can be diagnosed from the log alone.
+    """
+    database = tmp_path / "g15.db"
+    connection = connect(database)
+    try:
+        initialize_database(connection)
+        context = describe_read_only_context(database, connection=connection)
+    finally:
+        connection.close()
+
+    assert "database=" in context
+    assert "journal_mode=wal" in context
+    assert "-shm=" in context
+    assert "-wal=" in context
+
+
+def test_the_diagnostic_context_reports_the_sqlite_codes(tmp_path: Path) -> None:
+    """The diagnostic context names the SQLite primary and extended codes.
+
+    ``sqlite_errorcode`` carries the *full* result code, so the primary code
+    sits in the low byte and the extended code in the upper bits.  Reporting
+    the full code as the extended one would lose exactly the number that
+    tells the flavours of a read-only refusal apart.
+    """
+    database = tmp_path / "g15.db"
+    connection = connect(database)
+    try:
+        initialize_database(connection)
+        error = sqlite3.OperationalError("attempt to write a readonly database")
+        error.sqlite_errorcode = 8  # type: ignore[attr-defined]
+        context = describe_read_only_context(database, error, connection=connection)
+    finally:
+        connection.close()
+
+    assert "primary=8" in context
+    assert "extended=0" in context
+
+
+def test_the_diagnostic_context_tells_the_readonly_flavours_apart(
+    tmp_path: Path,
+) -> None:
+    """The extended code separates the read-only refusals from each other.
+
+    A bare ``SQLITE_READONLY`` (full code 8) and
+    ``SQLITE_READONLY_CANTINIT`` (full code 776) share the primary code 8 and
+    differ only in the extended code -- 0 against 3.  The diagnostic context
+    has to report that difference, because it is what tells "the handle was
+    downgraded" apart from "the database could not be initialised at all".
+    """
+    database = tmp_path / "g15.db"
+    connection = connect(database)
+    try:
+        initialize_database(connection)
+        error = sqlite3.OperationalError("attempt to write a readonly database")
+        error.sqlite_errorcode = 776  # type: ignore[attr-defined]
+        error.sqlite_errorname = "SQLITE_READONLY_CANTINIT"  # type: ignore[attr-defined]
+        context = describe_read_only_context(database, error, connection=connection)
+    finally:
+        connection.close()
+
+    assert "primary=8" in context
+    assert "extended=3" in context
+    assert "SQLITE_READONLY_CANTINIT" in context
+
+
+def test_a_probe_that_cannot_roll_back_does_not_return_a_broken_connection(
+    tmp_path: Path,
+) -> None:
+    """A failed probe rollback must not hand out a connection in a transaction.
+
+    The write-capability probe opens a transaction and rolls it back.  If the
+    rollback fails, the connection is left inside a transaction that nobody
+    asked for, and the caller's next ``BEGIN`` fails with "cannot start a
+    transaction within a transaction".  Returning such a connection would move
+    the failure from the probe to a place that cannot explain it, so the
+    refusal has to happen here instead.
+    """
+    database = tmp_path / "g15.db"
+    connection = connect(database)
+    try:
+        initialize_database(connection)
+    finally:
+        connection.close()
+
+    original = database_module._open_and_configure
+
+    def refusing_open(path: Path) -> sqlite3.Connection:
+        opened = original(path)
+        opened.set_authorizer(
+            lambda action, arg1, _arg2, _database, _trigger: (
+                sqlite3.SQLITE_DENY
+                if action == sqlite3.SQLITE_TRANSACTION and arg1 == "ROLLBACK"
+                else sqlite3.SQLITE_OK
+            )
+        )
+        return opened
+
+    monkeypatch_target = database_module
+    monkeypatch_target._open_and_configure = refusing_open
+    try:
+        with pytest.raises(DatabaseError) as caught:
+            connect(database)
+    finally:
+        monkeypatch_target._open_and_configure = original
+
+    assert "could not be rolled back" in str(caught.value)
+
+
+def test_the_probe_does_not_wait_for_a_concurrent_writer(tmp_path: Path) -> None:
+    """The probe must not block for the busy timeout under a concurrent writer.
+
+    Probing with ``BEGIN IMMEDIATE`` used to wait for the connection's busy
+    timeout -- five seconds by default -- before SQLite reported
+    ``SQLITE_BUSY``.  The wait bought nothing: ``SQLITE_BUSY`` is lock
+    contention rather than a degraded handle, so the probe answered "writable"
+    either way, just five seconds later and on every concurrent consumer.
+    """
+    database = tmp_path / "g15.db"
+    holder = connect(database)
+    try:
+        initialize_database(holder)
+        holder.execute("BEGIN IMMEDIATE")
+        holder.execute("INSERT INTO runs VALUES ('r','s','2.0','v','c','2026-01-01')")
+
+        started = time.monotonic()
+        connection = connect(database)
+        elapsed = time.monotonic() - started
+        try:
+            assert not connection.in_transaction
+        finally:
+            connection.close()
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+
+    assert elapsed < 1.0, f"the probe waited {elapsed:.3f}s for the busy timeout"
