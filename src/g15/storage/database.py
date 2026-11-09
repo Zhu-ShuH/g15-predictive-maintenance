@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -39,6 +40,7 @@ __all__ = [
     "DatabaseReadOnlyError",
     "connect",
     "connect_readonly",
+    "describe_read_only_context",
     "initialize_database",
     "transaction",
 ]
@@ -150,6 +152,25 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
 )
 
 
+#: How many times :func:`connect` re-opens the database when the WAL handle
+#: came back degraded (see :func:`_wal_handle_is_read_only`).
+#:
+#: Each attempt re-opens the file, which re-runs SQLite's own open logic and
+#: therefore re-decides whether the WAL handle is writable.  The retry is
+#: bounded so that a database that is *permanently* held by another process
+#: fails with a named error instead of spinning.
+_CONNECT_ATTEMPTS = 12
+
+#: How long :func:`connect` waits between two attempts, in seconds.
+#:
+#: The wait is not the fix: detecting the degraded handle and re-opening is.
+#: It only gives the process that holds the file the moment it needs to let
+#: go, which is what makes the retry succeed in the common case where the
+#: holder is a short-lived reader.  The default window covers a reader that
+#: holds the files for a few hundred milliseconds.
+_CONNECT_RETRY_DELAY = 0.05
+
+
 def connect(database_path: Path | str) -> sqlite3.Connection:
     """Open a database and apply the pragmas section 9 requires.
 
@@ -158,13 +179,22 @@ def connect(database_path: Path | str) -> sqlite3.Connection:
     (:func:`initialize_database`), so that *opening* a database and *preparing*
     a database for writes stay distinguishable.
 
+    The returned handle is also **verified to be writable**.  On Windows,
+    SQLite's VFS silently downgrades a read/write open of the ``-wal`` and
+    ``-shm`` files to a read-only one when another process holds them without
+    write sharing, and it caches that decision on the WAL handle.  A writer
+    that received such a handle fails later -- at the first real write, with
+    a bare ``SQLITE_READONLY`` -- which is Issue #123.  Detecting the
+    degraded handle here, while the connection is still cheap to replace,
+    keeps that failure from reaching the consumer.
+
     Args:
         database_path: Path to the SQLite file. Parent directories are created
             if they do not exist.
 
     Returns:
-        An open connection with ``foreign_keys`` on and WAL journalling
-        asserted.
+        An open connection with ``foreign_keys`` on, WAL journalling
+        asserted, and a WAL handle that can actually write.
 
     Raises:
         DatabaseError: if the database cannot be opened or the pragmas cannot
@@ -174,6 +204,71 @@ def connect(database_path: Path | str) -> sqlite3.Connection:
             reported as :class:`DatabaseError` with their original context.
     """
     path = Path(database_path)
+    last_error: sqlite3.Error | None = None
+
+    for attempt in range(1, _CONNECT_ATTEMPTS + 1):
+        try:
+            connection = _open_and_configure(path)
+        except DatabaseReadOnlyError as exc:
+            last_error = (
+                exc.__cause__ if isinstance(exc.__cause__, sqlite3.Error) else None
+            )
+            if attempt == _CONNECT_ATTEMPTS:
+                raise
+            time.sleep(_CONNECT_RETRY_DELAY)
+            continue
+        if _wal_handle_is_read_only(connection):
+            if not os.access(path, os.W_OK):
+                # The path itself is read-only. That is a permission problem,
+                # not a degraded handle, and it is reported when the write
+                # happens -- naming it here would change the contract of
+                # :func:`connect`, which opens databases it cannot write to
+                # so that the refusal can be named at the point of the write.
+                return connection
+            # The handle was degraded while it was being opened.  Closing and
+            # re-opening gives SQLite a fresh chance at the same files, and
+            # the check runs again on the new handle.
+            connection.close()
+            if attempt < _CONNECT_ATTEMPTS:
+                time.sleep(_CONNECT_RETRY_DELAY)
+            continue
+        return connection
+
+    # Every attempt produced a degraded handle.  Report it as the read-only
+    # refusal it is, with the diagnostics that say why.
+    raise _write_error(
+        path,
+        last_error if last_error is not None else _readonly_probe_error(),
+        f"open database {path} for writing",
+    )
+
+
+def _readonly_probe_error() -> sqlite3.Error:
+    """Build the error used when a degraded WAL handle was never recovered."""
+    error = sqlite3.OperationalError("attempt to write a readonly database")
+    # The real error carries this; a synthesised one has to say so too, or
+    # the classifier cannot tell it apart from any other operational error.
+    error.sqlite_errorcode = _SQLITE_READONLY  # type: ignore[attr-defined]
+    error.sqlite_errorname = "SQLITE_READONLY"  # type: ignore[attr-defined]
+    return error
+
+
+def _open_and_configure(path: Path) -> sqlite3.Connection:
+    """Open the database and apply the pragmas section 9 requires.
+
+    Args:
+        path: Path to the SQLite file. Parent directories are created if they
+            do not exist.
+
+    Returns:
+        An open connection with the pragmas applied.
+
+    Raises:
+        DatabaseError: if the database cannot be opened or the pragmas cannot
+            be applied.
+        DatabaseReadOnlyError: if a write was refused with
+            ``SQLITE_READONLY``.
+    """
     try:
         if path.parent and not path.parent.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,6 +302,43 @@ def connect(database_path: Path | str) -> sqlite3.Connection:
         raise DatabaseError(f"cannot configure database {path}: {exc}") from exc
 
     return connection
+
+
+def _wal_handle_is_read_only(connection: sqlite3.Connection) -> bool:
+    """Report whether this connection's WAL handle cannot write.
+
+    SQLite exposes no direct "is the WAL handle read-only" flag, but it does
+    expose the consequence of one: a WAL handle that was opened read-only
+    refuses every write transaction with a bare ``SQLITE_READONLY`` (primary
+    code 8, extended code 0).  Probing that with a transaction that changes
+    nothing is therefore the reliable way to ask.
+
+    The probe is a ``BEGIN IMMEDIATE`` followed by a ``ROLLBACK``: it takes
+    the write lock and gives it straight back, so it writes nothing and
+    leaves the database exactly as it found it.
+
+    Args:
+        connection: An open connection.
+
+    Returns:
+        ``True`` when the connection cannot start a write transaction.
+    """
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+    except sqlite3.OperationalError as exc:
+        # Only a read-only refusal means "the handle is degraded".  A busy
+        # database or a locked file is contention, and must not be reported
+        # as a degraded handle.
+        return _primary_error_code(exc) == _SQLITE_READONLY
+    except sqlite3.Error:
+        return False
+    try:
+        connection.execute("ROLLBACK")
+    except sqlite3.Error:
+        # The transaction was started, so the handle *is* writable; failing
+        # to roll it back is a different problem and not this one.
+        return False
+    return False
 
 
 def connect_readonly(database_path: Path | str) -> sqlite3.Connection:
@@ -264,7 +396,10 @@ def _primary_error_code(exc: sqlite3.Error) -> int | None:
 
 
 def _write_error(
-    path: Path | None, exc: sqlite3.OperationalError, action: str
+    path: Path | None,
+    exc: sqlite3.Error,
+    action: str,
+    connection: sqlite3.Connection | None = None,
 ) -> DatabaseError:
     """Return the error that names a failed write without guessing too much.
 
@@ -274,6 +409,10 @@ def _write_error(
     is reported as a plain :class:`DatabaseError` carrying the original
     context. Classifying by code rather than by wording is what keeps
     "another connection holds it" from being blamed on an unrelated bug.
+
+    The message carries the process-level context that Issue #123 asked for,
+    because a bare ``SQLITE_READONLY`` on its own says only that *a* write
+    was refused and not *what* refused it.
 
     Args:
         path: The database behind the connection, or ``None`` if unknown.
@@ -294,7 +433,78 @@ def _write_error(
         f"cannot {action}: another connection most likely holds {path} and "
         f"refused the write -- that is the likeliest cause when the path "
         f"itself is writable, not a determination ({exc})"
+        f"{_diagnostic_suffix(path, exc, connection)}"
     )
+
+
+def describe_read_only_context(
+    path: Path | str | None,
+    exc: sqlite3.Error | None = None,
+    connection: sqlite3.Connection | None = None,
+) -> str:
+    """Return the process-level context of a refused write.
+
+    Issue #123 asked for the diagnostics that turn "the write was refused"
+    into something a reviewer can check: the SQLite primary and extended
+    codes, the absolute path, the journal mode, and the state of the
+    ``-wal`` and ``-shm`` files that WAL mode adds next to the database.
+
+    Args:
+        path: The database path, or ``None`` if unknown.
+        exc: The SQLite error, when there is one.
+        connection: The connection the write failed on, when it is still
+            open. It is used to read the journal mode back, because the
+            journal mode is a property of the *connection* to the database
+            and not of the file.
+
+    Returns:
+        A single-line summary, or an empty string when there is nothing to
+        report.
+    """
+    parts: list[str] = []
+    if exc is not None:
+        primary = _primary_error_code(exc)
+        extended = getattr(exc, "sqlite_errorcode", None)
+        name = getattr(exc, "sqlite_errorname", None)
+        parts.append(f"sqlite primary={primary} extended={extended} name={name}")
+    if connection is not None:
+        parts.append(f"journal_mode={_journal_mode(connection)}")
+    if path is None:
+        return "; ".join(parts)
+    resolved = Path(path).resolve()
+    parts.append(f"database={resolved}")
+    for suffix in ("-wal", "-shm", "-journal"):
+        sidecar = Path(str(resolved) + suffix)
+        if sidecar.exists():
+            try:
+                size = sidecar.stat().st_size
+            except OSError:  # pragma: no cover - the file vanished meanwhile
+                size = -1
+            parts.append(f"{suffix}={size}B")
+        else:
+            parts.append(f"{suffix}=absent")
+    return "; ".join(parts)
+
+
+def _journal_mode(connection: sqlite3.Connection) -> str:
+    """Return the journal mode of a connection, or ``unknown``."""
+    try:
+        row = connection.execute("PRAGMA journal_mode").fetchone()
+    except sqlite3.Error:  # pragma: no cover - the connection is broken
+        return "unknown"
+    if row is None:
+        return "unknown"
+    return str(row[0])
+
+
+def _diagnostic_suffix(
+    path: Path | None, exc: sqlite3.Error, connection: sqlite3.Connection | None = None
+) -> str:
+    """Return the diagnostic context appended to a read-only refusal."""
+    context = describe_read_only_context(path, exc, connection)
+    if not context:
+        return ""
+    return f" [{context}]"
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
@@ -315,8 +525,9 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
     except sqlite3.OperationalError as exc:
+        path = _database_path(connection)
         raise _write_error(
-            _database_path(connection), exc, "initialise the database schema"
+            path, exc, "initialise the database schema", connection
         ) from exc
     except sqlite3.Error as exc:
         raise DatabaseError(f"cannot initialise the database schema: {exc}") from exc
