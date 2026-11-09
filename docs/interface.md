@@ -549,7 +549,7 @@ python -m g15 benchmark --config configs/benchmark_1m.yaml
 python -m g15 doctor
 ```
 
-输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上表是统一接口规格，不代表每个子命令都已实现；其中 `consume` 已由 #71 合入主线，其余命令按各自实现与验收记录判断。**
+输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上表是统一接口规格，不代表每个子命令都已实现；其中 `consume` 已由 #71 合入主线，`simulate` 与 `report` 已由 #110 / PR #125 合入主线，`validate` 与 `benchmark` 亦已实现；`verify` 与 `doctor` 尚未接线，其余按各自实现与验收记录判断。**
 
 `verify` 与 `report` 的职责不得互换。`g15 verify` 未来薄接 `verify_run`，只读 Manifest/NPZ，不读 SQLite 或 `private_truth/`、不写报告；完整性校验实际执行后 `passed=True` 返回 `0`、`passed=False` 返回 `4`，无法执行的 Manifest/Schema/I/O/路径错误返回 `3`，未预期异常返回 `5`。`g15 report` 调用 `build_report(run_dir, run_dir/artifacts/results.sqlite)`，负责真值对账并生成 JSON/Markdown；两份产物成功生成即返回 `0`，即使报告字段为 `passed=false` 或 `passed=null`，因为这些是报告数据而非普通生成命令的进程失败。`ReportError`、`DataContractError` 家族及数据库/文件 I/O 返回 `3`，未预期异常返回 `5`；不得把 `EXIT_ACCEPTANCE=4` 扩到普通 `report`。
 
