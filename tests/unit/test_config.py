@@ -1000,19 +1000,16 @@ def test_cli_returns_2_for_mixed_type_unknown_keys(
     "argv",
     [
         ["doctor"],
-        [
-            "simulate",
-            "--config",
-            str(CONFIGS / "default.yaml"),
-            "--output-root",
-            "runs",
-        ],
     ],
 )
 def test_cli_unimplemented_subcommands_exit_non_zero(
     argv: list[str], capsys: pytest.CaptureFixture
 ) -> None:
-    """Registered but unimplemented commands must never look successful."""
+    """Registered but unimplemented commands must never look successful.
+
+    ``simulate`` is implemented by #110 and therefore no longer in this list;
+    ``doctor`` remains unimplemented and is still covered here.
+    """
     code = main(argv)
 
     captured = capsys.readouterr()

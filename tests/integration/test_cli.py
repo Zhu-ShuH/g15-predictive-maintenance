@@ -1,4 +1,4 @@
-"""Integration tests for the ``g15`` command line (Issues #65 and #51, C3).
+"""Integration tests for the ``g15`` command line (Issues #65, #51 and #110, C3).
 
 Every test drives a real ``python -m g15`` subprocess against real files: a
 small run produced by the producer, a consumer configuration, and the
@@ -750,6 +750,318 @@ def test_benchmark_exits_five_on_an_unexpected_error(
 
 
 # --------------------------------------------------------------------------- #
+# simulate / report: the Issue #110 CLI wiring
+# --------------------------------------------------------------------------- #
+
+#: The smallest shipped scenario, used by both the producer fixture and the
+#: end-to-end chain below.
+SCENARIO_CONFIG = CONFIGS / "healthy.yaml"
+
+
+def _run_injected_cli(
+    tmp_path: Path, argv: tuple[str, ...], body: str
+) -> subprocess.CompletedProcess[str]:
+    """Run a real ``g15`` subprocess with one CLI dependency replaced.
+
+    ``produce_run`` and ``build_report`` belong to C4/B1, not to C3.  Swapping
+    the name the CLI calls is the only way to reach an unexpected failure
+    branch without corrupting a real run; the child still imports ``g15.cli``
+    and executes ``main`` in a separate process, with no mock framework.
+    """
+    launcher = tmp_path / "launcher_110.py"
+    launcher.write_text(
+        "import sys\n"
+        "import g15.cli as cli\n"
+        "\n"
+        "\n" + body + "\n\nsys.exit(cli.main(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "src")
+    return subprocess.run(
+        [sys.executable, str(launcher), *argv],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=300,
+        check=False,
+        cwd=tmp_path,
+    )
+
+
+def test_simulate_help_documents_its_arguments() -> None:
+    """The frozen arguments of section 10 stay visible without a run."""
+    result = run_cli("simulate", "--help")
+
+    assert result.returncode == 0
+    assert "--config" in result.stdout
+    assert "--output-root" in result.stdout
+    assert "not implemented" not in result.stdout
+
+
+def test_report_help_documents_its_argument() -> None:
+    """The report command must no longer present itself as unimplemented."""
+    result = run_cli("report", "--help")
+
+    assert result.returncode == 0
+    assert "--run-dir" in result.stdout
+    assert "not implemented" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("simulate",),
+        ("simulate", "--config", str(SCENARIO_CONFIG)),
+        ("simulate", "--output-root", "runs"),
+        ("report",),
+    ],
+)
+def test_new_commands_require_their_arguments(argv: tuple[str, ...]) -> None:
+    """A missing required argument is an argument error, not a crash."""
+    result = run_cli(*argv)
+
+    assert result.returncode == 2
+    assert "required" in result.stderr
+
+
+def test_simulate_rejects_an_invalid_config(tmp_path: Path) -> None:
+    """A bad scenario document exits 2 and names the offending field."""
+    config = tmp_path / "bad.yaml"
+    config.write_text(
+        SCENARIO_CONFIG.read_text(encoding="utf-8") + "unexpected_field: 1\n",
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        "simulate",
+        "--config",
+        str(config),
+        "--output-root",
+        str(tmp_path / "runs"),
+    )
+
+    assert result.returncode == 2
+    assert "unexpected_field" in result.stderr
+
+
+def test_simulate_reports_a_missing_config(tmp_path: Path) -> None:
+    """A missing configuration file is a configuration error, not a crash."""
+    result = run_cli(
+        "simulate",
+        "--config",
+        str(tmp_path / "no-such.yaml"),
+        "--output-root",
+        str(tmp_path / "runs"),
+    )
+
+    assert result.returncode == 2
+    assert "error:" in result.stderr
+    assert not (tmp_path / "runs").exists()
+
+
+def test_simulate_succeeds_on_a_real_run(tmp_path: Path) -> None:
+    """The CLI hands a loaded config to the frozen producer entry."""
+    output_root = tmp_path / "runs"
+    result = run_cli(
+        "simulate",
+        "--config",
+        str(SCENARIO_CONFIG),
+        "--output-root",
+        str(output_root),
+    )
+
+    assert result.returncode == 0, result.stderr
+    run_dir = Path(text_field(result.stdout, "run_dir"))
+    assert run_dir.is_dir()
+    assert output_root in run_dir.parents
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "complete"
+
+
+def test_simulate_exits_three_on_an_unwritable_output_root(tmp_path: Path) -> None:
+    """An output root below a regular file cannot receive a run directory."""
+    blocked = tmp_path / "blocked"
+    blocked.write_text("not a directory", encoding="utf-8")
+
+    result = run_cli(
+        "simulate",
+        "--config",
+        str(SCENARIO_CONFIG),
+        "--output-root",
+        str(blocked / "runs"),
+    )
+
+    assert result.returncode == 3
+    assert "error:" in result.stderr
+
+
+def test_simulate_exits_five_on_an_unexpected_error(tmp_path: Path) -> None:
+    """Anything the producer mapping does not name stays an unexpected error."""
+    result = _run_injected_cli(
+        tmp_path,
+        (
+            "simulate",
+            "--config",
+            str(SCENARIO_CONFIG),
+            "--output-root",
+            str(tmp_path / "runs"),
+        ),
+        "def _boom(*_args, **_kwargs):\n"
+        "    raise RuntimeError('injected producer fault')\n"
+        "\n"
+        "\n"
+        "cli.produce_run = _boom",
+    )
+
+    assert result.returncode == 5
+    assert "unexpected" in result.stderr
+    assert "RuntimeError" in result.stderr
+
+
+def test_report_reports_a_missing_run_dir(tmp_path: Path) -> None:
+    """A run directory that does not exist is an I/O failure, not a crash."""
+    result = run_cli("report", "--run-dir", str(tmp_path / "no-such-run"))
+
+    assert result.returncode == 3
+    assert "error:" in result.stderr
+
+
+def test_report_requires_a_consumed_run(run_dir: Path) -> None:
+    """A complete but unconsumed run has no database to report from."""
+    result = run_cli("report", "--run-dir", str(run_dir))
+
+    assert result.returncode == 3
+    assert "database" in result.stderr
+
+
+def _consume_for_report(run_dir: Path) -> None:
+    """Consume a real run so the report builder has its database."""
+    result = run_cli(
+        "consume", "--run-dir", str(run_dir), "--config", str(CONSUMER_CONFIG)
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_report_succeeds_on_a_consumed_run(run_dir: Path) -> None:
+    """Both artefacts are written and their paths reach stdout."""
+    _consume_for_report(run_dir)
+
+    result = run_cli("report", "--run-dir", str(run_dir))
+
+    assert result.returncode == 0, result.stderr
+    json_path = Path(text_field(result.stdout, "report_json"))
+    markdown_path = Path(text_field(result.stdout, "report_markdown"))
+    assert json_path.is_file()
+    assert markdown_path.is_file()
+    assert "passed" in json.loads(json_path.read_text(encoding="utf-8"))
+    assert "# " in markdown_path.read_text(encoding="utf-8")
+
+
+def test_report_exits_zero_for_a_diagnostic_report(run_dir: Path) -> None:
+    """Issue #110: generation success is 0 even when the verdict is unusable.
+
+    ``build_report`` legitimately writes a diagnostic report whose ``passed``
+    is ``False`` or ``None`` when the evidence is incomplete.  That is not an
+    acceptance gate: exit code 4 belongs to ``verify`` or a dedicated
+    acceptance entry and must never leak out of the ordinary ``report``.
+    """
+    _consume_for_report(run_dir)
+
+    result = run_cli("report", "--run-dir", str(run_dir))
+
+    assert result.returncode == 0, result.stderr
+    assert result.returncode != 4
+    json_path = Path(text_field(result.stdout, "report_json"))
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["passed"] is None or payload["passed"] is False
+
+
+def test_report_exits_five_on_an_unexpected_error(
+    tmp_path: Path, run_dir: Path
+) -> None:
+    """Anything the builder mapping does not name stays an unexpected error."""
+    result = _run_injected_cli(
+        tmp_path,
+        ("report", "--run-dir", str(run_dir)),
+        "def _boom(*_args, **_kwargs):\n"
+        "    raise RuntimeError('injected builder fault')\n"
+        "\n"
+        "\n"
+        "cli.build_report = _boom",
+    )
+
+    assert result.returncode == 5
+    assert "unexpected" in result.stderr
+    assert "RuntimeError" in result.stderr
+
+
+def test_report_exits_three_on_a_data_contract_error(
+    tmp_path: Path, run_dir: Path
+) -> None:
+    """Section 10:554 puts the DataContractError family on exit code 3.
+
+    ``_run_simulate`` already treats the family as an I/O or schema failure,
+    so ``report`` has to do the same: the frozen contract lists
+    ``ReportError``, the ``DataContractError`` family and database or file
+    I/O as ``3``.  Without this case the exit code could drift to ``5``
+    unnoticed -- the schema layer is evolving, and a future
+    ``ManifestError`` raised straight out of the builder would be mapped to
+    "unexpected" even though the contract says ``3``.
+    """
+    result = _run_injected_cli(
+        tmp_path,
+        ("report", "--run-dir", str(run_dir)),
+        "def _boom(*_args, **_kwargs):\n"
+        "    raise ManifestError('injected contract fault')\n"
+        "\n"
+        "\n"
+        "from g15.pipeline.schema import ManifestError\n"
+        "cli.build_report = _boom",
+    )
+
+    assert result.returncode == 3
+    assert "error:" in result.stderr
+
+
+def test_simulate_consume_report_chain_from_an_empty_directory(tmp_path: Path) -> None:
+    """Issue #110 acceptance: the whole chain in one fresh, empty directory."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    output_root = empty / "runs"
+
+    simulated = run_cli(
+        "simulate",
+        "--config",
+        str(SCENARIO_CONFIG),
+        "--output-root",
+        str(output_root),
+        cwd=empty,
+    )
+    assert simulated.returncode == 0, simulated.stderr
+    run_dir = Path(text_field(simulated.stdout, "run_dir"))
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "complete"
+
+    consumed = run_cli(
+        "consume",
+        "--run-dir",
+        str(run_dir),
+        "--config",
+        str(CONSUMER_CONFIG),
+        cwd=empty,
+    )
+    assert consumed.returncode == 0, consumed.stderr
+
+    reported = run_cli("report", "--run-dir", str(run_dir), cwd=empty)
+    assert reported.returncode == 0, reported.stderr
+
+    assert (run_dir / "reports" / "summary.json").is_file()
+    assert (run_dir / "reports" / "summary.md").is_file()
+    assert (run_dir / "artifacts" / "results.sqlite").is_file()
+
+
+# --------------------------------------------------------------------------- #
 # Unimplemented subcommands stay explicitly unsuccessful
 # --------------------------------------------------------------------------- #
 
@@ -758,19 +1070,15 @@ def test_benchmark_exits_five_on_an_unexpected_error(
     "argv",
     [
         ("doctor",),
-        (
-            "simulate",
-            "--config",
-            str(CONFIGS / "healthy.yaml"),
-            "--output-root",
-            "runs",
-        ),
-        ("report", "--run-dir", "runs/whatever"),
         ("verify", "--run-dir", "runs/whatever"),
     ],
 )
 def test_unimplemented_subcommands_fail_explicitly(argv: tuple[str, ...]) -> None:
-    """Registered but unimplemented commands must never look successful."""
+    """Only the still-unimplemented commands must say so explicitly.
+
+    ``simulate`` and ``report`` were wired in Issue #110 and have their own
+    tests above; leaving them here would assert the opposite of the wiring.
+    """
     result = run_cli(*argv)
 
     assert result.returncode != 0
