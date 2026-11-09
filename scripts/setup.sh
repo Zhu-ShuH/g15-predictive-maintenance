@@ -5,8 +5,15 @@
 #   1. 检查 Conda；缺失时给出清晰安装提示并非零退出，绝不静默安装 Anaconda/Miniconda。
 #   2. pp03 不存在时按 environment.yml 创建；已存在时检查 Python 3.12，
 #      版本不符立即停止并说明原因；重复运行不删除、不覆盖已有环境。
-#   3. 版本确认后才安装：python -m pip install -e . -r requirements-dev.txt，
-#      并做 g15/numpy/yaml 导入检查。
+#   3. 版本确认后才安装，且**分两条**命令，与 docs/environment.md §2 和
+#      .github/workflows/ci.yml 的 skeleton job 逐条对应：
+#        ① pip install -r requirements-dev.txt（间接安装 requirements.lock.txt）
+#        ② pip install -e . --no-deps --no-build-isolation
+#      随后执行 pip check 核对已装版本集合与锁一致。
+#      两条必须拆开：--no-build-isolation 要求构建后端 setuptools.build_meta
+#      已在环境中就位，而 setuptools 在锁内、只能由第 ① 条装上；把两个开关
+#      直接加在原来那一条命令后面会以 BackendUnavailable 失败。
+#   4. 最后做 g15/numpy/yaml 导入检查。
 #
 # 退出码：0 成功；2 前置条件不满足（Conda 缺失 / pp03 版本不符 / 文件缺失）；
 #         3 安装或命令执行失败。
@@ -56,12 +63,22 @@ case "$PYVER" in
   *) die "pp03 的 Python 版本为 $PYVER，不符合 3.12 约定。按规范保留现有环境，联系 A/C6 协调迁移，本脚本不覆盖。" 2 ;;
 esac
 
-# ---- 4. 安装项目与依赖（版本确认后才执行）----
-echo "[setup] 安装项目及依赖: pip install -e . -r requirements-dev.txt"
-"$CONDA" run --no-capture-output -n pp03 python -m pip install -e . -r requirements-dev.txt \
-  || die "依赖安装失败（网络或依赖冲突），见上方 pip 输出" 3
+# ---- 4. 安装锁定的依赖，再安装项目（版本确认后才执行）----
+# 与 docs/environment.md §2 和 CI 的 skeleton job 逐条对应：先装锁、再装项目。
+echo "[setup] ① 安装锁定依赖: pip install -r requirements-dev.txt"
+"$CONDA" run --no-capture-output -n pp03 python -m pip install -r requirements-dev.txt \
+  || die "锁定依赖安装失败（网络或依赖冲突），见上方 pip 输出" 3
 
-# ---- 5. 导入检查 ----
+echo "[setup] ② 安装项目（editable，锁定口径，不带依赖解析与构建隔离）: pip install -e . --no-deps --no-build-isolation"
+"$CONDA" run --no-capture-output -n pp03 python -m pip install -e . --no-deps --no-build-isolation \
+  || die "项目安装失败（网络或构建问题），见上方 pip 输出" 3
+
+# ---- 5. 核对已装版本集合与锁一致（CI 的第三步）----
+echo "[setup] ③ 核对已装版本集合: pip check"
+"$CONDA" run --no-capture-output -n pp03 python -m pip check \
+  || die "pip check 报告依赖冲突（见上方输出）；已装版本集合与锁不一致" 3
+
+# ---- 6. 导入检查 ----
 echo "[setup] 导入检查..."
 "$CONDA" run --no-capture-output -n pp03 python -c "import g15, numpy, yaml; print('G15 package imports OK')" \
   || die "g15/numpy/yaml 导入失败" 3
