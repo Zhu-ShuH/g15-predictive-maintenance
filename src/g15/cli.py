@@ -281,7 +281,7 @@ def _run_report(run_dir: Path) -> int:
     database_path = run_dir / DATABASE_RELATIVE_PATH
     try:
         summary_path = build_report(run_dir, database_path)
-    except ReportError as exc:
+    except (ReportError, DataContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_IO
     except OSError as exc:

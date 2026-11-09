@@ -996,6 +996,34 @@ def test_report_exits_five_on_an_unexpected_error(
     assert "RuntimeError" in result.stderr
 
 
+def test_report_exits_three_on_a_data_contract_error(
+    tmp_path: Path, run_dir: Path
+) -> None:
+    """Section 10:554 puts the DataContractError family on exit code 3.
+
+    ``_run_simulate`` already treats the family as an I/O or schema failure,
+    so ``report`` has to do the same: the frozen contract lists
+    ``ReportError``, the ``DataContractError`` family and database or file
+    I/O as ``3``.  Without this case the exit code could drift to ``5``
+    unnoticed -- the schema layer is evolving, and a future
+    ``ManifestError`` raised straight out of the builder would be mapped to
+    "unexpected" even though the contract says ``3``.
+    """
+    result = _run_injected_cli(
+        tmp_path,
+        ("report", "--run-dir", str(run_dir)),
+        "def _boom(*_args, **_kwargs):\n"
+        "    raise ManifestError('injected contract fault')\n"
+        "\n"
+        "\n"
+        "from g15.pipeline.schema import ManifestError\n"
+        "cli.build_report = _boom",
+    )
+
+    assert result.returncode == 3
+    assert "error:" in result.stderr
+
+
 def test_simulate_consume_report_chain_from_an_empty_directory(tmp_path: Path) -> None:
     """Issue #110 acceptance: the whole chain in one fresh, empty directory."""
     empty = tmp_path / "empty"
