@@ -24,6 +24,10 @@ flowchart LR
     TRUTH -. 仅供报告层对账 .-> REPORT
     DB --> VERIFY[完整性校验 C5]
     VERIFY -.-> REPORT
+    AUTH[运行时 HMAC + 严格授权快照] --> QUERY[只读授权查询 D0]
+    DB --> QUERY
+    QUERY --> HTTP[标准库薄 HTTP transport]
+    HTTP --> OP[获授权操作员]
 ```
 
 实线表达已合入模块之间的数据职责，不代替本次执行记录；虚线部分为尚待集成的验证/报告路径。真值分目录属于代码访问约定，不是操作系统权限隔离。真值只由报告层（`reporting.builder` / `reporting.metrics`）读取用于真值对账；`reporting.verifier` / `g15 verify` 只做 Manifest/NPZ 完整性校验，不读真值；consumer/analysis 不能用真值决定预测结果。
@@ -37,6 +41,7 @@ flowchart LR
 | schema / serialization / producer | C4 | [#29](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29)、[#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)、[#43](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/43)、[#48](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/48) | Manifest/四数组/完整发布语义按契约，不自行增加字段或改计时范围 |
 | analysis | B2 | 特征、健康评分、告警，[#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54) | #73 数值边界整改已合入 `0a637fc2`，A/B1/C4/C2 均在 `e4814b65` 批准；#82 已由 #91 合入 `51cd99ad`，1.0/1.1 时期 `np.ma.MaskedArray` 掩码被静默使用的历史行为，已在 1.2 改为掩码非空即 `ValueError` 拒收，空掩码继续接受。`load_health_rules(path)` 实际读取规则 YAML，是 interface §6 文件 I/O 分层约束的已知例外；不读取运行数据或真值 |
 | consumer / storage | C2 | 公开文件消费、窗口结果、恢复状态与事务，[#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) | [#76](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/76) 末片上界预检已集成；真实强杀与公共契约仍待收口 |
+| query / service | A / B1；公共契约 C4 非作者复核 | #135 分支新增 `query/auth.py`、`cursor.py`、`application.py` 与标准库 `service/http.py`，真实路径为 bearer 验签→YAML 精确授权→受控 run 路由→`connect_readonly()`→SQLite | 只支持单 run / 单 device / 每 run 一库的 D0；无密码登录、TLS、逐 token 撤销、跨 run 聚合、缓存或容量结论，自动测试与非作者 Review 齐备前不标已验收 |
 | reporting / verify | 原分工 C5；#9/#51 当前相关实现由 B1 接手 | 候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)、[#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 主线模块仍空；#70场景类型依赖名称的判定问题已由B2提出、A复证并请求修改，待B1方案/修复；真值只由 `reporting.builder` / `reporting.metrics` 做对账，`reporting.verifier` / `g15 verify` 只做 Manifest/NPZ 完整性校验且不读真值；原始分片校验不等于真值匹配、检出率或完整时间轴验证 |
 | scripts / environment | C6；A 协调依赖与验收 | [#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) 修正执行位；[environment](environment.md) | setup/demo/verify/benchmark 仍是占位；[#10](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/10)、[#28](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/28) 保留 |
 
@@ -49,6 +54,33 @@ flowchart LR
 逐片事务不承诺整个 run 出错时全回滚。特别是短尾 `error` 可能在较早分片已提交后报错；#76 已合入的实现保证的是新增末片上界预检在业务写入前拒收，不能将两类失败混为“五表始终零写入”。单片运行没有可供反推的名义分片长度，不添加新的 Manifest/config 字段。
 
 恢复从已提交 processed 标记及持久状态继续，同分片内容改变应拒绝重放。单元测试、进程强杀、断电是不同证据层级；没有实测的层级保持未验证。源数据、虚拟环境、运行库与大型报告原始目录不提交到仓库。
+
+## 3.1 D0 只读查询信任边界（#135）
+
+```mermaid
+flowchart LR
+    C[客户端 bearer] --> T[薄 HTTP transport]
+    T --> V[固定 HMAC-SHA-256 验签]
+    V --> P[严格 YAML 授权快照]
+    P --> R[受控 runs_root 路由与 Manifest 核对]
+    R --> RO[connect_readonly]
+    RO --> Q[只读事务 + keyset query]
+    Q --> X[白名单响应投影]
+    X --> C
+    Q -. 禁止访问 .-> PT[private_truth]
+```
+
+认证与授权分开：bearer 只证明短期主体，run/device 权限只来自启动时完整校验的
+授权快照；token 和 cursor 使用不同的运行时 key。没有网络 login 或密码存储，
+也不把 YAML 当作身份凭据。授权失败和真实资源缺失都在文件系统访问前后映射为
+同构 404；认证失败是通用 401。每页重新认证授权并重新打开只读数据库，cursor
+只携带带 MAC 的分页范围，不能替代权限检查。
+
+查询组件不 import reporting，不构造或扫描 `private_truth` 路径；窗口、告警、
+状态来自一个只读事务中的已提交五表。状态响应仅取 `state_json.state` 八字段，
+reset 审计信封留在数据库内。事件日志不含原始路径、run/device、raw subject、
+Authorization 或 cursor。完整字段、HTTP 与已知重放/TLS 边界见
+[interface §9.2](interface.md#92-135-d0-只读授权查询契约)。
 
 ## 4. 双系统目标部署
 
