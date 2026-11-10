@@ -134,7 +134,7 @@ bearer 仅凭持有即可使用，非 loopback 部署必须通过 TLS 或受信 
 仅允许以下占位结构；这是项目自定义 token，**不得称为 JWT**：
 
 ```text
-<FORMAT_VERSION>.<BASE64URL_CANONICAL_CLAIMS>.<BASE64URL_SIGNATURE>
+g15q1.<BASE64URL_CANONICAL_CLAIMS>.<BASE64URL_SIGNATURE>
 ```
 
 - 服务端固定 `HMAC-SHA-256`；token 不携带、也不能选择 `alg`。格式段固定为 `g15q1`，claims 中 `typ="g15-query-access"`、`ver="1"`；具体 `iss` 与 `aud` 值仍待 Review。
