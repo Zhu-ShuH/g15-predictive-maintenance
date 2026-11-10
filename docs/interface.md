@@ -41,7 +41,7 @@ YAML 配置 → validate/config → Simulation Engine ─┬─> private_truth/f
                                                                  ▼
                                                    Report Builder / Truth Matcher
                                                    ├─ JSON / Markdown
-                                                   ├─ 故障真值匹配（仅测试）
+                                                   ├─ 故障真值对账（仅报告层）
                                                    ├─ 延迟/漏报/误报
                                                    └─ 性能/恢复证据
 ```
