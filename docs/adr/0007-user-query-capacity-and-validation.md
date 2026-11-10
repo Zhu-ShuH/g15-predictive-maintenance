@@ -1,6 +1,6 @@
 # ADR-0007：用户健康查询入口、十万级口径与容量验证
 
-- 状态：**提案；语义未冻结；未实现查询服务；未执行高负载**
+- 状态：**提案；十万不同用户同时真实查询的主目标已定；同步/统计/SLO/资源未冻结；未实现查询服务；未执行高负载**
 - 关联：[Issue #133](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133)、#2、#9、#56
 - 审阅基线：main `23d8592839cd4ad8f0e6006464e10efe3afa6234`
 - 来源边界：组长基于课堂侧重点追加的工程工作假设，不是教师正式评分细则或权重
@@ -20,6 +20,8 @@ G15 当前是一个仓库内的模块化单体，以 CLI 驱动离线生产、�
 
 > 经认证且获授权的操作员，按可见的 `run_id + device_id` 查询最近一页健康窗口及告警；响应来自已提交的 `runs / feature_windows / alarms / alarm_states`，具有稳定顺序/游标、页大小、数据版本、健康分、告警级别/原因、窗口序号和 `scoring_version/rule_id`，且不读取 `private_truth`。
 
+组长已经确定主目标为：100,000 个不同且已认证、获授权的用户在同一受控波次中发起上述真实查询，并以客户端与服务端实际在途状态证明“同时查询”。Review 只精确化同步窗口、统计区间、状态边界、SLO、资源和拓扑，不再选择 H 或 F。
+
 非目标：
 
 - 不以 CLI、HTTP 200、空 handler、常量响应、`sleep` 或 mock 数据库冒充业务查询；
@@ -28,51 +30,62 @@ G15 当前是一个仓库内的模块化单体，以 CLI 驱动离线生产、�
 - 不改变 #56/#9 的“计划与选择方法先审 → 冻结 → 首次执行”顺序；
 - 不改变现有成员模块属地；新增工作由 A/B1 承接，跨入既有模块须另行授权和 Review。
 
-## 3. 必须分别记录的容量语义
+## 3. 已决定的主目标与分阶段量测
+
+主场景采用 F：100,000 个不同用户在同一受控波次中各发起一条真实主请求。所有阶段使用同一时钟与 request/trace ID，并按匿名化用户去重：
 
 | 字段 | 定义 |
 |---|---|
-| `distinct_users` | 本轮不同且已认证/授权的用户数 |
-| `total_requests` | 尝试与完成的累计请求数，分别记录 |
-| `arrival_rate_rps` | 每秒发起的开放式到达率 |
-| `open_connections` | 同一时刻建立的传输连接数 |
-| `active_virtual_users` | 带 think time 的关闭式客户端状态机数 |
-| `max_in_flight` | 同一时刻服务端已接收但未完成的真实业务请求峰值 |
-| `success_throughput_rps` | 业务正确且授权正确的完成吞吐 |
+| `client_distinct_users` | 本波次发起主请求的不同已认证/授权用户数 |
+| `client_started` | 越过发送 barrier 并开始发送应用请求；建连或等待 barrier 不计 |
+| `client_waiting` | 主请求已完整发送、尚未收到完整响应或终态错误 |
+| `client_completed` | 客户端已完整收到响应或终态错误 |
+| `server_received` | 入口已收到完整请求并分配 request/trace ID |
+| `server_queued` | 已接收但真实业务执行尚未开始 |
+| `server_executing` | 认证/授权与 handler → repository → SQLite 正在执行 |
+| `server_completed` | 终态响应已完整交付传输层；客户端接收另记 |
+| `client_in_flight` | 同一时刻 `client_started - client_completed` 的不同用户主请求数 |
+| `server_in_flight` | 同一时刻 `server_received - server_completed` 的不同用户主请求数，包含排队、执行及响应交付中的请求 |
+| `total_requests` | 累计尝试/完成数；重试单列，不能补足不同用户数 |
+| `arrival_rate_rps` | 开放式模型每秒发起率；关闭式 VU 不得冒充固定到达率 |
+| `open_connections` | 同一时刻传输连接数，不等于查询或用户数 |
+| `active_virtual_users` | 客户端状态机数，不等于实际在途 |
+| `success_throughput_rps` | 业务与授权均正确的完成吞吐 |
 
-任何报告必须同时给这些字段及采样方法，不得只写“100k 并发”。`syc` 与 `test` 的“一一对应”术语尚未确认，本 ADR 不自行解释。
+分别报告客户端与服务端的不同用户在途峰值、发生时刻、排队/执行组成及采样方法。只有某阶段的不同用户峰值真实达到 100,000，才能声称该阶段达到 100k；同步发起不能自动推导服务端已达到同样峰值。重试、重定向、重复请求、连接数和累计请求均不能补足用户数。具体同步窗口、统计区间、时钟误差和最终判定阶段由 Review 精确冻结。
 
-## 4. 待选 workload 与候选 SLO
+`syc` 与 `test` 的“一一对应”术语尚未确认，本 ADR 不自行解释。
 
-### Profile H：100k 活跃用户
+## 4. 主场景 F 与补充场景 H
 
-- 100,000 个不同的已认证 VU；
-- 平均 think time 30 秒，使用固定 seed 的可复现抖动；
-- 10 分钟稳定段，平均 offered load 约 3,333.3 req/s；
-- 热态候选 p50≤200ms、p95≤500ms、p99≤1s，客户端 timeout 2 秒；
-- 成功吞吐达到 offered load 的 99.9%，5xx+timeout<0.1%；
-- 错误、越权与跨权限缓存泄漏为 0；
-- 冷启动首分钟单列，候选 p95≤2s；
-- 单列实际 `max_in_flight`，不得把 100k VU 写成 100k in-flight。
+### 主场景 F：十万不同用户同时真实查询
 
-这些数字来自“人类交互查询 + 30 秒刷新”的工程候选，不是教师要求。
+- 100,000 个不同身份在待审同步窗口内各越过发送 barrier，并各发起一条真实主请求；
+- 客户端发起/等待和服务端接收/排队/执行/完成必须逐阶段实测、按用户去重并关联同一 request/trace ID；
+- barrier 只能控制发送前起跑；禁止在 handler 中 `sleep`、人工变慢业务、压住/延后响应、故意扩大队列或用网络限速制造在途峰值；
+- 达不到目标时如实失败，不能退回 H 作为替代通过；
+- 同步窗口、观测/统计区间、采样精度、SLO、资源与分布式负载拓扑仍待 Review；
+- 若用 5 秒观察 100,000 个请求完成，平均至少约 20,000 query/s 才能清空；这是容量算术，不是冻结 SLO 或能力证据。
 
-### Profile F：严格 100k 同时在途
+候选交互目标供 Review：热态 p50≤200ms、p95≤500ms、p99≤1s，客户端 timeout 2 秒，5xx+timeout<0.1%；错误、越权与跨权限缓存泄漏为 0；冷启动首分钟单列、候选 p95≤2s。这些数字不是教师要求，也尚未冻结。
 
-- 在审定的 barrier/启动窗口内真实形成并证明 100,000 in-flight；
-- 连接、请求尝试或 VU 不能替代；
-- 若 timeout 为 5 秒，至少约 20,000 query/s 才能在 5 秒内清空该批；这是容量推导，不是能力证据；
-- 分布式负载端、网络/服务容量、资源和费用须另审；当前禁止执行。
+### 补充场景 H：带 think time 的持续活跃用户
 
-Review 必须选择主 Profile；H 的结果不能写成 F 通过。
+H 只用于常态交互、稳定段和 soak，不替代 F。关闭式 VU 的稳态吞吐近似：
+
+```text
+X_closed ≈ N / (think_time + mean_response_time)
+```
+
+当 `N=100,000`、think time=30 秒且平均响应时间趋近于 0 时，3,333.3 req/s 只是近似上限；响应时间为正时吞吐更低。需要固定到达率时必须使用开放式模型，并分别报告计划/实际到达率、生成端丢弃与饱和。H 的任何结果均不得降低、替代或宣告 F 通过。
 
 ## 5. 数据、认证、正确性与缓存
 
-基于现行 1,000,000 点和 `window_points=256`，每 run 约 3,907 个窗口。候选容量数据：
+现行 `benchmark_1m.yaml` 为 1,000,000 点、`chunk_points=102,400`，`consumer.yaml` 为 `window_points=256`、`incomplete_window=drop`。9 个完整分片各有 400 窗，末片 78,400 点有 306 个完整窗并丢 64 点，因此每 run 为 `floor(1,000,000 / 256) = 3,906` 个完整窗口。候选容量数据：
 
 - D0：10 设备 × 100 窗口，用于正确性；
-- D1：1,000 设备 × 约 3,907 窗口，约 390.7 万行；
-- D2：10,000 设备 × 约 3,907 窗口，约 3,907 万行；候选 10 用户/设备授权。
+- D1：1,000 设备 × 3,906 窗口，共 3,906,000（390.6 万）行；
+- D2：10,000 设备 × 3,906 窗口，共 39,060,000（3,906 万）行；候选按每设备一个此规模 run、10 用户/设备授权。
 
 用户/设备比、历史 run、告警密度、响应大小、保留周期和分页上限未冻结。D2 在磁盘、建库时间和 RSS 未测前不得称为可行。
 
@@ -112,14 +125,16 @@ Review 必须选择主 Profile；H 的结果不能写成 F 通过。
 
 ## 7. 并发、资源与可溯源证据
 
-须冻结开放式到达率或关闭式 VU、ramp/steady/burst/soak、worker/线程/进程/异步模型、连接生命周期、排队/背压和超时/取消。连接数不得默认为用户数。
+须冻结同步发起窗口、观测/统计区间、采样时钟与误差、开放式到达率或关闭式 VU、ramp/steady/burst/soak、worker/线程/进程/异步模型、连接生命周期、排队/背压和超时/取消。连接数不得默认为用户数。
 
 每轮同时保存：
 
-- client：计划/实际到达率、VU、连接、in-flight、完成/失败/超时、原始延迟直方图、CPU/RSS/网络/FD；
-- server：接收/完成/拒绝、队列、worker、CPU/RSS/网络/FD、SQLite 查询时延与 busy/locked/readonly、缓存命中/逐出、磁盘；
-- trace：UTC、request/trace ID、匿名化 actor/权限域、query shape、数据版本、workload profile、cache state、状态/错误码、DB/总时延和实例；
+- client：不同用户数、barrier 释放、started/完整发送/waiting/completed、连接、客户端在途峰值、完成/失败/超时、原始延迟直方图、CPU/RSS/网络/FD；
+- server：received/queued/executing/completed、服务端在途峰值及对应不同用户数、拒绝、队列、worker、CPU/RSS/网络/FD、SQLite 查询时延与 busy/locked/readonly、缓存命中/逐出、磁盘；
+- trace：UTC、request/trace ID、匿名化 actor/权限域、各阶段时间戳、query shape、数据版本、workload profile、cache state、状态/错误码、DB/总时延和实例；
 - provenance：完整源码 SHA、数据集摘要、配置、机器/环境、命令、退出码与全部失败样本。
+
+发送 barrier 只允许在客户端开始发送前同步。不得通过服务端或客户端 `sleep`、故意延迟读取/写出响应、代理限速、人工阻塞 handler、压住响应或人为扩大队列制造在途峰值。快速完成导致服务端峰值低于目标时，应如实记录，不能修改业务路径来装饰数字。
 
 禁止记录 token、密码、真实个人身份、敏感第三方信息或 `private_truth`。
 
@@ -129,8 +144,8 @@ Review 必须选择主 Profile；H 的结果不能写成 F 通过。
 2. **集成**：真实进程、真实认证/授权、正式 query/repository、`connect_readonly()` 与真实 SQLite；逐项对照独立 SQL/oracle，不 mock 本次目标。
 3. **冒烟/回归**：1 用户/10 请求，再到 10/50 in-flight、每档 1 分钟；响应和 client/server/request-log 计数守恒，同时保证既有生产/消费/报告及 #56/#9 不被改变。
 4. **兼容**：Windows 开发回归；Ubuntu 24.04 与 RHEL 9 在同一 SHA 分别 fresh clone 做低负载启停、认证、查询和资源留证。十万级不进入共享 CI。
-5. **性能**：候选 100→500→1,000 VU/in-flight；先预热，再每档稳定 5–10 分钟；冷/热、均匀设备和 80/20 热点分开。
-6. **压力**：候选 1k→5k→10k→25k→50k→100k；每档至少 5 分钟，目标档候选 10 分钟；60 分钟 soak 另立。每档明确 VU 或 in-flight。
+5. **性能**：主场景 F 候选先按相同阶段定义验证 100→500→1,000 个不同用户的实际在途请求；先预热，再按待审统计区间留证；冷/热、均匀设备和 80/20 热点分开。
+6. **压力**：F 候选按 1k→5k→10k→25k→50k→100k 个不同用户逐级同步发起并实测客户端/服务端在途；目标档统计区间待 Review。H 的 VU/think time/soak 结果另报，不得混入或替代 F。
 
 前一档的业务正确性、日志计数、负载端余量、服务端资源和缓存状态不可信时，禁止升档。
 
@@ -173,7 +188,7 @@ Review 必须选择主 Profile；H 的结果不能写成 F 通过。
 
 Review 尚须决定：
 
-1. Profile H 或 F 哪个是主口径；
+1. 主场景 F 的同步发起窗口、客户端/服务端在途状态边界、采样时钟、统计区间与判定阶段；H 仅为补充场景；
 2. 第一版仅查询单 run/device，还是需要共享目录/跨 run；
 3. 身份/授权模型及资源隐藏语义；
 4. application query 与 transport 边界、依赖、进程/连接模型；
