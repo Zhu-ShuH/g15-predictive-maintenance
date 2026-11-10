@@ -79,7 +79,7 @@ manifest 侧的版本窗口：生产端只写 `2.0`；读入端接受 `{1.0, 2.0
 
 ## 4 匹配细则（`docs/acceptance.md` §3 的可执行化）
 
-1. 真值事件是半开区间 `[s, e)`，仅验证器读取。
+1. 真值事件是半开区间 `[s, e)`，仅报告层（`reporting.builder` / `reporting.metrics`）读取用于真值对账；`reporting.verifier` 与 `g15 verify` 只做完整性校验，不读真值。
 2. 允许告警窗口起点区间为 `[floor(s/W)×W, ceil(e/W)×W + 2W)`，W=256，`max_detection_lag_windows=2`；用告警的 `window_start_seq`，不用机器当前时间。
 3. 必须同 `device_id`；告警按 `(device_id, rule_id, start_seq)` 去重；事件与告警**一对一**匹配，先求**最大匹配数**，多解按事件起点、`event_id`、告警起点、`rule_id` 排序选择。
 4. `detection_rate = TP / 事件总数`；零事件返回 `null`。逐事件输出匹配、漏报、首次告警窗口、数据时延与宽限。
