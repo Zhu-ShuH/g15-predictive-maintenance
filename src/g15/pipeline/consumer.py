@@ -55,7 +55,12 @@ from g15.common.types import SimulationChunk
 from g15.config import ConsumerConfig
 from g15.pipeline.schema import ChunkManifestEntry, Manifest, ManifestStatus
 from g15.pipeline.serialization import read_chunk
-from g15.storage.database import connect, initialize_database, transaction
+from g15.storage.database import (
+    DatabaseError,
+    connect,
+    initialize_database,
+    transaction,
+)
 from g15.storage.repository import (
     ConsumptionRepository,
     check_chunk_digest,
@@ -65,10 +70,12 @@ from g15.storage.repository import (
 )
 
 __all__ = [
+    "AlarmResetResult",
     "ConsumptionError",
     "ConsumptionSummary",
     "consume_run",
     "load_manifest_from_run_dir",
+    "reset_alarm_state",
 ]
 
 
@@ -105,6 +112,43 @@ class ConsumptionSummary:
     shards_processed: int = 0
     shards_skipped: int = 0
     windows_dropped: int = 0
+
+
+@dataclass(frozen=True)
+class AlarmResetResult:
+    """The public result of one explicit alarm-streak reset (Issue #127).
+
+    The record is a *return value*, not a new key in the ``state_json``
+    envelope: storage keeps ``reset_event`` / ``reset_history`` unchanged.
+
+    Attributes:
+        run_id: Read from ``run_dir/manifest.json``, never supplied by the CLI.
+        device_id: The device whose streak was reset.
+        rule_id: The rule whose streak was reset.
+        reason: The operator's non-empty free text.
+        reset_at_utc: When the reset was recorded.
+        previous_state_schema_version: Version declared by the archived row.
+        previous_state: The archived state when strict decoding succeeded,
+            otherwise ``None``.
+        previous_state_json: The archived row's verbatim JSON text, always set.
+        new_state: The empty streak; the sequence anchor is deliberately kept.
+        archived_reset_count: Resets archived *before* this one (0 on first).
+        previous_state_decodable: Whether strict decoding succeeded. Legacy
+            rows without a version, future versions and damaged JSON all give
+            ``False``.
+    """
+
+    run_id: str
+    device_id: str
+    rule_id: str
+    reason: str
+    reset_at_utc: str
+    previous_state_schema_version: str | None
+    previous_state: AlarmState | None
+    previous_state_json: str
+    new_state: AlarmState
+    archived_reset_count: int
+    previous_state_decodable: bool
 
 
 @dataclass(frozen=True)
@@ -200,6 +244,97 @@ def load_manifest_from_run_dir(run_dir: Path) -> Manifest:
         return manifest_from_dict(raw)
     except Exception as exc:  # noqa: BLE001 - re-raised as a consumer error
         raise ConsumptionError(f"invalid manifest at {manifest_path}: {exc}") from exc
+
+
+def reset_alarm_state(  # pylint: disable=R0913
+    run_dir: Path,
+    database_path: Path,
+    device_id: str,
+    rule_id: str,
+    *,
+    reason: str,
+    allow_legacy: bool = True,
+) -> AlarmResetResult:
+    """Explicitly archive one alarm streak and start a fresh one.
+
+    This is the public, consumer-level entry frozen in
+    ``docs/interface.md`` section 8.5 (Issue #127). It is a thin wrapper: it
+    first reads ``run_id`` from ``run_dir/manifest.json``, checks that
+    ``device_id`` agrees with that manifest, then delegates the atomic
+    read/decode/archive/write to the repository. No SQL, no schema changes and
+    no path policy beyond ``database_path`` live here.
+
+    A reset only replaces one ``alarm_states`` row. It never deletes alarms,
+    never recomputes a run, and never touches ``processed_chunks``,
+    ``feature_windows``, ``alarms`` or ``runs``. It clears the streak but keeps
+    the ``last_end_seq_exclusive`` anchor, so the very next window may raise an
+    alarm again. Consumption failures never call this function implicitly.
+
+    Args:
+        run_dir: Directory holding ``manifest.json``.
+        database_path: Database holding the stored state. It must already
+            exist; a reset never creates an empty database.
+        device_id: Device to reset; must match the manifest.
+        rule_id: Rule whose stored state is reset.
+        reason: Operator's non-empty free text, recorded in the audit.
+        allow_legacy: Archive rows the strict decoder refuses. The CLI never
+            exposes this argument and always uses the default ``True``.
+
+    Returns:
+        The audit of this reset and the new empty streak.
+
+    Raises:
+        ValueError: if ``reason`` is empty or whitespace only (exit code 2).
+        ConsumptionError: if the manifest is missing/malformed or the device
+            does not match it (exit code 3).
+        DatabaseError: if the database is missing or cannot be opened
+            (exit code 3).
+        StateCompatibilityError: if the row cannot be decoded and
+            ``allow_legacy`` is ``False`` (exit code 3).
+        StorageError: if there is no stored state to reset (exit code 3).
+    """
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("reset reason must be a non-empty text")
+
+    manifest = load_manifest_from_run_dir(Path(run_dir))
+    if manifest.device_id != device_id:
+        raise ConsumptionError(
+            f"device {device_id!r} does not match manifest device "
+            f"{manifest.device_id!r} in {Path(run_dir)}"
+        )
+
+    database = Path(database_path)
+    if not database.is_file():
+        raise DatabaseError(
+            f"cannot reset alarm state: no database at {database}; "
+            "a reset never creates an empty database"
+        )
+
+    connection = connect(database)
+    try:
+        audit = ConsumptionRepository(connection).reset_alarm_state_audited(
+            manifest.run_id,
+            device_id,
+            rule_id,
+            reason=reason,
+            allow_legacy=allow_legacy,
+        )
+    finally:
+        connection.close()
+
+    return AlarmResetResult(
+        run_id=manifest.run_id,
+        device_id=device_id,
+        rule_id=rule_id,
+        reason=reason,
+        reset_at_utc=audit.reset_at_utc,
+        previous_state_schema_version=audit.previous_state_schema_version,
+        previous_state=audit.previous_state,
+        previous_state_json=audit.previous_state_json,
+        new_state=audit.new_state,
+        archived_reset_count=audit.archived_reset_count,
+        previous_state_decodable=audit.previous_state_decodable,
+    )
 
 
 def consume_run(

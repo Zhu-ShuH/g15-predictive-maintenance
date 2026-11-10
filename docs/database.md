@@ -365,8 +365,10 @@ True；而 `mode=ro` 连接在**无第二持有者**的情况下写库，同样�
 }
 ```
 
-`reason` 取三个值：`rule_change`（规则身份不兼容）、`legacy_unattributable`
-（legacy 且来源不可考）、`operator_reset`（人工主动重置）。
+`reason` 是操作者填写的**非空自由文本**，不设闭合枚举，实现也不做枚举校验；
+`rule_change`、`legacy_unattributable`、`operator_reset` 只是文档示例，不是允许值清单。
+机器可读的判断依据是 `previous_state_schema_version` 与保留的旧行原文，而不是解析这段文字。
+`reset_event` / `reset_history` 的信封键名与 `state_schema_version` 均不因此改变。
 
 **审计必须活过后续写入。** 普通窗口写 `state_json` 时编码器并不知道历史，
 若整段覆盖，重置记录会在下一个窗口就消失——重置确实发生了，但库里查不到。
