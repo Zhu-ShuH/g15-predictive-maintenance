@@ -27,7 +27,7 @@
 - 配置：`configs/*.yaml`，`schema_version: '1.0'`；`scenario` 包括 `id/seed/start_time_utc/device_id/sample_rate_hz/total_points/chunk_points`；`signals.vibration` 和 `signals.temperature`；`fault_generation.mode/stochastic_probability_per_window/events`。消费者使用独立的 `configs/consumer.yaml`，只含 `window_points/incomplete_window/health_rules_file`，不得读取 `fault_generation`；数据契约变更必须审批。
 - 分片：`runs/<run_id>/raw/part-000000.npz`，四个**等长**数组：`seq: int64`、`timestamp_ns: int64`、`vibration: float64 (g)`、`temperature: float64 (degC)`；读取必须 `np.load(..., allow_pickle=False)`。分片原子发布并经 SHA-256 校验。
 - 清单：`manifest.json` 带 `schema_version/run_id/scenario_id/device_id/seed/sample_rate_hz/start_time_utc/total_points/units/status/parts`；**仅 `status=complete` 可供消费**。每个 part 有 `part_id/path/rows/sha256`。
-- 真值：`runs/<run_id>/private_truth/faults.json` 只允许报告层（`reporting.builder` / `reporting.metrics`）读取，用于测试匹配；**消费者、特征、健康评分、告警程序以及 `reporting.verifier` 禁止读取真值或由故障位置生成答案**。（口径见 `docs/interface.md` §5.3，裁定见 #113）
+- 真值：`runs/<run_id>/private_truth/faults.json` 只允许报告层（`reporting.builder` / `reporting.metrics`）读取用于真值对账；**消费者、特征、健康评分、告警程序以及 `reporting.verifier` 禁止读取真值或由故障位置生成答案**。（口径见 `docs/interface.md` §5.3，裁定见 #113）
 - 特征：至少均值、标准差、RMS、峰峰值、超额峭度、主频；健康分为 [0,100] 且评分规则可配置；告警有黄/红、去抖和窗口位置；参数边界、除零、NaN/Inf 明确处理。
 - CLI：`python -m g15 validate|simulate|consume|report|verify|benchmark|doctor`；退出码 `0` 成功、`2` 参数/配置问题、`3` I/O/Schema、`4` 验收不达标、`5` 未预期异常。完整参数见 `docs/interface.md`。
 - SQLite：`runs`、`processed_chunks`、`feature_windows`、`alarms` 四张核心表；另有待评审的 `alarm_states` 状态表，WAL、开启外键；**特征、评分、告警、分片完成标记在同一事务提交**；同分片重放不得重复入库。
