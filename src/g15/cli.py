@@ -1,11 +1,11 @@
 """Command line entry point for the G15 sandbox.
 
 ``validate`` has been implemented since Issue #4, ``simulate`` and ``report``
-since Issue #110, ``consume`` since Issue #65 and ``benchmark`` since Issue
-#51; the remaining subcommands of ``docs/interface.md`` section 10 (``verify``
-and ``doctor``) are registered with their frozen arguments so that ``--help``
-stays honest, and they exit non-zero with an explicit message instead of
-pretending to succeed.
+since Issue #110, ``consume`` since Issue #65, ``benchmark`` since Issue #51
+and ``reset-alarms`` since Issue #127; the remaining subcommands of
+``docs/interface.md`` section 10 (``verify`` and ``doctor``) are registered
+with their frozen arguments so that ``--help`` stays honest, and they exit
+non-zero with an explicit message instead of pretending to succeed.
 
 Exit codes (``docs/interface.md`` section 10):
 
@@ -29,13 +29,18 @@ import sys
 from pathlib import Path
 
 from .config import ConfigError, load_config, load_consumer_config
-from .pipeline.consumer import ConsumptionError, consume_run
+from .pipeline.consumer import (
+    AlarmResetResult,
+    ConsumptionError,
+    consume_run,
+    reset_alarm_state,
+)
 from .pipeline.producer import produce_run, produce_run_detailed
 from .pipeline.schema import DataContractError
 from .reporting.builder import SUMMARY_MD, ReportError, build_report
 from .reporting.verifier import VerificationError, verify_run
 from .storage.database import DatabaseError
-from .storage.repository import StorageError
+from .storage.repository import StateCompatibilityError, StorageError
 
 #: Successful run.
 EXIT_OK = 0
@@ -103,9 +108,40 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report.add_argument("--run-dir", required=True, help="path to runs/<run_id>")
 
+    reset_alarms = subparsers.add_parser(
+        "reset-alarms",
+        help="explicitly reset one alarm streak (Issue #127)",
+        description=(
+            "Archive the stored alarm state for one (run, device, rule) and "
+            "start a fresh streak. Only the target alarm_states row changes: "
+            "processed_chunks, feature_windows, alarms and runs are left "
+            "untouched. Historical alarms are not deleted and the run is not "
+            "recomputed. The last_end_seq_exclusive anchor is kept, so the "
+            "next window may raise an alarm again. --yes is the only "
+            "confirmation; a failed consume never triggers a reset."
+        ),
+    )
+    reset_alarms.add_argument("--run-dir", required=True, help="path to runs/<run_id>")
+    reset_alarms.add_argument(
+        "--device-id", required=True, help="device id declared by the manifest"
+    )
+    reset_alarms.add_argument(
+        "--rule-id", required=True, help="rule whose stored state is reset"
+    )
+    reset_alarms.add_argument(
+        "--reason", required=True, help="non-empty operator reason (free text)"
+    )
+    reset_alarms.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirm the reset non-interactively (required)",
+    )
+
     verify = subparsers.add_parser(
         "verify",
-        help="verify a published run's shards and manifest (not implemented)",
+        # Kept short: ``reset-alarms`` widened the subcommand column, and a
+        # longer line would fold ``(not implemented)`` onto a second line.
+        help="verify shards and manifest (not implemented)",
     )
     verify.add_argument("--run-dir", required=True, help="path to runs/<run_id>")
 
@@ -293,6 +329,99 @@ def _run_report(run_dir: Path) -> int:
     return EXIT_OK
 
 
+def _print_reset_audit(result: AlarmResetResult, database_path: Path) -> None:
+    """Print one reset's audit as stable key=value lines.
+
+    The four untouched tables are named explicitly: section 8.5 requires the
+    operator to see that a reset did not delete historical alarms or recompute
+    the run.
+    """
+    print(
+        f"reset run_id={result.run_id} device_id={result.device_id} "
+        f"rule_id={result.rule_id}"
+    )
+    print(f"reason={result.reason}")
+    print(f"reset_at_utc={result.reset_at_utc}")
+    print(f"previous_state_schema_version={result.previous_state_schema_version}")
+    print(
+        "previous_state_decodable="
+        f"{'true' if result.previous_state_decodable else 'false'}"
+    )
+    print(
+        "previous_state_json_bytes="
+        f"{len(result.previous_state_json.encode('utf-8'))}"
+    )
+    print(f"archived_reset_count={result.archived_reset_count}")
+    print(
+        "new_state_consecutive_breaches="
+        f"{result.new_state.consecutive_breaches} "
+        f"new_state_active_level={result.new_state.active_level} "
+        f"new_state_alarm_windows={result.new_state.alarm_windows}"
+    )
+    print("tables_untouched=processed_chunks,feature_windows,alarms,runs")
+    print(f"database={database_path}")
+
+
+def _run_reset_alarms(  # pylint: disable=R0911
+    run_dir: Path,
+    device_id: str,
+    rule_id: str,
+    reason: str,
+    *,
+    confirmed: bool,
+) -> int:
+    """Explicitly reset one alarm streak.
+
+    The database path is derived from ``run_dir`` exactly as ``consume`` does;
+    there is deliberately no ``--database`` option and no ``allow_legacy``
+    option. Exit codes follow section 8.5: empty reason or a missing required
+    argument is 2, data/I/O/state failures are 3, success is 0, and anything
+    unanticipated is left to :func:`main` to map to 5.
+
+    Args:
+        run_dir: Directory holding the manifest and the database.
+        device_id: Device whose streak is reset.
+        rule_id: Rule whose streak is reset.
+        reason: Operator's non-empty free text.
+        confirmed: Whether ``--yes`` was supplied.
+
+    Returns:
+        ``0``, ``2`` or ``3``.
+    """
+    if not reason.strip():
+        print("error: --reason must not be empty", file=sys.stderr)
+        return EXIT_INVALID
+    if not confirmed:
+        print(
+            "error: reset-alarms requires --yes; a reset is never implicit",
+            file=sys.stderr,
+        )
+        return EXIT_INVALID
+
+    database_path = run_dir / DATABASE_RELATIVE_PATH
+    try:
+        result = reset_alarm_state(
+            run_dir, database_path, device_id, rule_id, reason=reason
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+    except (ConsumptionError, DatabaseError, sqlite3.Error, OSError) as exc:
+        print(f"error: cannot reset alarm state: {exc}", file=sys.stderr)
+        return EXIT_IO
+    except StateCompatibilityError as exc:
+        # A StorageError subclass: keep its specific diagnostic first, or the
+        # message would degrade into a generic storage failure.
+        print(f"error: incompatible stored state: {exc}", file=sys.stderr)
+        return EXIT_IO
+    except StorageError as exc:
+        print(f"error: cannot reset alarm state: {exc}", file=sys.stderr)
+        return EXIT_IO
+
+    _print_reset_audit(result, database_path)
+    return EXIT_OK
+
+
 def _run_benchmark(config_path: Path) -> int:
     """Publish one benchmark run and report the separated cost figures.
 
@@ -396,6 +525,14 @@ def main(argv: list[str] | None = None) -> int:
             return _run_consume(Path(args.run_dir), Path(args.config))
         if args.command == "report":
             return _run_report(Path(args.run_dir))
+        if args.command == "reset-alarms":
+            return _run_reset_alarms(
+                Path(args.run_dir),
+                args.device_id,
+                args.rule_id,
+                args.reason,
+                confirmed=args.yes,
+            )
         if args.command == "benchmark":
             return _run_benchmark(Path(args.config))
     except Exception as exc:  # pylint: disable=broad-except
@@ -406,8 +543,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"error: subcommand {args.command!r} is not implemented yet; "
-        "'validate', 'simulate', 'consume', 'report' and 'benchmark' "
-        "are available so far",
+        "'validate', 'simulate', 'consume', 'report', 'reset-alarms' and "
+        "'benchmark' are available so far",
         file=sys.stderr,
     )
     return EXIT_UNEXPECTED

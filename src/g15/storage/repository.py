@@ -66,6 +66,7 @@ __all__ = [
     "RunConflictError",
     "StateCompatibilityError",
     "WindowRecord",
+    "ResetAudit",
     "ConsumptionRepository",
     "encode_features_json",
     "decode_features_json",
@@ -169,6 +170,36 @@ class WindowRecord:
     health: HealthResult
     alarms: tuple[Alarm, ...]
     state: AlarmState
+
+
+@dataclass(frozen=True)
+class ResetAudit:
+    """The audit of one explicit reset, assembled inside the reset transaction.
+
+    Keeping these values in the storage layer (rather than re-reading the row
+    afterwards) is what makes the return value atomic: a concurrent write that
+    lands between the reset and a later read cannot change what the caller is
+    told about the row it just archived.
+
+    Attributes:
+        new_state: The empty streak that replaced the archived one.
+        reset_at_utc: When the reset was recorded.
+        previous_state_json: The archived row's verbatim JSON text.
+        archived_reset_count: Resets already archived *before* this one.
+        previous_state_decodable: Whether strict decoding of the old envelope
+            succeeded. ``False`` covers legacy rows without a version, future
+            versions and damaged JSON alike.
+        previous_state: The archived state when strict decoding succeeded.
+        previous_state_schema_version: Version declared by the archived row.
+    """
+
+    new_state: AlarmState
+    reset_at_utc: str
+    previous_state_json: str
+    archived_reset_count: int
+    previous_state_decodable: bool
+    previous_state: AlarmState | None
+    previous_state_schema_version: str | None
 
 
 def utc_now_text() -> str:
@@ -870,6 +901,138 @@ class ConsumptionRepository:
 
     # -- explicit reset (Issue #57 S3) ------------------------------------
 
+    # The whole read/decode/archive/write cycle stays in one scope on purpose:
+    # splitting it would move part of the cycle outside the transaction.
+    def reset_alarm_state_audited(  # pylint: disable=R0913,R0914
+        self,
+        run_id: str,
+        device_id: str,
+        rule_id: str,
+        *,
+        reason: str,
+        reset_at: str | None = None,
+        scoring_version: str | None = None,
+        allow_legacy: bool = True,
+    ) -> ResetAudit:
+        """Archive a stored state and return its audit in one transaction.
+
+        The ``SELECT``, the strict decode, the archival body, the reset-event
+        assembly and the ``UPDATE`` all share a single ``transaction()``.
+        Reading outside that transaction would let a concurrent reset or a
+        concurrent consumer write replace the row between the read and the
+        write, so the audit could describe a state that was never the one
+        actually archived (Issue #127, A's ruling 7 / C4-7).
+
+        Args:
+            run_id: The run identifier.
+            device_id: The device identifier.
+            rule_id: The rule identifier.
+            reason: Why the streak is being reset. Stored in the audit record.
+            reset_at: The reset timestamp; defaults to now.
+            scoring_version: Identity to stamp on the new streak when the old
+                row cannot be decoded. Defaults to the value found in the old
+                row, if any.
+            allow_legacy: Accept an old row the strict decoder refuses. Set to
+                ``False`` to require a decodable current-version envelope.
+
+        Returns:
+            The audit of this reset, including the new empty streak and the
+            number of resets archived before it.
+
+        Raises:
+            StorageError: if there is no stored state to reset.
+            StateCompatibilityError: if the row cannot be decoded and
+                ``allow_legacy`` is ``False``.
+        """
+        with transaction(self._connection) as connection:
+            current = connection.execute(
+                """
+                SELECT state_json, last_end_seq_exclusive FROM alarm_states
+                WHERE run_id = ? AND device_id = ? AND rule_id = ?
+                """,
+                (run_id, device_id, rule_id),
+            ).fetchone()
+            if current is None:
+                raise StorageError(
+                    f"no alarm state is stored for run {run_id!r}, device "
+                    f"{device_id!r}, rule {rule_id!r}; there is nothing to reset"
+                )
+
+            raw_text = str(current[0])
+            archived_body, archived_version = _archived_state_body(raw_text)
+            reset_at_utc = reset_at or utc_now_text()
+            reset_event: dict[str, Any] = {
+                "reason": reason,
+                "reset_at_utc": reset_at_utc,
+                "previous_state_schema_version": archived_version,
+                "previous_state_json": raw_text,
+            }
+            previous: AlarmState | None
+            try:
+                previous = decode_state_json(raw_text)
+            except StorageError as exc:
+                # A damaged envelope raises plain ``StorageError`` from the
+                # JSON reader, while legacy/future versions raise the
+                # ``StateCompatibilityError`` subclass. Both mean "cannot be
+                # decoded strictly", and section 8.5 archives both verbatim
+                # when ``allow_legacy`` is set. In strict mode the public
+                # contract names a single compatibility error for all three.
+                if not allow_legacy:
+                    if isinstance(exc, StateCompatibilityError):
+                        raise
+                    raise StateCompatibilityError(str(exc)) from exc
+                previous = None
+
+            if archived_body is not None:
+                reset_event["previous_state"] = archived_body
+
+            if previous is not None:
+                identity_scoring = previous.scoring_version
+                identity_rule = previous.rule_id
+            else:
+                identity_scoring = scoring_version or _text_or_none(
+                    (archived_body or {}).get("scoring_version")
+                )
+                identity_rule = (
+                    _text_or_none((archived_body or {}).get("rule_id")) or rule_id
+                )
+
+            new_state = AlarmState(
+                scoring_version=identity_scoring,
+                rule_id=identity_rule,
+            )
+            history = _prior_reset_events(raw_text)
+            connection.execute(
+                """
+                UPDATE alarm_states
+                SET last_end_seq_exclusive = ?, state_json = ?
+                WHERE run_id = ? AND device_id = ? AND rule_id = ?
+                """,
+                (
+                    int(current[1]),
+                    encode_state_json(
+                        new_state,
+                        reset_event=reset_event,
+                        reset_history=history or None,
+                    ),
+                    run_id,
+                    device_id,
+                    rule_id,
+                ),
+            )
+
+        return ResetAudit(
+            reset_at_utc=reset_at_utc,
+            previous_state_schema_version=(
+                None if archived_version is None else str(archived_version)
+            ),
+            previous_state=previous,
+            previous_state_json=raw_text,
+            new_state=new_state,
+            archived_reset_count=len(history),
+            previous_state_decodable=previous is not None,
+        )
+
     def reset_alarm_state(
         self,
         run_id: str,
@@ -922,74 +1085,15 @@ class ConsumptionRepository:
             StateCompatibilityError: if the row cannot be decoded and
                 ``allow_legacy`` is ``False``.
         """
-        current = self._connection.execute(
-            """
-            SELECT state_json, last_end_seq_exclusive FROM alarm_states
-            WHERE run_id = ? AND device_id = ? AND rule_id = ?
-            """,
-            (run_id, device_id, rule_id),
-        ).fetchone()
-        if current is None:
-            raise StorageError(
-                f"no alarm state is stored for run {run_id!r}, device "
-                f"{device_id!r}, rule {rule_id!r}; there is nothing to reset"
-            )
-
-        raw_text = str(current[0])
-        archived_body, archived_version = _archived_state_body(raw_text)
-        reset_event: dict[str, Any] = {
-            "reason": reason,
-            "reset_at_utc": reset_at or utc_now_text(),
-            "previous_state_schema_version": archived_version,
-            "previous_state_json": raw_text,
-        }
-        previous: AlarmState | None
-        try:
-            previous = decode_state_json(raw_text)
-        except StateCompatibilityError:
-            if not allow_legacy:
-                raise
-            previous = None
-
-        if archived_body is not None:
-            reset_event["previous_state"] = archived_body
-
-        if previous is not None:
-            identity_scoring = previous.scoring_version
-            identity_rule = previous.rule_id
-        else:
-            identity_scoring = scoring_version or _text_or_none(
-                (archived_body or {}).get("scoring_version")
-            )
-            identity_rule = (
-                _text_or_none((archived_body or {}).get("rule_id")) or rule_id
-            )
-
-        new_state = AlarmState(
-            scoring_version=identity_scoring,
-            rule_id=identity_rule,
-        )
-        history = _prior_reset_events(raw_text)
-        with transaction(self._connection) as connection:
-            connection.execute(
-                """
-                UPDATE alarm_states
-                SET last_end_seq_exclusive = ?, state_json = ?
-                WHERE run_id = ? AND device_id = ? AND rule_id = ?
-                """,
-                (
-                    int(current[1]),
-                    encode_state_json(
-                        new_state,
-                        reset_event=reset_event,
-                        reset_history=history or None,
-                    ),
-                    run_id,
-                    device_id,
-                    rule_id,
-                ),
-            )
-        return new_state
+        return self.reset_alarm_state_audited(
+            run_id,
+            device_id,
+            rule_id,
+            reason=reason,
+            reset_at=reset_at,
+            scoring_version=scoring_version,
+            allow_legacy=allow_legacy,
+        ).new_state
 
     # -- introspection ----------------------------------------------------
 

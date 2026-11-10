@@ -140,6 +140,7 @@ def test_top_level_help_lists_every_command() -> None:
         "verify",
         "benchmark",
         "doctor",
+        "reset-alarms",
     ):
         assert command in result.stdout
 
@@ -1083,3 +1084,247 @@ def test_unimplemented_subcommands_fail_explicitly(argv: tuple[str, ...]) -> Non
 
     assert result.returncode != 0
     assert "not implemented" in result.stderr
+
+
+# --------------------------------------------------------------------------- #
+# reset-alarms (Issue #127): real subprocess, real database, no mocks
+# --------------------------------------------------------------------------- #
+
+RESET_RULE_ID = "health_heuristic"
+RESET_DATABASE = Path("artifacts") / "results.sqlite"
+RESET_OTHER_TABLES = ("processed_chunks", "feature_windows", "alarms", "runs")
+
+
+def _consume_for_reset(run_dir: Path) -> None:
+    """Consume a real run so its database holds a stored alarm state."""
+    result = run_cli(
+        "consume", "--run-dir", str(run_dir), "--config", str(CONSUMER_CONFIG)
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def _reset_argv(
+    run_dir: Path,
+    *,
+    reason: str = "operator reset",
+    yes: bool = True,
+    device_id: str | None = None,
+) -> tuple[str, ...]:
+    """Build the frozen five-argument invocation."""
+    device = (
+        device_id
+        or json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))[
+            "device_id"
+        ]
+    )
+    argv = [
+        "reset-alarms",
+        "--run-dir",
+        str(run_dir),
+        "--device-id",
+        device,
+        "--rule-id",
+        RESET_RULE_ID,
+        "--reason",
+        reason,
+    ]
+    if yes:
+        argv.append("--yes")
+    return tuple(argv)
+
+
+def _reset_table_counts(database_path: Path) -> dict[str, int]:
+    connection = sqlite3.connect(str(database_path))
+    try:
+        return {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in RESET_OTHER_TABLES
+        }
+    finally:
+        connection.close()
+
+
+def test_reset_alarms_help_documents_its_arguments_and_boundaries() -> None:
+    """The frozen argument set and the four-table boundary are visible."""
+    result = run_cli("reset-alarms", "--help")
+
+    assert result.returncode == 0
+    for flag in ("--run-dir", "--device-id", "--rule-id", "--reason", "--yes"):
+        assert flag in result.stdout
+    assert "--database" not in result.stdout
+    assert "allow_legacy" not in result.stdout
+    assert "processed_chunks" in result.stdout
+    assert "feature_windows" in result.stdout
+    assert "alarms" in result.stdout
+    assert "runs" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("reset-alarms",),
+        ("reset-alarms", "--run-dir", "runs/whatever"),
+        ("reset-alarms", "--run-dir", "runs/whatever", "--device-id", "DEV-002"),
+        (
+            "reset-alarms",
+            "--run-dir",
+            "runs/whatever",
+            "--device-id",
+            "DEV-002",
+            "--rule-id",
+            RESET_RULE_ID,
+        ),
+    ],
+)
+def test_reset_alarms_requires_its_arguments(argv: tuple[str, ...]) -> None:
+    """A missing required argument is an argument error, not a crash."""
+    result = run_cli(*argv)
+
+    assert result.returncode == 2
+    assert "required" in result.stderr
+
+
+def test_reset_alarms_requires_yes(run_dir: Path) -> None:
+    """``--yes`` is the only confirmation; its absence is exit code 2."""
+    result = run_cli(*_reset_argv(run_dir, yes=False))
+
+    assert result.returncode == 2
+    assert "--yes" in result.stderr
+
+
+def test_reset_alarms_rejects_an_empty_reason(run_dir: Path) -> None:
+    """A whitespace-only reason is a parameter error (exit code 2)."""
+    result = run_cli(*_reset_argv(run_dir, reason="   "))
+
+    assert result.returncode == 2
+    assert "reason" in result.stderr
+
+
+def test_reset_alarms_reports_a_missing_manifest(tmp_path: Path) -> None:
+    """A missing manifest maps to exit code 3."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    result = run_cli(
+        "reset-alarms",
+        "--run-dir",
+        str(empty),
+        "--device-id",
+        "DEV-002",
+        "--rule-id",
+        RESET_RULE_ID,
+        "--reason",
+        "missing manifest",
+        "--yes",
+    )
+
+    assert result.returncode == 3
+    assert "manifest" in result.stderr.lower()
+
+
+def test_reset_alarms_reports_a_missing_database(run_dir: Path) -> None:
+    """A reset never creates an empty database; the failure is exit code 3."""
+    result = run_cli(*_reset_argv(run_dir))
+
+    assert result.returncode == 3
+    assert "no database" in result.stderr
+    assert not (run_dir / RESET_DATABASE).exists()
+
+
+def test_reset_alarms_rejects_a_device_mismatch(run_dir: Path) -> None:
+    """The device must agree with the manifest (A's ruling 4)."""
+    _consume_for_reset(run_dir)
+    result = run_cli(*_reset_argv(run_dir, device_id="WRONG-DEVICE"))
+
+    assert result.returncode == 3
+    assert "does not match" in result.stderr
+
+
+def test_reset_alarms_reports_no_stored_state(run_dir: Path) -> None:
+    """Nothing to reset is a data failure (exit code 3), never a success."""
+    _consume_for_reset(run_dir)
+    connection = sqlite3.connect(str(run_dir / RESET_DATABASE))
+    try:
+        connection.execute("DELETE FROM alarm_states")
+        connection.commit()
+    finally:
+        connection.close()
+
+    result = run_cli(*_reset_argv(run_dir))
+
+    assert result.returncode == 3
+    assert "nothing to reset" in result.stderr
+
+
+def test_reset_alarms_succeeds_and_prints_the_audit(run_dir: Path) -> None:
+    """A real reset exits 0, prints the audit and leaves the other tables."""
+    _consume_for_reset(run_dir)
+    database = run_dir / RESET_DATABASE
+    before = _reset_table_counts(database)
+
+    result = run_cli(*_reset_argv(run_dir, reason="CLI 验收重置"))
+
+    assert result.returncode == 0, result.stderr
+    assert "run_id=" in result.stdout
+    assert "reason=CLI 验收重置" in result.stdout
+    assert "previous_state_decodable=true" in result.stdout
+    assert "archived_reset_count=0" in result.stdout
+    assert "new_state_consecutive_breaches=0" in result.stdout
+    assert "tables_untouched=processed_chunks,feature_windows,alarms,runs" in (
+        result.stdout
+    )
+    assert _reset_table_counts(database) == before
+
+    connection = sqlite3.connect(str(database))
+    try:
+        found = connection.execute("SELECT state_json FROM alarm_states").fetchone()
+    finally:
+        connection.close()
+    assert found is not None
+    payload = json.loads(str(found[0]))
+    assert payload["reset_event"]["reason"] == "CLI 验收重置"
+
+
+@pytest.mark.parametrize(
+    "error_name, marker",
+    [
+        ("StateCompatibilityError", "incompatible stored state"),
+        ("StorageError", "cannot reset alarm state"),
+    ],
+)
+def test_reset_alarms_maps_storage_failures_to_three(
+    tmp_path: Path, run_dir: Path, error_name: str, marker: str
+) -> None:
+    """The specific compatibility error is caught before its StorageError base."""
+    body = (
+        f"from g15.storage.repository import {error_name}\n"
+        "\n"
+        "\n"
+        "def _boom(*_args, **_kwargs):\n"
+        f"    raise {error_name}('injected reset fault')\n"
+        "\n"
+        "\n"
+        "cli.reset_alarm_state = _boom"
+    )
+    result = _run_injected_cli(tmp_path, _reset_argv(run_dir), body)
+
+    assert result.returncode == 3
+    assert marker in result.stderr
+
+
+def test_reset_alarms_exits_five_on_an_unexpected_error(
+    tmp_path: Path, run_dir: Path
+) -> None:
+    """An unanticipated failure is not swallowed into a success or a 3."""
+    result = _run_injected_cli(
+        tmp_path,
+        _reset_argv(run_dir),
+        "def _boom(*_args, **_kwargs):\n"
+        "    raise RuntimeError('injected reset fault')\n"
+        "\n"
+        "\n"
+        "cli.reset_alarm_state = _boom",
+    )
+
+    assert result.returncode == 5
+    assert "unexpected" in result.stderr
+    assert "RuntimeError" in result.stderr
