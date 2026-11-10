@@ -27,7 +27,29 @@ python -m pylint src/g15 --fail-under=8.5
 python -m pytest -q
 ```
 
-以上安装步骤仍需在目标环境验证；质量检查会运行当前已有的测试。当前 CLI 已实现 `validate` / `simulate` / `consume` / `report` / `benchmark`，`verify` / `doctor` 两个子命令尚未实现；部署脚本（`setup` / `verify` / `demo` / `benchmark` / `clean`）已就位，其中 `setup` 已按 `docs/environment.md` §2 与 CI 对齐为「先装锁、再装项目、`pip check`」三步；`demo` 与 `verify` 依赖的 `simulate` / `consume` / `report` 已随 #110 / PR #125 合入而打通，可跑通完整链路。`g15 verify` 与 `g15 doctor` 两个子命令本身仍未接线，但 `verify.sh` 不调用它们。标准见 [验收规范](docs/acceptance.md)。依赖已锁定（`#95` 已合入）；两机（RHEL 9.7 / Ubuntu 24.04.4）已从公开仓库现场全新克隆 `2054bb59` 并跑通 `setup.sh` 与 `benchmark.sh`（#10），但正式验收、检出率与峰值内存结论仍未完成。不要提交环境目录、运行数据或密钥。
+以上安装步骤仍需在目标环境验证；质量检查会运行当前已有的测试。当前 CLI 已实现 `validate` / `simulate` / `consume` / `report` / `benchmark`，`verify` / `doctor` 两个子命令尚未实现；部署脚本（`setup` / `verify` / `demo` / `benchmark` / `acceptance` / `clean`）已就位，其中 `setup` 已按 `docs/environment.md` §2 与 CI 对齐为「先装锁、再装项目、`pip check`」三步；`demo` 与 `verify` 依赖的 `simulate` / `consume` / `report` 已随 #110 / PR #125 合入而打通，可跑通完整链路。`g15 verify` 与 `g15 doctor` 两个子命令本身仍未接线，但 `verify.sh` 不调用它们。标准见 [验收规范](docs/acceptance.md)。依赖已锁定（`#95` 已合入）；两机（RHEL 9.7 / Ubuntu 24.04.4）已从公开仓库现场全新克隆 `2054bb59` 并跑通 `setup.sh` 与 `benchmark.sh`（#10），但正式验收、检出率与峰值内存结论仍未完成。不要提交环境目录、运行数据或密钥。
+
+## 现场一键验收（Issue #144）
+
+完整前置条件、证据判定、退出码和平台边界见
+[现场一键验收运行手册](docs/acceptance_runbook.md)。
+
+依赖已由 `scripts/setup.sh` 安装后，在仓库根运行：
+
+```sh
+bash scripts/acceptance.sh
+```
+
+入口不安装或下载依赖。它默认拒绝脏工作树，并用 `git archive <SHA>` 将固定提交复制到系统 `mktemp` 目录，在仓库外依次运行 `verify.sh`、离线/坏数据/`kill -9` 相关故障注入和 `benchmark.sh`；任一步非零，整体立即非零。源仓库的 `runs/` 不会被使用，测试临时目录也不会放入 Obsidian 规划库或其 `output/`。默认证据目录为系统临时目录下的 `g15-acceptance-<SHA>.*`，其中记录提交 SHA/tree、快照模式、系统与 Python/NumPy/PyYAML 版本、逐条原始退出码和日志。需要长期留档时，把根目录显式指向仓库和规划库之外：
+
+```sh
+mkdir -p "$HOME/g15-evidence"
+G15_ACCEPTANCE_EVIDENCE_ROOT="$HOME/g15-evidence" bash scripts/acceptance.sh
+```
+
+只有开发未提交实现时才可显式设置 `G15_ACCEPTANCE_ALLOW_DIRTY=1`；这类运行会醒目标注 `formal_evidence_eligible=false`，只能用于预检，不能作为最终 SHA 证据。总入口把质量/测试/故障/性能门禁失败统一返回 4，把日志/验收框架故障返回 5；子命令原始退出码保留在 `steps.tsv`。
+
+离线用例会先证明 DNS 与网络 socket 自检被测试专用守卫拒绝，再真实运行小型 `validate → simulate → consume → report`。该守卫只覆盖 Python `socket` 审计事件，**不等于操作系统已经断网**，也不能排除绕过 Python 审计 API 的原生代码；最终提交 SHA 仍须在关闭网卡或隔离网络命名空间后复跑同一入口并保存证据。Windows 没有 POSIX `SIGKILL`，该项会按既有用例明确 skip，正式 `kill -9` 证据必须来自 Linux。本入口不执行 #56 的未公开保留集；退出 0 也不等于“独立保留集检出已通过”。
 
 ## 后续门禁
 
