@@ -385,6 +385,50 @@ verify_run(run_dir: Path, *, expected_total_points: int | None = None) -> Verifi
 
 SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。`consume` 薄接线已由 #71 合入主线。显式重置的 consumer 级公开入口、审计返回与 `g15 reset-alarms` 子命令由 #127 实施，冻结契约见 §8.5；库级 `ConsumptionRepository.reset_alarm_state` 保留原有签名，不与 consumer 级入口混用。契约已裁定不等于功能已交付，在 #127 的实现与非作者复核齐备前不得写成已接线。
 
+
+### 6.2 只读查询与认证授权（#135，候选契约）
+
+`src/g15/query/**` 与 `src/g15/service/**` 是 #135 新增的只读查询与认证授权层。契约候选文本以 [ADR-0007 §5.1](adr/0007-user-query-capacity-and-validation.md) 为准，本小节只登记公开入口，实现前冻结项见该 ADR。当前只实现 D0 子集（10 设备 × 100 窗正确性基线），不宣称十万级容量。
+
+```python
+# query/errors.py
+STATUS_OK = 200; STATUS_UNAUTHORIZED = 401; STATUS_NOT_FOUND = 404; STATUS_BAD_REQUEST = 400
+class QueryError(Exception): ...            # 基类，携带 status 与 message
+class AuthenticationError(QueryError): ...  # -> 401（缺/坏/过期 token）
+class AuthorizationError(QueryError): ...   # -> 404（越权/资源不存在/Manifest 不匹配/缺库，统一隐藏存在性）
+class InvalidParameterError(QueryError): ...# -> 400（参数/cursor 结构非法）
+
+# query/bearer.py（HMAC-SHA-256 三段 bearer，非 JWT）
+BEARER_PREFIX = "g15q1"; CLAIM_TYP = "g15-query-access"; CLAIM_VER = "1"
+TTL_DEFAULT_SECONDS = 600; TTL_MAX_SECONDS = 900; CLOCK_TOLERANCE_SECONDS = 30; MAX_TOKEN_BYTES = 4096
+sign_token(claims: dict, key: bytes) -> str                # 内部签发，仅供 fixture/测试，不暴露网络端点
+verify_token(token, key, *, issuer, audience, now) -> AuthenticatedSubject
+
+# query/authz.py（静态 YAML 授权快照）
+AUTHZ_SCHEMA_VERSION = "1"; MAX_DEVICES_PER_SUBJECT = 10; MAX_ALLOW_PAIRS_PER_SUBJECT = 64
+load_authz(text: str) -> AuthzPolicy                       # 安全加载，拒 alias/merge/通配符/重复键/超扇出
+AuthzPolicy.subject(subject_id) -> Subject | None; Subject.allows(run_id, device_id) -> bool
+
+# query/cursor.py（keyset 游标，HMAC 完整性保护）
+CURSOR_PREFIX = "g15c1"; QUERY_WINDOWS = "windows"; QUERY_ALARMS = "alarms"
+encode_cursor(state: CursorState, key: bytes) -> str
+decode_cursor(cursor: str, key: bytes) -> CursorState
+
+# query/reader.py（只读查询，唯一允许 connect_readonly）
+open_readonly(database_path) -> sqlite3.Connection        # 缺文件/不可读 -> AuthorizationError(404)
+read_run_identity(conn, run_id) -> dict | None
+query_windows(conn, run_id, device_id, *, high_water_start_seq, last_start_seq, page_size) -> (list[WindowItem], bool)
+query_alarms(conn, run_id, device_id, *, high_water_start_seq, high_water_rule_id, last_start_seq, last_rule_id, page_size) -> (list[AlarmItem], bool)
+query_health(conn, run_id, device_id) -> HealthView | None
+window_high_water(conn, run_id, device_id); alarm_high_water(conn, run_id, device_id)
+
+# service/router.py（薄传输层，无网络，caller 传 Authorization 头与目标）
+DEFAULT_PAGE_SIZE = 50; MAX_PAGE_SIZE = 100; MIN_PAGE_SIZE = 1
+class QueryRouter: __init__(*, key, policy, runs, issuer, audience, now=None); handle(request) -> QueryResponse
+```
+
+`QueryRouter` 不监听端口、不读 `private_truth`、不在请求路径建表/迁移/ANALYZE，只经 `connect_readonly` 打开已存在库。错误矩阵：缺/重复 `Authorization`、错 scheme、格式/签名/claim 错、过期/时钟越界 → 401（`WWW-Authenticate: Bearer`，正文不区分）；token 有效但无授权/主体或 run·device 不存在/Manifest 不匹配/缺库 → 404（先授权再访问库，隐藏存在性）；参数/cursor 结构非法 → 400。第一版无 403。
+
 ## 7. 仿真模型规范
 
 ### 7.1 常规信号（确定性趋势 + 随机噪声）

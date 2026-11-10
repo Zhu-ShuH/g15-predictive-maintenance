@@ -35,6 +35,10 @@
 /src/g15/reporting/ @kittywent
 /tests/integration/ @kittywent
 /tests/fault_injection/ @kittywent
+/src/g15/query/ @kittywent
+/src/g15/service/ @kittywent
+/tests/unit/test_query*.py @kittywent
+/tests/unit/test_service*.py @kittywent
 /docs/test_plan.md @kittywent
 /docs/test_report.md @kittywent
 /scripts/ @Ran2149975600

@@ -38,6 +38,7 @@ flowchart LR
 | analysis | B2 | 特征、健康评分、告警，[#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54) | #73 数值边界整改已合入 `0a637fc2`，A/B1/C4/C2 均在 `e4814b65` 批准；#82 已由 #91 合入 `51cd99ad`，1.0/1.1 时期 `np.ma.MaskedArray` 掩码被静默使用的历史行为，已在 1.2 改为掩码非空即 `ValueError` 拒收，空掩码继续接受。`load_health_rules(path)` 实际读取规则 YAML，是 interface §6 文件 I/O 分层约束的已知例外；不读取运行数据或真值 |
 | consumer / storage | C2 | 公开文件消费、窗口结果、恢复状态与事务，[#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) | [#76](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/76) 末片上界预检已集成；真实强杀与公共契约仍待收口 |
 | reporting / verify | 原分工 C5；#9/#51 当前相关实现由 B1 接手 | 候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)、[#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 主线模块仍空；#70场景类型依赖名称的判定问题已由B2提出、A复证并请求修改，待B1方案/修复；真值只由 `reporting.builder` / `reporting.metrics` 做对账，`reporting.verifier` / `g15 verify` 只做 Manifest/NPZ 完整性校验且不读真值；原始分片校验不等于真值匹配、检出率或完整时间轴验证 |
+| query / service | B1（#135） | `src/g15/query/**`、`src/g15/service/**` 只读查询与认证授权，[#135](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/135) | 候选契约见 [ADR-0007](adr/0007-user-query-capacity-and-validation.md) §5.1；D0 子集（10 设备 × 100 窗）为当前验证口径，不宣称十万级 |
 | scripts / environment | C6；A 协调依赖与验收 | [#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) 修正执行位；[environment](environment.md) | setup/demo/verify/benchmark 仍是占位；[#10](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/10)、[#28](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/28) 保留 |
 
 ## 3. 文件交换与持久化责任
