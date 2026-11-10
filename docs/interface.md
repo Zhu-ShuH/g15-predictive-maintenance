@@ -383,7 +383,7 @@ verify_run(run_dir: Path, *, expected_total_points: int | None = None) -> Verifi
 
 `consume_run(run_dir, database_path, config)` 返回的 `ConsumptionSummary` 包含 `run_id/device_id/windows_written/alarms_written/shards_processed/shards_skipped/windows_dropped`。`windows_dropped` 沿用既有名称，单位是被丢弃的**样本点数**，不是窗口数；改名会破坏既有调用接口，本次不改名；如需改名，按 §13 接口变更流程办理。重复消费已提交同 SHA 的片只跳过分析，不丢失已提交状态。
 
-SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。`consume` 薄接线已由 #71 合入主线；现有公开重置能力仍在 `ConsumptionRepository.reset_alarm_state`，consumer 级包装签名、审计返回与新增 CLI 子命令仍由 #65 后续提出，不把 `consume` 合入误写成显式重置已经交付。
+SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。`consume` 薄接线已由 #71 合入主线。显式重置的 consumer 级公开入口、审计返回与 `g15 reset-alarms` 子命令由 #127 实施；在 #127 合入前，现有公开重置能力仍只有 `ConsumptionRepository.reset_alarm_state`。不得把本文的契约裁定写成该功能已经交付。
 
 ## 7. 仿真模型规范
 
@@ -456,7 +456,11 @@ crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
 
 当前存储信封为 `state_schema_version="1"`、`state`、`reset_event`，有历史重置时可附 `reset_history`。正常恢复缺版本、未知版本、缺/多状态键或非法类型均明确拒收；包括无历史 legacy 的自动迁移目前未实现，不能承诺“空旧行自动续跑”。B2/C2 仍须逐项确认类型与迁移口径，不能只凭算法层拒收就声称数据库恢复安全。
 
-显式重置与正常恢复分开：操作者重置留旧原文、原因和 UTC 时刻，后续状态写入及重开库不得抹掉审计，多次重置按最旧到最新保留历史。现有实现允许显式归档不可解码原文，是否将未来版本/损坏 JSON 纳入公共运维策略须受影响角色明确评议；`allow_legacy=False` 的严格路径保留。CLI 对应入口及确认参数仍按 #65 单独审阅。
+显式重置与正常恢复分开：操作者重置留旧原文、原因和 UTC 时刻，后续状态写入及重开库不得抹掉审计，多次重置按最旧到最新保留历史。未来版本/损坏 JSON 纳入公共运维策略，但必须由返回值 `previous_state_decodable=False` 明示旧行原文不可严格解码；宽容重置不等于旧数据可信。`allow_legacy=False` 的严格路径保留在库级（`StateCompatibilityError` 映射退出码 3）；CLI 固定 `allow_legacy=True` 且不暴露该参数，因此该分支不在 CLI 可达性承诺内。
+
+#127 冻结的 consumer 级契约为 `reset_alarm_state(run_dir, database_path, device_id, rule_id, *, reason, allow_legacy=True) -> AlarmResetResult`：`reason` 为非空自由文本，不用封闭枚举；`previous_state` 为 `AlarmState | None`，`previous_state_json` 保留旧行原文，`previous_state_decodable` 仅当前信封严格解码成功时为 `True`；`archived_reset_count` 是本次之前的归档重置数、不含本次。`device_id` 必须与 Manifest 一致，不一致抛 `ConsumptionError`（CLI 映射 3）。读旧行、解码/归档与写新行必须在同一 `transaction()` 中完成。重置只清空 streak、保留 `last_end_seq_exclusive` 锚点，不删除历史告警、不重算 run、不改其余四表。CLI 使用 `--run-dir/--device-id/--rule-id/--reason/--yes`，不提供 `--database`；子命令名 `reset-alarms`，退出码为 0/2/3/5。
+
+本条为 #127 的契约基线；功能未合入前状态仍是待实现。
 
 **重置 streak 不等于重新分析 run**：该动作不清除旧结果/`processed_chunks`，不更新 `runs.scoring_version`，不能作为变更规则/窗宽后“整 run 重算”的承诺。当前更换分析配置应保留原库、向新数据库消费；任何覆盖旧库或新增选择参数必须另行明确操作和审计。不得在消费失败时自动重置。
 
