@@ -1,8 +1,8 @@
 # ADR-0007：用户健康查询入口、十万级口径与容量验证
 
 - 状态：**提案；十万不同用户同时真实查询的主目标已定；同步/统计/SLO/资源未冻结；未实现查询服务；未执行高负载**
-- 关联：[Issue #133](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133)、#2、#9、#56
-- 审阅基线：main `23d8592839cd4ad8f0e6006464e10efe3afa6234`
+- 关联：[Issue #133](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133)、[#135](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/135)、#136、#2、#9、#56
+- 审阅基线：main `6437130ab4898921515ca2cec3a5db25c8e234ca`；#137 当前精确 head 另见 PR
 - 来源边界：组长基于课堂侧重点追加的工程工作假设，不是教师正式评分细则或权重
 - 负责人：A 与 B1；必要非作者/公共契约 Review：C4；最终门禁：A（不自批）
 
@@ -110,6 +110,143 @@ X_closed ≈ N / (think_time + mean_response_time)
 C4 在 [#133 合入后复核](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133#issuecomment-6762781638) 中使用单 SQLite、单 run、多 device、40 万条 `alarms` 的合成探针。**同一台机器、同一数据集、同一循环次数 N=50** 的三态对照为：未 `ANALYZE` 约 23.575 秒、已 `ANALYZE` 约 0.020 秒、已 `ANALYZE` 且补复合索引约 0.013 秒（同批对照，绝对值随机器负载浮动，仅用于说明查询计划对统计信息的敏感性，不作为生产基线）。C4 已更正其早先跨批次引用（48.03 秒为 200 次口径），不得再引用“约 3700 倍”跨批次倍差。该探针拓扑不同于现行一 run 一 device / 每 run 一库，也不得据此冻结新增索引。
 
 任一错误结果、越权或跨权限泄漏均为零容忍停止条件。
+
+### 5.1 #135 认证与授权候选契约（待 C4 非作者复核）
+
+> 来源：[B1 建议 6763623979](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/135#issuecomment-6763623979) 与 [A 待评审裁定 6764033066](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/135#issuecomment-6764033066)。这是 A/B1 提交 Review 的候选契约，**尚未取得 C4 对本节的批准，不是最终冻结**。
+>
+> 本节只定义契约，不生成、签发、提交或配置任何密码、bearer token、HMAC 密钥或其他凭据。所有示例都只使用不可运行的 `<PLACEHOLDER>`。
+
+#### 5.1.1 信任边界与职责
+
+认证（确认主体）与授权（主体可访问哪些 run/device）必须分开：
+
+1. 查询入口只从 `Authorization: Bearer <BEARER_TOKEN>` 接收 bearer；不得从 URL query、请求正文或 cookie 接收，也不得接受客户端另传 `sub` 覆盖 token 主体。
+2. 内部签发器只接受可信 fixture/bootstrap 已确认的主体并签发短期 token；第一版不公开 `login` 或 token 签发网络端点。fixture 注入“已认证主体”只证明测试边界，不等于已实现生产身份校验。
+3. 查询服务先严格验签和校验主体/时效，再以 `sub` 查询静态 YAML 授权快照；run/device 权限、数据库路径和角色列表均不得写入 token。
+4. YAML 只负责授权，不能证明身份，也不得保存密码、token 或签名密钥。
+5. 生产签发者如何验证原始凭据、TLS 终止位置、运行时密钥供应和轮换尚未冻结；这些事项解决前，只能声明 D0 测试/开发认证，不得声明生产登录已完成。
+
+bearer 仅凭持有即可使用，非 loopback 部署必须通过 TLS 或受信 TLS 终止；传输和存储均不得泄露凭据。参考 [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750.html)。
+
+#### 5.1.2 短期 bearer 格式候选
+
+仅允许以下占位结构；这是项目自定义 token，**不得称为 JWT**：
+
+```text
+<FORMAT_VERSION>.<BASE64URL_CANONICAL_CLAIMS>.<BASE64URL_SIGNATURE>
+```
+
+- 服务端固定 `HMAC-SHA-256`；token 不携带、也不能选择 `alg`。
+- 签名输入为前两段及中间句点的 ASCII 字节；签名比较必须使用 `hmac.compare_digest`，不得用普通 `==`。[Python `hmac` 文档](https://docs.python.org/3/library/hmac.html#hmac.compare_digest) 同样建议用 `compare_digest` 降低时序分析风险。
+- claims 是规范化 UTF-8 JSON 对象，只允许 `typ`、`ver`、`iss`、`aud`、`sub`、`iat`、`exp`、`jti`；拒绝缺失、重复或未知字段、非对象 JSON、浮点/布尔时间、非法 base64url 和超过候选 4,096 bytes 的 token。
+- `typ` 固定为 query access 类型，`ver` 固定为本格式版本；`iss` / `aud` / `sub` 必须为非空、区分大小写的精确字符串。具体 `iss` 与 `aud` 值仍待 Review。
+- `iat` / `exp` 使用服务端写入的 UTC POSIX 整秒；必须 `exp > iat`。候选默认 TTL 为 600 秒、硬上限 900 秒、服务器时钟容差 ±30 秒，均待 C4 复核，不是冻结门槛。
+- 校验顺序为：限制 header/总长度 → 解析固定版本 → 计算并比较 MAC → 再信任 claims 并校验类型、issuer、audience、主体和时间。验签前解析出的内容一律视为不可信输入。
+- 当前签名 key 只能由待审的运行时秘密来源注入；不得出现在仓库、YAML、静态 fixture 数据、日志、URL、CLI 参数或默认值中。未来测试 fixture 只能在进程内注入临时测试值，不能把该值提交为凭据；缺 key 时服务必须拒绝启动，不能回退到硬编码值。本 PR 不创建该测试值。
+- bearer 签名 key 与分页 cursor 的完整性 key 必须目的隔离；本节不生成或选择任何 key。
+
+#### 5.1.3 授权 YAML 候选
+
+授权文件只展示结构占位符：
+
+```yaml
+authz_schema_version: "1"
+subjects:
+  "<OPAQUE_SUBJECT_ID>":
+    permission_domain: "<PERMISSION_DOMAIN>"
+    allow:
+      - run_id: "<RUN_ID>"
+        device_id: "<DEVICE_ID>"
+```
+
+加载与使用规则：
+
+- 使用安全加载并严格校验：拒绝未知/重复键、YAML tag/merge/alias、空或非字符串主体、通配符、重复授权对及大小写模糊匹配；任何错误都拒绝整个快照并 fail closed，不做部分加载。
+- `sub` 必须精确匹配非 PII 的稳定主体 ID；姓名、邮箱和真实个人标识不得进入授权文件或日志。
+- D0 每主体最多授权 10 个不同 device，第一版每 device 只指向一个 run；超出上限属于授权快照加载失败，不映射成单次请求的 401/404。
+- 客户端不得提交数据库路径。服务将 `run_id` 映射到受控 run 根目录，解析后必须仍位于根目录内，并核对 Manifest 的 `run_id/device_id` 与请求一致；拒绝绝对路径、`..` 和符号链接逃逸。
+- 授权快照第一版只在启动时加载；变更后需受控重启。每一页请求仍重新认证并按当前快照授权，token 不缓存权限结论。热加载与失败回滚另行评审。
+
+#### 5.1.4 外部错误与资源隐藏
+
+| 条件 | 外部结果 | 边界 |
+|---|---|---|
+| Authorization 缺失/重复、scheme 错、格式/签名/claim 错、过期或时钟越界 | 401 | 通用 `WWW-Authenticate: Bearer`；正文不区分具体失败原因 |
+| token 有效但主体无授权、授权主体不存在、run/device 不存在或 Manifest 不匹配 | 404 | 状态与正文结构一致；先授权再访问数据库，不泄露资源是否存在 |
+| 参数或 cursor 结构无效且不涉及权限域泄漏 | 400（候选） | 通用参数错误；具体错误 schema 待 C4 复核 |
+| 有效且获授权 | 进入查询 | 第一版不引入 403 |
+
+内部日志可记录有限的枚举原因码，但不得记录 Authorization、token、签名、raw `sub` 或资源详情；本契约不承诺 404 恒定耗时，只冻结外部状态与正文同构。
+
+#### 5.1.5 查询、分页、版本与只读边界
+
+- 第一版只支持单 run / 单 device / 每 run 一库；跨 run、共享目录、聚合读模型和全局快照不在 #135。
+- 每一页都重新验 token、查 YAML 并用 `connect_readonly()` 打开已存在数据库；不得初始化 Schema、执行 DDL/DML/`ANALYZE`，缺库也不得创建文件。
+- 窗口按 `start_seq DESC`；告警按 `start_seq DESC, rule_id DESC`。不得用仅 OFFSET 分页。
+- 首屏分别记录窗口与告警的提交态高水位；后续页只返回高水位以内的行。cursor 必须绑定主体权限域、查询类型、run/device、排序、高水位和最后一键；窗口最后一键为 `start_seq`，告警为 `start_seq + rule_id`。结构损坏返回候选 400，跨主体/权限域/scope 使用统一 404。
+- cursor 是不可信输入且必须具备完整性保护；编码、长度和目的隔离 key 的来源仍待 C4 复核。每页授权重查不可由 cursor 替代。
+- 候选 `page_size` 默认 50、最大 100，待 C4 复核。
+- 版本来源必须逐项具名：Manifest `schema_version=2.0`；`features_version` 来自每条 `features_json`；`state_schema_version` 来自 `state_json` 信封；`scoring_version` 与 `rule_id` 不是 Schema 版本。配置版本没有可追溯持久化来源时必须省略，不得硬编码 `1.0` 或从 Manifest 推断。
+- 普通健康响应只允许投影当前业务 `state` 与获准版本字段；不得返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json`、自由文本 `reason` 或 `private_truth`。
+- 新鲜度只依据当前只读事务可见的已提交序号/状态/持久化时间；服务观察时间不得冒充数据生成时间。
+
+#### 5.1.6 失效、撤销与重放边界
+
+- 第一版是无状态 bearer：同一有效 token 在 `exp` 前可重放；`jti` 只供审计关联，不自动阻止重放。短 TTL、issuer/audience 绑定、TLS 与禁止记录凭据只能降低风险，不能宣称已消除。
+- 第一版没有 refresh token、逐 token 撤销、denylist、会话或 replay cache。若这些成为要求，须另立契约与状态存储 Review。
+- 第一版只支持单一当前签名 key；轮换采用受控重启并使全部旧 token 失效，不能声称支持单 token 紧急撤销。
+- 移除 YAML 主体并重启后，该主体即无授权；其未过期 token 仍可能通过认证，但所有资源请求统一 404。
+- 生产签发/bootstrap、密钥来源与轮换、TLS 终止、紧急撤销及 cursor 完整性机制均是生产声明前的阻断未决项。
+
+#### 5.1.7 脱敏追踪占位样例
+
+服务端生成 `request_id`；第一版 `trace_id` 与其相同并贯穿所有阶段。ID 由 UTC 前缀与安全随机片段组成，不接受客户端值作为权威 ID。样例不含真实数据：
+
+```json
+{
+  "timestamp_utc": "<UTC_TIMESTAMP>",
+  "request_id": "<REQUEST_ID>",
+  "trace_id": "<TRACE_ID>",
+  "actor_ref": "<OPAQUE_ACTOR_REF>",
+  "permission_domain": "<PERMISSION_DOMAIN>",
+  "stage": "<STAGE>",
+  "query_shape": "single_run_single_device_health_v1",
+  "manifest_schema_version": "<MANIFEST_SCHEMA_VERSION>",
+  "features_version": "<FEATURES_VERSION>",
+  "state_schema_version": "<STATE_SCHEMA_VERSION>",
+  "result": "<STATUS>"
+}
+```
+
+禁止记录 token、Authorization、签名/HMAC 摘要、密码、raw `sub`、真实姓名、`private_truth`、原始 run/device、cursor、reset 审计字段或自由文本 `reason`。401/404 对外只返回统一错误标识与 `request_id`。
+
+#### 5.1.8 最低测试矩阵
+
+| 组别 | 必须覆盖 | 预期 |
+|---|---|---|
+| header/格式 | 缺失、重复、错误 scheme、分段/base64/JSON 损坏、重复/未知 claim、超长 | 统一 401；日志无凭据 |
+| 签名/claims | payload/签名篡改、错 key、错 typ/ver/iss/aud、空 sub、缺 claim | 统一 401；验签前不信任主体 |
+| 时间 | 过期、未来 iat、exp≤iat、TTL 超上限、±30 秒边界 | 按候选时钟规则确定性通过/拒绝 |
+| 授权/隐藏 | 允许、主体无映射、越权、资源不存在、Manifest 不匹配 | 允许路径正确；其余同结构 404；无 403 |
+| YAML/路径 | 坏 YAML、重复/未知键、通配符、>10 device、绝对路径、`..`、符号链接逃逸 | 启动 fail closed；不部分加载、不创建数据库 |
+| 生命周期 | 同 token 在 TTL 内重复使用、过期、整体换 key | 重放按已知风险留证；过期/旧 key 拒绝 |
+| 分页 | 告警并列、翻页间追加、cursor 损坏/跨主体/跨 scope、翻页间撤权 | 无重复错序；新行不越过高水位；每页重查授权 |
+| 数据/只读 | 响应对独立 SQL/oracle；缺库；检查文件/Schema/业务行 | 结果一致；缺库不创建；查询路径零业务写入 |
+| 版本/投影 | 四类版本来源、配置版本缺来源、reset 审计字段与真值扫描 | 不伪造 config 版本；敏感字段不可达 |
+| trace | 全阶段 ID、401/404、日志扫描 | ID 可关联；无 token、PII、真值或审计原文 |
+
+#### 5.1.9 Review 前仍未决定
+
+1. `iss` / `aud` 的精确值、TTL/硬上限/时钟容差；
+2. 生产身份凭据验证与 token 签发/bootstrap 流程；
+3. 运行时密钥供应、TLS 终止、轮换、紧急撤销与是否需要 replay cache；
+4. cursor 编码、长度、完整性算法及独立 key 来源；
+5. 授权文件与受控 run 根目录的配置位置、热加载/重启策略；
+6. 外部错误正文 schema、HTTP 路径/方法和 `page_size`；
+7. D0 之后的授权扇出、历史 run、跨库路由与聚合读模型。
+
+以上事项经 C4/B1 对当前精确 head 复核并由 A 记录后，才可称为冻结；此前实现只能针对获批的 D0 子集，不得宣称生产认证、即时撤销、防重放或十万级能力。
 
 ## 6. 架构选项
 
