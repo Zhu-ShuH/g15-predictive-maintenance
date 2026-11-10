@@ -69,7 +69,7 @@
 | #6 | 故障注入（spike/step/burst） | C1 | `src/g15/simulation/faults.py`、`tests/unit/test_faults*.py` | 可指定起点/时长/幅度；真值清单一致 | #5 |
 | #7 | 特征 / 健康评分 / 告警 | B2 | `src/g15/analysis/features.py`、`src/g15/analysis/health.py`、`src/g15/analysis/alarms.py`、`configs/health_rules.yaml`、`tests/unit/test_analysis*.py` | ≥5 特征；健康分 ∈[0,100]；常值窗口不产生 NaN/Inf | #4 |
 | #8 | 消费入口与 SQLite 存储 | C2 | `src/g15/pipeline/consumer.py`、`src/g15/storage/database.py`、`src/g15/storage/repository.py`、`tests/unit/test_consumer*.py` | 同一事务提交；重复消费不重复入库；`kill -9` 可重放 | #3、#7 |
-| #9 | 独立验证与报告 | C5 | `src/g15/reporting/builder.py`、`src/g15/reporting/metrics.py`、`tests/integration/*`、`tests/fault_injection/*`、`docs/test_plan.md`、`docs/test_report.md` | 仅验证器读真值；报告给检出率与误报数；输出 `summary.json`/`.md` | #6、#8 |
+| #9 | 独立验证与报告 | C5 | `src/g15/reporting/builder.py`、`src/g15/reporting/metrics.py`、`tests/integration/*`、`tests/fault_injection/*`、`docs/test_plan.md`、`docs/test_report.md` | 仅报告层读真值用于对账；报告给检出率与误报数；输出 `summary.json`/`.md` | #6、#8 |
 | #10 | 部署脚本与双 Linux 准备 | C6 | `scripts/setup.sh`、`scripts/demo.sh`、`scripts/verify.sh`、`scripts/benchmark.sh`、`scripts/clean.sh`、`docs/deployment.md`、`docs/operations.md` | `setup.sh` 按 `environment.yml` 创建或复用 `pp03`（Python 3.12）；demo/verify/benchmark 可执行；第 1 天先起两台虚拟机 | 无 |
 | #11 | 仿真生产入口 producer | C4 | `src/g15/pipeline/producer.py`、`tests/unit/test_producer*.py` | 产出完整 `run_dir`（分片 + 完整 Manifest） | #3、#5 |
 
