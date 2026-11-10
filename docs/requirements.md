@@ -34,7 +34,7 @@
 | N01 | 1,000,000 个采样时刻；生成、序列化、哈希和 complete Manifest 发布合计严格 <60 秒；双信号共 2,000,000 标量另报 | 沿用 acceptance §2，双 Linux 各三次；#53 的 Windows 结果不替代 Linux，不把内核计时或事后校验混进生产窗口 |
 | N02 | 预设受控集事件召回 100%，同时报告误报和延迟；零事件召回为 null | 保持 acceptance §3；开发已查看数据与独立保留验证分开，#56 未冻结前不选/跑新保留 seed |
 | N03 | 配置/seed/版本可追溯；UTC、绝对序号和单位明确 | 保留仿真确定性；最终记录源码、配置/规则摘要与依赖，不以当前机器时钟生成测量 |
-| N04 | 参数/配置 2，I/O/Schema 3，实际验收失败 4，未知错误 5，成功 0 | 沿用 interface §10；主线 validate 的 0/2 已实现，未知/占位分支使用 5；cli.py 现只有 EXIT_OK/EXIT_INVALID/EXIT_UNEXPECTED，3/4 常量尚未定义。#71 候选定义 consume 的 3，验收失败 4 随后续 verify/验收入口接线补齐；#70 提供报告能力，不等于 CLI 已接线 |
+| N04 | 参数/配置 2，I/O/Schema 3，实际验收失败 4，未知错误 5，成功 0 | 沿用 interface §10。`cli.py` 已定义 `EXIT_OK=0`、`EXIT_INVALID=2`、`EXIT_IO=3`、`EXIT_ACCEPTANCE=4`、`EXIT_UNEXPECTED=5`；`validate`、`simulate`、`consume`、`report`、`benchmark` 已接线，`verify`、`doctor` 尚未接线并返回 5。I/O/Schema 失败使用 3；4 只用于实际运行且未通过的验收门禁（当前 `benchmark`，未来 `verify`），不得扩到普通 `report`；报告产物成功生成即返回 0，即使报告字段为 `passed=false` 或 `passed=null` |
 | N05 | 安装可联网，业务运行不依赖网络或在线 AI | C6 实测现场网络、运行离线与备用依赖；尚未完成的离线安装准备保持待办 |
 | N06 | 数据、告警状态、分片游标同事务；重复/恢复可诊断 | #64 已有实现与回归；真实强杀、日志和重启后内容一致性仍需实测，不宣称断电零损失 |
 | N07 | 至少 15 单测、20 个可执行用例、3 类故障注入证据 | 测试存在及数量不替代执行结果；三类为业务故障、文件损坏、Linux 强杀恢复，不能用三种波形替代三类可靠性证据 |
@@ -79,15 +79,28 @@ R11 的第一条真实路径必须读取已提交的 `runs / feature_windows / a
 | N11 | 补充场景 H 用于带 think time 的持续活跃用户与 soak；关闭式稳态吞吐近似 `X_closed ≈ N / (think_time + mean_response_time)`；100,000 用户、30 秒 think time 的 3,333.3 req/s 仅在响应时间趋近 0 时为近似上限；固定到达率须另用开放式模型 | H 不是主目标的替代验收，任何结果均不得降低或宣告 F 通过 |
 | N12 | UTC request/trace ID、匿名化 actor/权限域、数据版本、workload/cache 状态、状态/错误码、端到端/DB 时延及服务端/压测端资源可溯源；凭据、敏感数据和真值禁止入日志 | 当前 `common/logger.py` 为空，既有运行日志不是请求级证据 |
 | N13 | 单元 → 真实集成 → 1/10/50 低负载冒烟/回归 → Windows/双 Linux 兼容 → F 的 100/500/1000 性能 → 1k/5k/10k/25k/50k/100k 不同用户实际在途压力；每档满足正确性、阶段计数可信和两端资源余量才升级，H 另行报告 | 当前只批准规划和文档 Review，不执行十万级；所有失败、固定 SHA、命令、环境、原始直方图和两端资源必须保留 |
+| N14 | 查询实现前冻结授权扇出、稳定分页、具名版本、提交态新鲜度、审计投影、正式只读连接及查询计划/索引 | 由 #135 固化真实查询契约、#136 建立 oracle 与分级门禁；按现行“每设备一 run、每 run 一库”和代表性 D0/D1/D2 保存 `EXPLAIN QUERY PLAN` 与冷/热态证据。不得把合成单库探针外推为生产结论，也不得在真实 SQL 与数据分布冻结前预定新增索引 |
 
-按现行 `benchmark_1m.yaml` 的 1,000,000 点、`chunk_points=102,400` 与 `consumer.yaml` 的 `window_points=256`、`incomplete_window=drop`，每 run 为 3,906 个完整窗口并丢弃尾部 64 点。候选数据集为 D0（10 设备 × 100 窗口）、D1（1,000 设备 × 3,906 窗口，共 3,906,000 / 390.6 万行）和 D2（10,000 设备 × 3,906 窗口，共 39,060,000 / 3,906 万行，按每设备一个此规模 run）。设备/用户比、历史 run、告警密度、响应大小、缓存冷热与保留周期仍待评审；D2 在磁盘、建库时间和 RSS 未测前不得称为可行。
+按现行 `benchmark_1m.yaml` 的 1,000,000 点、`chunk_points=102,400` 与 `consumer.yaml` 的 `window_points=256`、`incomplete_window=drop`，每 run 为 3,906 个完整窗口并丢弃尾部 64 点。候选数据集为 D0（10 设备 × 100 窗口）、D1（1,000 设备 × 3,906 窗口，共 3,906,000 / 390.6 万行）和 D2（10,000 设备 × 3,906 窗口，共 39,060,000 / 3,906 万行）。现行 Manifest 契约是一 run 一 device，且每个 run 使用独立 `results.sqlite`：D1/D2 是分别分散在 1,000/10,000 个数据库中的 `feature_windows` 汇总规模，每库约 3,906 行；告警、状态与历史 run 另计。若改成共享读模型或单库多设备布局，须另审 Schema、迁移、目录/聚合策略与代表性查询计划。设备/用户比、历史 run 数、告警密度、响应大小、缓存冷热与保留周期仍待评审；D2 在磁盘、建库时间、路由成本和 RSS 未测前不得称为可行。
+
+### 5.3 查询实现前冻结项（#135 / #136，摘要；完整 13 条见 ADR-0007 §5）
+
+1. **授权扇出**：每用户/角色/租户可见的 device/run 数量与上限、总映射规模、热点分布、历史 run 和跨 run 路由/分页上限。
+2. **稳定分页**：冻结查询范围、确定性全序、游标字段、页大小、方向和提交态可见性；窗口可评审 `start_seq`，告警须用 `start_seq + rule_id` 或等价唯一键打破并列，不以仅 OFFSET 冒充稳定游标。
+3. **具名版本**：逐项区分 Manifest `schema_version=2.0`、配置契约 `SCHEMA_VERSION=1.0`、特征信封 `features_version`、状态信封 `state_schema_version`；`scoring_version` 与 `rule_id` 保持独立含义。只有存在可追溯持久化来源时才返回配置版本，不得从 Manifest 推断或用笼统 `data_version` 混写。
+4. **审计投影**：普通健康查询只按允许列表返回当前业务 `state` 与获准版本字段；不得返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json` 或自由文本 `reason`。审计查询若有需求另设授权入口。
+5. **提交态新鲜度**：只依据同一只读事务可见的已提交行、序号、状态或持久化时间；不得读取 `private_truth` 或用真值注入时间推导。跨库查询须分别记录每库 `as_of`，未实现共享快照前不得宣称全局原子新鲜度。
+6. **正式只读路径**：请求层使用现有 `connect_readonly()` 打开已存在数据库，不得调用可写连接、初始化 Schema、执行 DDL/DML，或在请求路径运行会写统计信息的 `ANALYZE`。
+7. **查询计划与索引**：针对冻结后的真实 SQL、当前一 run 一库拓扑和代表性数据分别保存 `EXPLAIN QUERY PLAN`、冷/热态与统计信息证据，再决定沿用现有索引、在维护阶段生成统计、另立索引变更或引入聚合读模型。
+
+C4 在 [#133 合入后复核](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133#issuecomment-6762781638) 中使用单 SQLite、单 run、多 device、40 万条 `alarms` 的合成探针；未 `ANALYZE`、已 `ANALYZE`、再加复合索引三种状态同时改变了统计与索引条件。该结果只提示查询计划可能敏感，不代表现行一 run 一 device / 每 run 一库的生产性能，更不预定新增复合索引。
 
 任一错误/越权/跨权限缓存泄漏、client/server/request-log 计数不守恒、服务崩溃/OOM/数据损坏、SQLite 锁错误持续增长、压测端饱和或统计/缓存状态不可证明，均停止升档并留存失败。
 
-### 5.3 变更与保密边界
+### 5.4 变更与保密边界
 
 - 本节不改变 R04/N01 百万点生产、R07/N02 与 #56/#9 独立效果验收、Schema/真值隔离、事务或双 Linux既有口径。
 - 现有成员模块属地不因本节改变；新增 query/service/auth 路径由 A/B1 承接，若需修改现有 storage、analysis、CLI 或 scripts，另开实现 Issue 并取得对应 Review。
-- `syc` 与 `test` 的“一一对应”术语尚未确认，不自行解释或写入追踪矩阵。
+- `syc` 为 `src` 的笔误；`src` 与 `test` 的对应关系按 B1 复核记录，不再作为待定术语。
 - 外部课堂参考项目及第三方相关信息不进入公开仓库、fixture 或日志；概要/详细设计、TOGAF 映射和 Windows/Linux 部署材料只从 G15 自有已审事实派生。
 - 关闭 #133 或合入 ADR/需求文档只表示方案可继续评审，不表示服务已实现、阈值已冻结或十万级已通过。

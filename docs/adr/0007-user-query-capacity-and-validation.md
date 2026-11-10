@@ -1,8 +1,8 @@
 # ADR-0007：用户健康查询入口、十万级口径与容量验证
 
 - 状态：**提案；十万不同用户同时真实查询的主目标已定；同步/统计/SLO/资源未冻结；未实现查询服务；未执行高负载**
-- 关联：[Issue #133](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133)、#2、#9、#56
-- 审阅基线：main `23d8592839cd4ad8f0e6006464e10efe3afa6234`
+- 关联：[Issue #133](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133)、[#135](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/135)、#136、#2、#9、#56
+- 审阅基线：main `6437130ab4898921515ca2cec3a5db25c8e234ca`；#137 当前精确 head 另见 PR
 - 来源边界：组长基于课堂侧重点追加的工程工作假设，不是教师正式评分细则或权重
 - 负责人：A 与 B1；必要非作者/公共契约 Review：C4；最终门禁：A（不自批）
 
@@ -54,7 +54,7 @@ G15 当前是一个仓库内的模块化单体，以 CLI 驱动离线生产、�
 
 分别报告客户端与服务端的不同用户在途峰值、发生时刻、排队/执行组成及采样方法。只有某阶段的不同用户峰值真实达到 100,000，才能声称该阶段达到 100k；同步发起不能自动推导服务端已达到同样峰值。重试、重定向、重复请求、连接数和累计请求均不能补足用户数。具体同步窗口、统计区间、时钟误差和最终判定阶段由 Review 精确冻结。
 
-`syc` 与 `test` 的“一一对应”术语尚未确认，本 ADR 不自行解释。
+`syc` 为 `src` 的笔误；`test` 与 `src` 的目录对应关系按 B1 复核记录，不再作为待定术语。
 
 ## 4. 主场景 F 与补充场景 H
 
@@ -84,22 +84,172 @@ X_closed ≈ N / (think_time + mean_response_time)
 现行 `benchmark_1m.yaml` 为 1,000,000 点、`chunk_points=102,400`，`consumer.yaml` 为 `window_points=256`、`incomplete_window=drop`。9 个完整分片各有 400 窗，末片 78,400 点有 306 个完整窗并丢 64 点，因此每 run 为 `floor(1,000,000 / 256) = 3,906` 个完整窗口。候选容量数据：
 
 - D0：10 设备 × 100 窗口，用于正确性；
-- D1：1,000 设备 × 3,906 窗口，共 3,906,000（390.6 万）行；
-- D2：10,000 设备 × 3,906 窗口，共 39,060,000（3,906 万）行；候选按每设备一个此规模 run、10 用户/设备授权。
+- D1：1,000 设备 × 3,906 窗口，共 3,906,000（390.6 万）行，按现行布局分散在 1,000 个 run 数据库；
+- D2：10,000 设备 × 3,906 窗口，共 39,060,000（3,906 万）行，按现行布局分散在 10,000 个 run 数据库；候选为 10 用户/设备授权。
 
-用户/设备比、历史 run、告警密度、响应大小、保留周期和分页上限未冻结。D2 在磁盘、建库时间和 RSS 未测前不得称为可行。
+现行 Manifest 契约是一 run 一 device，且每个 run 使用独立 `results.sqlite`；因此 D1/D2 是跨 1,000/10,000 个数据库汇总的 `feature_windows` 规模，每库每 run 约 3,906 行，告警、状态与历史 run 另计。历史 run 会继续增加数据库数量。若改成共享读模型或单库多设备布局，须另审 Schema、迁移、目录/聚合策略和代表性查询计划。
+
+用户/设备比、历史 run、告警密度、响应大小、保留周期和分页上限未冻结。D2 在磁盘、建库时间、路由成本和 RSS 未测前不得称为可行。
 
 实现前必须冻结：
 
 1. 身份来源及 user—角色/租户—device—run 授权映射；
 2. 401/403/404 是否隐藏资源存在性；
 3. 独立 SQL/oracle 与每个响应的正确性对账；
-4. 数据提交后的可见性、新鲜度和版本字段；
-5. 缓存 key 必含权限域、查询参数和数据版本，拒绝结果不得共享泄漏；
-6. OS/SQLite 冷缓存、应用冷缓存和稳定热态的可重复准备/清理；
-7. 缓存容量、失效、逐出与禁用后的基线。
+4. 稳定分页：冻结查询范围、确定性全序、游标字段、页大小、方向及翻页期间已提交数据的可见性；窗口可评审 `start_seq`，告警须用 `start_seq + rule_id` 或等价唯一键打破并列，不以仅 OFFSET 冒充稳定游标；
+5. 具名版本：区分 Manifest `schema_version=2.0`、配置契约 `SCHEMA_VERSION=1.0`、特征信封 `features_version`、状态信封 `state_schema_version`，并保持 `scoring_version` / `rule_id` 独立；没有持久化来源的配置版本不得推断或返回；
+6. 提交态新鲜度：只依据只读事务可见的已提交行、序号、状态或持久化时间，不读 `private_truth`、不以真值注入时间推导；跨库查询记录各库 `as_of`，未实现共享快照前不宣称全局原子新鲜度；
+7. 响应投影：普通健康查询只按允许列表返回业务 `state` 与获准版本字段，不返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json` 或自由文本 `reason`；
+8. 授权扇出：每用户/角色/租户可见的 device/run 数量与上限、总映射规模、热点分布、历史 run 及跨 run 路由/分页上限；
+9. 正式只读路径：使用现有 `connect_readonly()` 打开已存在数据库，不调用可写连接、不初始化 Schema、不执行 DDL/DML，也不在请求路径运行会写统计信息的 `ANALYZE`；
+10. 查询计划与索引：对冻结后的真实 SQL、现行一 run 一库拓扑及代表性 D0/D1/D2 分别保存 `EXPLAIN QUERY PLAN`、冷/热态和统计信息证据，再决定沿用现有索引、在维护阶段生成统计、另立索引变更或引入聚合读模型；不在证据前预定答案；
+11. 缓存 key 必含权限域、查询参数和具名版本/可见性边界，拒绝结果不得共享泄漏；
+12. OS/SQLite 冷缓存、应用冷缓存和稳定热态的可重复准备/清理；
+13. 缓存容量、失效、逐出与禁用后的基线。
+
+C4 在 [#133 合入后复核](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/133#issuecomment-6762781638) 中使用单 SQLite、单 run、多 device、40 万条 `alarms` 的合成探针。**同一台机器、同一数据集、同一循环次数 N=50** 的三态对照为：未 `ANALYZE` 约 23.575 秒、已 `ANALYZE` 约 0.020 秒、已 `ANALYZE` 且补复合索引约 0.013 秒（同批对照，绝对值随机器负载浮动，仅用于说明查询计划对统计信息的敏感性，不作为生产基线）。C4 已更正其早先跨批次引用（48.03 秒为 200 次口径），不得再引用“约 3700 倍”跨批次倍差。该探针拓扑不同于现行一 run 一 device / 每 run 一库，也不得据此冻结新增索引。
 
 任一错误结果、越权或跨权限泄漏均为零容忍停止条件。
+
+### 5.1 #135 认证与授权候选契约（待 C4 非作者复核）
+
+> 来源：[B1 建议 6763623979](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/135#issuecomment-6763623979) 与 [A 待评审裁定 6764033066](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/135#issuecomment-6764033066)。这是 A/B1 提交 Review 的候选契约，**尚未取得 C4 对本节的批准，不是最终冻结**。
+>
+> 本节只定义契约，不生成、签发、提交或配置任何密码、bearer token、HMAC 密钥或其他凭据。所有示例都只使用不可运行的 `<PLACEHOLDER>`。
+
+#### 5.1.1 信任边界与职责
+
+认证（确认主体）与授权（主体可访问哪些 run/device）必须分开：
+
+1. 查询入口只从 `Authorization: Bearer <BEARER_TOKEN>` 接收 bearer；不得从 URL query、请求正文或 cookie 接收，也不得接受客户端另传 `sub` 覆盖 token 主体。
+2. 内部签发器只接受可信 fixture/bootstrap 已确认的主体并签发短期 token；第一版不公开 `login` 或 token 签发网络端点。fixture 注入“已认证主体”只证明测试边界，不等于已实现生产身份校验。
+3. 查询服务先严格验签和校验主体/时效，再以 `sub` 查询静态 YAML 授权快照；run/device 权限、数据库路径和角色列表均不得写入 token。
+4. YAML 只负责授权，不能证明身份，也不得保存密码、token 或签名密钥。
+5. 生产签发者如何验证原始凭据、TLS 终止位置、运行时密钥供应和轮换尚未冻结；这些事项解决前，只能声明 D0 测试/开发认证，不得声明生产登录已完成。
+
+bearer 仅凭持有即可使用，非 loopback 部署必须通过 TLS 或受信 TLS 终止；传输和存储均不得泄露凭据。参考 [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750.html)。
+
+#### 5.1.2 短期 bearer 格式候选
+
+仅允许以下占位结构；这是项目自定义 token，**不得称为 JWT**：
+
+```text
+g15q1.<BASE64URL_CANONICAL_CLAIMS>.<BASE64URL_SIGNATURE>
+```
+
+- 服务端固定 `HMAC-SHA-256`；token 不携带、也不能选择 `alg`。格式段固定为 `g15q1`，claims 中 `typ="g15-query-access"`、`ver="1"`；具体 `iss` 与 `aud` 值仍待 Review。
+- claims 只允许 `typ`、`ver`、`iss`、`aud`、`sub`、`iat`、`exp`、`jti`。`iss` / `aud` / `sub` / `jti` 必须为非空、区分大小写、长度受限的 ASCII 标识；`jti` 由服务端 CSPRNG 生成，至少 128 bit 随机量，但只作审计关联，不提供防重放保证。
+- 签发端用 `json.dumps(claims, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)` 产生唯一 ASCII JSON 字节，再使用**无 `=` padding** 的 RFC 4648 base64url；拒绝缺失、重复或未知字段、非对象 JSON、浮点/布尔时间、非规范 JSON/base64url、非法字符和超过候选 4,096 bytes 的 token。
+- 签名输入为原始 `g15q1.<BASE64URL_CANONICAL_CLAIMS>` ASCII 字节；必须校验完整 32-byte HMAC-SHA-256 digest，不允许截断。签名比较使用 `hmac.compare_digest`，不得用普通 `==`。[Python `hmac` 文档](https://docs.python.org/3/library/hmac.html#hmac.compare_digest) 同样建议用 `compare_digest` 降低时序分析风险。
+- `iat` / `exp` 使用服务端写入的 UTC POSIX 整秒；必须 `exp > iat`。候选默认 TTL 为 600 秒、硬上限 900 秒、服务器时钟容差 ±30 秒，均待 C4 复核，不是冻结门槛。
+- 校验顺序为：严格检查唯一 header、三段数量、总长度和 ASCII/base64url 字符集 → 校验固定 `g15q1` → 解码 signature 并要求恰为 32 bytes → 对原始前两段计算 MAC 并 `compare_digest` → MAC 通过后再解码/严格解析 JSON、拒绝重复键，并重编码确认 canonical payload 段逐字节一致 → 最后校验 typ/ver/issuer/audience/主体和时间。验签前解析出的内容一律视为不可信输入。
+- 当前签名 key 只能由待审的运行时秘密来源注入，必须至少 32 bytes 高熵；短 key 或缺 key 时服务拒绝启动。key 不得出现在仓库、YAML、静态 fixture 数据、日志、URL、CLI 参数或默认值中。未来测试 fixture 只能在进程内注入临时测试值，不能把该值提交为凭据；不得回退到硬编码值。本 PR 不创建该测试值。
+- bearer 签名 key 与分页 cursor 的完整性 key 必须目的隔离；本节不生成或选择任何 key。
+
+#### 5.1.3 授权 YAML 候选
+
+授权文件只展示结构占位符：
+
+```yaml
+authz_schema_version: "1"
+policy_version: "<OPAQUE_POLICY_VERSION>"
+subjects:
+  "<OPAQUE_SUBJECT_ID>":
+    actor_ref: "<OPAQUE_ACTOR_REF>"
+    permission_domain: "<PERMISSION_DOMAIN>"
+    allow:
+      - run_id: "<RUN_ID>"
+        device_id: "<DEVICE_ID>"
+```
+
+加载与使用规则：
+
+- 使用安全加载并严格校验：拒绝未知/重复键、YAML tag/merge/alias、空或非字符串主体、通配符、重复授权对及大小写模糊匹配；任何错误都拒绝整个快照并 fail closed，不做部分加载。
+- `sub` 必须精确匹配非 PII 的稳定主体 ID；同一条目还必须提供唯一、非 PII 且不等于 raw `sub` 的 `actor_ref`，日志只使用该值。`policy_version` 与 `permission_domain` 也必须是非 PII 的不透明标识。姓名、邮箱和真实个人标识不得进入授权文件或日志；禁止用无盐 `hash(sub)` 伪装匿名化。
+- D0 每主体最多授权 10 个不同 device；每条授权项是一对 `run_id + device_id`，每次请求只查一对。允许同一 device 存在多个历史 run，但第一版不做跨 run 查询、排序或聚合；超出 device 上限属于授权快照加载失败，不映射成单次请求的 401/404。
+- 客户端不得提交数据库路径。服务将 `run_id` 映射到受控 run 根目录，解析后必须仍位于根目录内，并核对 Manifest 的 `run_id/device_id` 与请求一致；拒绝绝对路径、`..` 和符号链接逃逸。
+- 授权快照第一版只在启动时加载；变更后需受控重启。每一页请求仍重新认证并按当前快照授权，token 不缓存权限结论。热加载与失败回滚另行评审。
+
+#### 5.1.4 外部错误与资源隐藏
+
+| 条件 | 外部结果 | 边界 |
+|---|---|---|
+| Authorization 缺失/重复、scheme 错、格式/签名/claim 错、过期或时钟越界 | 401 | 通用 `WWW-Authenticate: Bearer`；正文不区分具体失败原因 |
+| token 有效但主体无授权、授权主体不存在、run/device 不存在或 Manifest 不匹配 | 404 | 状态与正文结构一致；先授权再访问数据库，不泄露资源是否存在 |
+| 参数或 cursor 结构无效且不涉及权限域泄漏 | 400（候选） | 通用参数错误；具体错误 schema 待 C4 复核 |
+| 有效且获授权 | 进入查询 | 第一版不引入 403 |
+
+内部日志可记录有限的枚举原因码，但不得记录 Authorization、token、签名、raw `sub` 或资源详情；本契约不承诺 404 恒定耗时，只冻结外部状态与正文同构。
+
+#### 5.1.5 查询、分页、版本与只读边界
+
+- 第一版只支持单 run / 单 device / 每 run 一库；跨 run、共享目录、聚合读模型和全局快照不在 #135。
+- 每一页都重新验 token、查 YAML 并用 `connect_readonly()` 打开已存在数据库；不得初始化 Schema、执行 DDL/DML/`ANALYZE`，缺库也不得创建文件。
+- 窗口按 `start_seq DESC`；告警按 `start_seq DESC, rule_id DESC`。不得用仅 OFFSET 分页。
+- 窗口与告警使用两个独立 cursor。首屏分别记录 `window_high_water_start_seq` 与 `alarm_high_water=(start_seq, rule_id)`；后续页只返回对应高水位以内的行。每个 cursor 必须绑定 `cursor_version`、`actor_ref`、`policy_version`、权限域、查询类型、run/device、排序、`page_size`、高水位和上一页最后一键；窗口最后一键为 `start_seq`，告警为 `(start_seq, rule_id)`。结构损坏返回候选 400，跨主体/权限域/scope 使用统一 404。
+- descending keyset 谓词必须可复现：窗口后续页使用 `start_seq < last_start_seq` 且不超过窗口高水位；告警使用 `start_seq < last_start_seq OR (start_seq = last_start_seq AND rule_id < last_rule_id)`，且不超过告警高水位。稳定分页依赖当前 `feature_windows` / `alarms` 对已处理 run 的追加式写入；若未来允许回填更小排序键、更新或删除，必须使旧 cursor 失效或另行冻结快照机制。
+- cursor 是不可信输入且必须具备完整性保护；编码、长度和目的隔离 key 的来源仍待 C4 复核。每页授权重查不可由 cursor 替代。
+- 候选 `page_size` 默认 50、最大 100，待 C4 复核。
+- 版本来源必须逐项具名：`manifest_schema_version` 来自目标数据库 `runs.schema_version` 的实际持久化值，不得硬编码；当前写端为 2.0，兼容读入可能为 1.0。`features_version` 来自每条 `features_json`；`state_schema_version` 来自 `state_json` 信封；`scoring_version` 与 `rule_id` 不是 Schema 版本。配置版本没有可追溯持久化来源时必须省略，不得硬编码 `1.0` 或从 Manifest 推断。
+- 健康查询可返回契约允许的窗口/告警业务字段；状态部分只能从 `state_json.state` 做允许列表投影并附获准版本字段。不得返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json`、自由文本 `reason` 或 `private_truth`。
+- 新鲜度只依据当前只读事务可见的已提交序号/状态/持久化时间；服务观察时间不得冒充数据生成时间。
+
+#### 5.1.6 失效、撤销与重放边界
+
+- 第一版是无状态 bearer：同一有效 token 在 `exp` 前可重放；`jti` 只供审计关联，不自动阻止重放。短 TTL、issuer/audience 绑定、TLS 与禁止记录凭据只能降低风险，不能宣称已消除。
+- 第一版没有 refresh token、逐 token 撤销、denylist、会话或 replay cache。若这些成为要求，须另立契约与状态存储 Review。
+- 第一版只支持单一当前签名 key；**替换运行时 key 后**受控重启会使全部旧 token 失效，仅重启而沿用同 key 不会失效。不能声称支持单 token 紧急撤销。
+- 移除 YAML 主体并重启后，该主体即无授权；其未过期 token 仍可能通过认证，但所有资源请求统一 404。
+- 生产签发/bootstrap、密钥来源与轮换、TLS 终止、紧急撤销及 cursor 完整性机制均是生产声明前的阻断未决项。
+
+#### 5.1.7 脱敏追踪占位样例
+
+服务端生成 `request_id`；第一版 `trace_id` 与其相同并贯穿 `server_received → authn_checked → authz_checked → db_opened → query_started → query_completed → response_completed`，拒绝路径使用 `rejected`。ID 由 UTC 前缀与安全随机片段组成，不接受客户端值作为权威 ID；`actor_ref` 只取自已校验授权快照的独立字段。样例不含真实数据：
+
+```json
+{
+  "timestamp_utc": "<UTC_TIMESTAMP>",
+  "request_id": "<REQUEST_ID>",
+  "trace_id": "<TRACE_ID>",
+  "actor_ref": "<OPAQUE_ACTOR_REF>",
+  "permission_domain": "<PERMISSION_DOMAIN>",
+  "stage": "<STAGE>",
+  "query_shape": "single_run_single_device_health_v1",
+  "manifest_schema_version": "<MANIFEST_SCHEMA_VERSION>",
+  "features_version": "<FEATURES_VERSION>",
+  "state_schema_version": "<STATE_SCHEMA_VERSION>",
+  "result": "<STATUS>"
+}
+```
+
+禁止记录 token、Authorization、签名/HMAC 摘要、密码、raw `sub`、真实姓名、`private_truth`、原始 run/device、cursor、reset 审计字段或自由文本 `reason`。401/404 对外只返回统一错误标识与 `request_id`。
+
+#### 5.1.8 最低测试矩阵
+
+| 组别 | 必须覆盖 | 预期 |
+|---|---|---|
+| header/格式 | 缺失、重复、错误 scheme、分段/base64/JSON 损坏、重复/未知 claim、超长 | 统一 401；日志无凭据 |
+| 签名/claims | payload/签名篡改、错 key、错 typ/ver/iss/aud、空 sub、缺 claim | 统一 401；验签前不信任主体 |
+| 时间 | 过期、未来 iat、exp≤iat、TTL 超上限、±30 秒边界 | 使用可注入时钟，不靠真实等待；按候选规则确定性通过/拒绝 |
+| 授权/隐藏 | 允许、主体无映射、越权、资源不存在、Manifest 不匹配 | 允许路径正确；其余同结构 404；无 403 |
+| YAML/路径 | 坏 YAML、重复/未知键、通配符、>10 device、绝对路径、`..`、符号链接逃逸 | 启动 fail closed；不部分加载、不创建数据库 |
+| 生命周期 | 同 token 在 TTL 内重复使用、过期、整体换 key | 重放按已知风险留证；过期/旧 key 拒绝 |
+| 分页 | 告警并列、翻页间追加、cursor 损坏/跨主体/跨 scope、翻页间撤权 | 无重复错序；新行不越过高水位；每页重查授权 |
+| 数据/只读 | 响应对独立 SQL/oracle；缺库；检查文件/Schema/业务行 | 结果一致；缺库不创建；查询路径零业务写入 |
+| 版本/投影 | 各实际持久化版本来源、配置版本缺来源、reset 审计字段与真值扫描 | 返回实际版本并省略无来源 config 版本；敏感字段不可达 |
+| trace | 全阶段 ID、401/404、日志扫描 | ID 可关联；无 token、PII、真值或审计原文 |
+
+#### 5.1.9 Review 前仍未决定
+
+1. `iss` / `aud` 的精确值、TTL/硬上限/时钟容差；
+2. 生产身份凭据验证与 token 签发/bootstrap 流程；
+3. 运行时密钥供应、TLS 终止、轮换、紧急撤销与是否需要 replay cache；
+4. cursor 编码、长度、完整性算法及独立 key 来源，以及窗口/告警双高水位的确切编码；
+5. 授权文件与受控 run 根目录的配置位置、热加载/重启策略，以及 `actor_ref` / `policy_version` 的创建与轮换治理；
+6. 外部错误正文 schema、HTTP 路径/方法和 `page_size`；
+7. D0 之后的授权扇出、历史 run、跨库路由与聚合读模型。
+
+以上事项经 C4/B1 对当前精确 head 复核并由 A 记录后，才可称为冻结；此前实现只能针对获批的 D0 子集，不得宣称生产认证、即时撤销、防重放或十万级能力。
 
 ## 6. 架构选项
 
@@ -189,12 +339,15 @@ X_closed ≈ N / (think_time + mean_response_time)
 Review 尚须决定：
 
 1. 主场景 F 的同步发起窗口、客户端/服务端在途状态边界、采样时钟、统计区间与判定阶段；H 仅为补充场景；
-2. 第一版仅查询单 run/device，还是需要共享目录/跨 run；
-3. 身份/授权模型及资源隐藏语义；
+2. 第一版仅查询单 run/device，还是需要共享目录/跨 run；若跨库，如何表达各库 `as_of` 与非全局原子快照；
+3. 身份/授权模型、资源隐藏语义、授权扇出上限、热点分布与跨 run 路由；
 4. application query 与 transport 边界、依赖、进程/连接模型；
-5. D0/D1/D2、告警密度、响应大小、缓存策略与 SLO；
-6. 低负载通过后允许的资源/拓扑及何时授权十万级；
-7. `syc` 的准确术语和与 `test` 的关系；
-8. 概要/详细设计、TOGAF 映射和 Windows/Linux 部署材料如何从 G15 自有事实派生。
+5. 确定性排序、稳定游标、提交态可见性与分页期间新提交数据的语义；
+6. Manifest/config/feature/state 四类版本字段的名称、来源与缺失行为，以及健康响应的审计字段允许列表；
+7. 正式 `connect_readonly()` 路径、代表性真实 SQL、D0/D1/D2 查询计划与逐表索引/统计维护决策；
+8. D0/D1/D2、告警密度、响应大小、缓存策略与 SLO；
+9. 低负载通过后允许的资源/拓扑及何时授权十万级；
+10. （已确认，不再待定）`syc` 仅为 `src` 的笔误；`src` 与 `test` 的对应关系按 B1 复核记录。
+11. 概要/详细设计、TOGAF 映射和 Windows/Linux 部署材料如何从 G15 自有事实派生。
 
 在这些事项获得真实 Review 前，本 ADR 保持提案；不得把候选数字、文档或空接口写成冻结标准或验收成绩。
