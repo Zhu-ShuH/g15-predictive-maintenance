@@ -16,7 +16,7 @@
 | C4 | 数据接口与生产入口 | `pipeline/schema.py`、`serialization.py`、`producer.py`、`docs/interface.md` | Manifest/NPZ 契约稳定、原子落盘、错误输入被拒收 | GLM 5.3 |
 | B2 | 下游算法技术负责人 | `analysis/features.py`、`health.py`、`alarms.py` | 函数有测试，健康评分 0–100，受控故障检出 | GLM 5.3 |
 | C2 | 消费、数据库与恢复 | `pipeline/consumer.py`、`storage/` | 重复消费幂等，kill 重启可恢复 | GLM 5.3 |
-| C5 | 独立验证、报告与测试汇总 | `tests/integration/`、`tests/fault_injection/`、`reporting/`、`docs/test_plan.md`、`docs/test_report.md` | 汇总全员至少 15 单测、20 用例；独立匹配真值、报告误报与性能证据 | GLM 5.3 |
+| C5 | 独立验证、报告与测试汇总 | `tests/integration/`、`tests/fault_injection/`、`reporting/`、`docs/test_plan.md`、`docs/test_report.md` | 汇总全员至少 15 单测、20 用例；核对报告层真值对账结果、误报与性能证据 | GLM 5.3 |
 | C6 | 环境、部署、运维、交付文档 | `scripts/`、`docs/deployment.md`、`docs/operations.md`、README 协助 | Ubuntu/RHEL 实际克隆部署、运行手册 | GLM 5.3 |
 
 **两条指导链**：B1 负责指导 C1/C3 的仿真与配置配合；B2 负责指导 C2 的数据分析/存储配合；A 与 C4 审核公共数据接口，并协调 C3 的 CLI；A 审核 C5 的验收口径和 C6 的双 Linux 证据。每位实现者写并运行本模块测试，C5 负责独立集成验证和全组证据汇总。代码所有权表示首要责任，不意味着其他成员可以绕开 PR 审查直接修改。九人都必须有真实有意义的提交、可讲述的输入输出与测试。
@@ -168,7 +168,7 @@ def extract_basic_features(signal: NDArray[np.float64]) -> SignalFeatures:
 
 ### 5.3 故障注入和恢复策略
 
-**业务故障**：程序从原始数据计算特征并产生报警，验证器单独用真值匹配；不得让下游直接读取注入位置。**坏文件**：改动已生成的一个分片字节，读取应产生 SHA 错误，不得写入部分可信结果。**进程崩溃**：在未消费完时 kill，重启读取 `processed_chunks` 并跳过已经提交的分片；所有写入和游标必须同一事务，校验最终条数和告警数。再补配置不合法/磁盘无权限作为可选增强。
+**业务故障**：程序从原始数据计算特征并产生报警，报告层（`reporting.builder` / `reporting.metrics`）单独用真值对账；不得让下游直接读取注入位置。**坏文件**：改动已生成的一个分片字节，读取应产生 SHA 错误，不得写入部分可信结果。**进程崩溃**：在未消费完时 kill，重启读取 `processed_chunks` 并跳过已经提交的分片；所有写入和游标必须同一事务，校验最终条数和告警数。再补配置不合法/磁盘无权限作为可选增强。
 
 ### 5.4 数据质量和统计口径
 
