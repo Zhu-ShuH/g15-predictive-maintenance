@@ -9,7 +9,7 @@
 教师硬指标要求给出"受控故障检出率"，并且验证必须独立。本计划的独立性由三条约束保证：
 
 1. 只有 `g15.reporting` 读 `private_truth/faults.json`；`simulation`、`pipeline`、`analysis`、`storage` 全程不读真值（见 §6.4 的可证伪用例）。
-2. 匹配由验证器按 `device_id` 与事件区间自行计算，被测代码不产出 `event_id`，因此"检出"不是被测方自报的。
+2. 匹配由报告层（`reporting.builder` / `reporting.metrics`）按 `device_id` 与事件区间自行计算，被测代码不产出 `event_id`，因此"检出"不是被测方自报的；`reporting.verifier` 与 `g15 verify` 只做完整性校验，不读真值。
 3. 验证 seed `20261016` 不参与阈值调参：`configs/health_rules.yaml` 在验证前已提交并记录摘要（§2），本轮未修改任何规则、阈值或测试期望。
 
 ## 2 被测身份与配置摘要
