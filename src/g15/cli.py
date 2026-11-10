@@ -352,6 +352,9 @@ def _print_reset_audit(result: AlarmResetResult, database_path: Path) -> None:
         f"{len(result.previous_state_json.encode('utf-8'))}"
     )
     print(f"archived_reset_count={result.archived_reset_count}")
+    print(f"audit_sequence={result.audit_sequence}")
+    print(f"audit_previous_hash={result.audit_previous_hash or 'null'}")
+    print(f"audit_event_hash={result.audit_event_hash}")
     print(
         "new_state_consecutive_breaches="
         f"{result.new_state.consecutive_breaches} "
@@ -359,6 +362,7 @@ def _print_reset_audit(result: AlarmResetResult, database_path: Path) -> None:
         f"new_state_alarm_windows={result.new_state.alarm_windows}"
     )
     print("tables_untouched=processed_chunks,feature_windows,alarms,runs")
+    print("audit_table=audit_events append_only=true")
     print(f"database={database_path}")
 
 

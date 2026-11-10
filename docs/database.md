@@ -2,15 +2,16 @@
 
 > 负责人：C2（@zty-78）｜Issue #8｜状态：随 #8 实现同步，`docs/interface.md` §9 仍是权威基线。
 >
-> 本文件**不新增也不修改** §9 的表结构。§9 的五张表、字段与主键以 A 同步后的版本为准；
-> 本文只说明 C2 的实现如何落进那些表，以及两个 JSON 列的内部格式。
+> 本文件不单方面修改 §9。五张业务表及 Issue #143 新增的独立审计表，均以
+> `docs/interface.md` §9 和 ADR-0008 的评审版本为准；本文说明 C2 的实现、
+> 两个 JSON 列的内部格式和应用级只增审计边界。
 > **若 §9 与本文冲突，以 §9 为准**，并请 A 知会以同步本文。
 
 ---
 
-## 一、五张表
+## 一、五张业务表与一张审计表
 
-§9 的五张表由 `src/g15/storage/database.py` 的 `SCHEMA_STATEMENTS` 原样创建。
+§9 的表由 `src/g15/storage/database.py` 的 `SCHEMA_STATEMENTS` 原样创建。
 字段不增不减，唯一添加的是两个索引（`feature_windows(run_id, start_seq)` 与
 `alarms(run_id, start_seq)`），用于报告侧按位置查询；§9 允许核心表扩展字段与索引，
 且这两个索引不改变任何主键或外键语义。
@@ -22,6 +23,25 @@
 | `feature_windows` | `(run_id, device_id, start_seq)` | 每个窗口的特征与健康分 |
 | `alarms` | `(run_id, device_id, rule_id, start_seq)` | 告警行 |
 | `alarm_states` | `(run_id, device_id, rule_id)` | 跨分片的告警状态 |
+| `audit_events` | `event_sequence` | 高风险操作的应用级只增审计链；不属于消费结果 |
+
+### `audit_events`：只增与哈希链
+
+`audit_events` 首版只记录真实 `reset-alarms`。每次记录包含 UTC、动作、
+run/device/rule、脱敏来源 `local-cli`、理由、最小 payload、前驱哈希和当前哈希。
+`BEFORE UPDATE` / `BEFORE DELETE` 触发器拒绝普通写连接改删历史；
+`BEFORE INSERT` 守卫只允许严格的下一序号、正确尾哈希和全新事件哈希，阻断
+`INSERT OR REPLACE`、序号复用、跳号与错误前驱。
+
+仓库的 `verify_audit_chain() -> int` 按 `event_sequence` 顺序重算
+SHA-256 链；成功返回已校验事件数，序号断档、前驱不一致、payload 变化或
+事件哈希不符均抛 `AuditChainError`。状态 UPDATE 和审计 INSERT 位于同一个
+`BEGIN IMMEDIATE` 事务，审计写失败会把状态更新一起回滚。
+
+这不是 WORM 或外部签名日志：有文件/DDL 权限者仍可移除触发器或替换整个库。
+哈希链只能使未同步重算的内部改动可检；因为没有独立尾锚，删除最后一条或整段
+尾缀不可检。威胁边界、被否决方案和未来外部审计方向见
+[ADR-0008](adr/0008-append-only-audit.md)。
 
 ### `runs.status` 的语义：manifest 快照，**不是**「已消费完」
 
@@ -69,7 +89,7 @@
 |---|---|---|---|
 | `connect(path)` | 消费端写入 | 是（建 schema、写行） | 创建 |
 | `connect_readonly(path)` | 只读观察（报表、测试轮询） | **否** | 报错，不创建 |
-| `initialize_database(conn)` | 建 §9 五张表 | 是 | — |
+| `initialize_database(conn)` | 建 §9 业务表、审计表、触发器与索引 | 是 | — |
 
 `connect_readonly()` 用 `file:...?mode=ro` URI 打开既有文件：既不创建文件，
 也不改日志模式，更不与写者抢写锁。
@@ -452,6 +472,11 @@ True；而 `mode=ro` 连接在**无第二持有者**的情况下写库，同样�
 
 **「提交成功才采纳内存态」是回滚后不丢数据的关键**：commit 失败或进程被杀时，
 内存里的新状态一并作废，下次从库里已提交的 `state_json` 重建。
+
+显式 reset 使用另一笔短事务，但遵守同一原子原则：旧行 SELECT、归档、
+`alarm_states` UPDATE、`audit_events` INSERT 必须全部位于同一
+`BEGIN IMMEDIATE` / COMMIT 之间。若审计触发器、外键、磁盘或提交失败，状态和
+审计一起回滚，不能留下“状态已清空但审计缺失”的半结果。
 
 消费启动时，初始状态**永远来自库**（`alarm_states`），不来自任何进程内残留。
 

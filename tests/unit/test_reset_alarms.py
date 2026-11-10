@@ -1,10 +1,8 @@
-"""Contract tests for the public ``reset-alarms`` entry (Issue #127).
+"""Contract tests for the public ``reset-alarms`` entry (Issues #127/#143).
 
-These are the 16 cases of C2's proposal section 7 plus the two cases A added
-in ruling 8 on #127, plus two cases pinning the single-transaction boundary
-(A's ruling 7 / C4-7): one traces BEGIN/SELECT/UPDATE/COMMIT ordering and one
-injects a competing writer between the read and the write. Every case uses a
-real run directory produced by the project's producer and a real SQLite
+The original reset contract cases remain alongside the append-only audit,
+hash-chain, migration and single-transaction cases added for #143. Every case
+uses a real run directory produced by the project's producer and a real SQLite
 database; the storage layer is never mocked.
 """
 
@@ -29,6 +27,7 @@ from g15.pipeline.consumer import (
 from g15.pipeline.producer import produce_run
 from g15.storage.database import DatabaseError, connect
 from g15.storage.repository import (
+    AuditChainError,
     ConsumptionRepository,
     StateCompatibilityError,
     StorageError,
@@ -175,6 +174,21 @@ def _set_raw_text(database_path: Path, text: str) -> None:
         connection.close()
 
 
+def _audit_rows(database_path: Path) -> list[tuple[Any, ...]]:
+    """Return the stable public columns of the append-only audit chain."""
+    connection = sqlite3.connect(str(database_path))
+    try:
+        return connection.execute("""
+            SELECT event_sequence, event_time_utc, action, run_id, device_id,
+                   rule_id, actor_ref, reason, payload_json, previous_hash,
+                   event_hash
+            FROM audit_events
+            ORDER BY event_sequence
+            """).fetchall()
+    finally:
+        connection.close()
+
+
 def _snapshot(database_path: Path) -> dict[str, list[tuple[Any, ...]]]:
     """Full contents of the four tables a reset must never touch."""
     connection = sqlite3.connect(str(database_path))
@@ -240,6 +254,9 @@ def test_reset_returns_a_complete_audit_and_archives_the_old_state(
     assert result.archived_reset_count == 0
     assert result.new_state.consecutive_breaches == 0
     assert result.new_state.active_level is None
+    assert result.audit_sequence == 1
+    assert result.audit_previous_hash is None
+    assert len(result.audit_event_hash) == 64
 
     payload, anchor = _row(_database(run_dir))
     assert payload["reset_event"]["reason"] == result.reason
@@ -248,6 +265,26 @@ def test_reset_returns_a_complete_audit_and_archives_the_old_state(
     assert payload["reset_event"]["previous_state_schema_version"] == "1"
     assert anchor == original_anchor  # the anchor is deliberately kept
     assert decode_state_json(_raw_text(_database(run_dir))).consecutive_breaches == 0
+
+    rows = _audit_rows(_database(run_dir))
+    assert len(rows) == 1
+    assert rows[0][0] == result.audit_sequence
+    assert rows[0][2] == "alarm_state.reset"
+    assert rows[0][3:6] == (result.run_id, result.device_id, result.rule_id)
+    assert rows[0][6] == "local-cli"
+    assert rows[0][7] == result.reason
+    assert rows[0][9] is None
+    assert rows[0][10] == result.audit_event_hash
+    audit_payload = json.loads(str(rows[0][8]))
+    assert audit_payload["previous_state_decodable"] is True
+    assert audit_payload["previous_state_schema_version"] == "1"
+    assert len(audit_payload["previous_state_sha256"]) == 64
+
+    connection = connect(_database(run_dir))
+    try:
+        assert ConsumptionRepository(connection).verify_audit_chain() == 1
+    finally:
+        connection.close()
 
 
 def test_reset_then_continue_consumption_starts_a_fresh_streak(
@@ -314,6 +351,9 @@ def test_audit_survives_reopening_the_database(tmp_path: Path) -> None:
     payload = json.loads(str(found[0]))
     assert payload["reset_event"]["reason"] == result.reason
     assert decode_state_json(str(found[0])).consecutive_breaches == 0
+    rows = _audit_rows(_database(run_dir))
+    assert len(rows) == 1
+    assert rows[0][10] == result.audit_event_hash
 
 
 def test_second_reset_archives_the_first_in_history(tmp_path: Path) -> None:
@@ -325,9 +365,226 @@ def test_second_reset_archives_the_first_in_history(tmp_path: Path) -> None:
 
     assert first.archived_reset_count == 0
     assert second.archived_reset_count == 1
+    assert first.audit_sequence == 1
+    assert second.audit_sequence == 2
+    assert second.audit_previous_hash == first.audit_event_hash
     payload, _ = _row(_database(run_dir))
     assert payload["reset_event"]["reason"] == "second"
     assert [item["reason"] for item in payload["reset_history"]] == ["first"]
+
+    rows = _audit_rows(_database(run_dir))
+    assert [row[0] for row in rows] == [1, 2]
+    assert rows[1][9] == rows[0][10]
+    connection = connect(_database(run_dir))
+    try:
+        assert ConsumptionRepository(connection).verify_audit_chain() == 2
+    finally:
+        connection.close()
+
+
+def test_reset_migrates_an_existing_database_without_audit_schema(
+    tmp_path: Path,
+) -> None:
+    """The reset write entry upgrades a pre-#143 database before appending."""
+    run_dir = _publish(tmp_path)
+    _consume(run_dir)
+    database = _database(run_dir)
+
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute("DROP TABLE audit_events")
+        connection.commit()
+    finally:
+        connection.close()
+
+    result = _reset(run_dir, reason="migrated write entry")
+
+    assert result.audit_sequence == 1
+    assert result.audit_previous_hash is None
+    assert len(_audit_rows(database)) == 1
+    connection = sqlite3.connect(str(database))
+    try:
+        triggers = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+            ).fetchall()
+        }
+    finally:
+        connection.close()
+    assert {
+        "audit_events_append_guard",
+        "audit_events_no_update",
+        "audit_events_no_delete",
+    }.issubset(triggers)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "UPDATE audit_events SET reason = 'rewritten' WHERE event_sequence = 1",
+        "DELETE FROM audit_events WHERE event_sequence = 1",
+        "INSERT OR REPLACE INTO audit_events "
+        "SELECT * FROM audit_events WHERE event_sequence = 1",
+    ),
+)
+def test_audit_rows_cannot_be_rewritten(tmp_path: Path, statement: str) -> None:
+    """Triggers reject UPDATE, DELETE and SQLite REPLACE rewrite paths."""
+    run_dir = _publish(tmp_path)
+    _consume(run_dir)
+    result = _reset(run_dir, reason="immutable")
+
+    connection = sqlite3.connect(str(_database(run_dir)))
+    try:
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            connection.execute(statement)
+        connection.rollback()
+    finally:
+        connection.close()
+
+    rows = _audit_rows(_database(run_dir))
+    assert len(rows) == 1
+    assert rows[0][7] == "immutable"
+    assert rows[0][10] == result.audit_event_hash
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "INSERT INTO audit_events "
+        "SELECT event_sequence + 2, event_time_utc, action, run_id, device_id, "
+        "rule_id, actor_ref, reason, payload_json, event_hash, "
+        "lower(hex(randomblob(32))) "
+        "FROM audit_events WHERE event_sequence = 1",
+        "INSERT INTO audit_events "
+        "SELECT event_sequence + 1, event_time_utc, action, run_id, device_id, "
+        "rule_id, actor_ref, reason, payload_json, lower(hex(zeroblob(32))), "
+        "lower(hex(randomblob(32))) "
+        "FROM audit_events WHERE event_sequence = 1",
+        "INSERT OR REPLACE INTO audit_events "
+        "SELECT event_sequence + 1, event_time_utc, action, run_id, device_id, "
+        "rule_id, actor_ref, reason, payload_json, event_hash, event_hash "
+        "FROM audit_events WHERE event_sequence = 1",
+    ),
+)
+def test_audit_insert_must_extend_the_exact_chain_tail(
+    tmp_path: Path, statement: str
+) -> None:
+    """Direct writers cannot skip a sequence or name the wrong predecessor."""
+    run_dir = _publish(tmp_path)
+    _consume(run_dir)
+    _reset(run_dir, reason="tail anchor")
+    database = _database(run_dir)
+    before = _audit_rows(database)
+
+    connection = sqlite3.connect(str(database))
+    try:
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            connection.execute(statement)
+        connection.rollback()
+    finally:
+        connection.close()
+
+    assert _audit_rows(database) == before
+
+
+def test_audit_chain_detects_an_offline_payload_rewrite(tmp_path: Path) -> None:
+    """A privileged trigger bypass remains detectable by the hash-chain check."""
+    run_dir = _publish(tmp_path)
+    _consume(run_dir)
+    _reset(run_dir, reason="first")
+    _reset(run_dir, reason="second")
+    database = _database(run_dir)
+
+    # This deliberately models a file/DDL administrator, which is outside the
+    # trigger threat boundary.  Dropping the trigger makes the tamper possible;
+    # verification must still refuse the now-inconsistent chain.
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute("DROP TRIGGER audit_events_no_update")
+        connection.execute(
+            "UPDATE audit_events "
+            "SET payload_json = '{\"tampered\":true}' "
+            "WHERE event_sequence = 1"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    connection = connect(database)
+    try:
+        with pytest.raises(AuditChainError, match="audit event 1 hash mismatch"):
+            ConsumptionRepository(connection).verify_audit_chain()
+    finally:
+        connection.close()
+
+
+def test_audit_chain_detects_a_broken_previous_hash(tmp_path: Path) -> None:
+    """The verifier rejects a link that no longer names its predecessor."""
+    run_dir = _publish(tmp_path)
+    _consume(run_dir)
+    _reset(run_dir, reason="first")
+    _reset(run_dir, reason="second")
+    database = _database(run_dir)
+
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute("DROP TRIGGER audit_events_no_update")
+        connection.execute(
+            "UPDATE audit_events SET previous_hash = ? WHERE event_sequence = 2",
+            ("0" * 64,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    connection = connect(database)
+    try:
+        with pytest.raises(AuditChainError, match="audit event 2 has previous_hash"):
+            ConsumptionRepository(connection).verify_audit_chain()
+    finally:
+        connection.close()
+
+
+def test_audit_insert_failure_rolls_back_the_state_reset(tmp_path: Path) -> None:
+    """State and audit are atomic: refusing the INSERT preserves both sides."""
+    run_dir = _publish(tmp_path)
+    _consume(run_dir)
+    database = _database(run_dir)
+    original_text = _raw_text(database)
+
+    connection = sqlite3.connect(str(database))
+    try:
+        connection.execute("""
+            CREATE TRIGGER reject_audit_insert
+            BEFORE INSERT ON audit_events
+            BEGIN
+              SELECT RAISE(ABORT, 'forced audit failure');
+            END
+            """)
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced audit failure"):
+        _reset(run_dir, reason="must roll back")
+
+    assert _raw_text(database) == original_text
+    assert _audit_rows(database) == []
+
+
+def test_normal_state_writes_do_not_remove_append_only_audit(tmp_path: Path) -> None:
+    """Later window-state writes leave the independent audit chain untouched."""
+    run_dir = _publish(tmp_path)
+    original = _consume_first_part_only(run_dir)
+    result = _reset(run_dir, reason="before remaining shards")
+    before = _audit_rows(_database(run_dir))
+
+    _consume_remaining_parts(run_dir, original)
+
+    after = _audit_rows(_database(run_dir))
+    assert after == before
+    assert after[0][10] == result.audit_event_hash
 
 
 # --------------------------------------------------------------------------- #
@@ -539,6 +796,9 @@ def test_audit_survives_new_shards_and_a_reopen(tmp_path: Path) -> None:
     payload = json.loads(str(found[0]))
     assert payload["reset_event"]["reason"] == result.reason
     assert payload["reset_event"]["previous_state_json"] == result.previous_state_json
+    rows = _audit_rows(_database(run_dir))
+    assert len(rows) == 1
+    assert rows[0][10] == result.audit_event_hash
 
 
 # --------------------------------------------------------------------------- #
@@ -575,10 +835,15 @@ def test_read_and_write_share_one_transaction(tmp_path: Path) -> None:
         for i, sql in enumerate(statements)
         if sql.strip().startswith("UPDATE alarm_states")
     )
+    audit_insert = next(
+        i
+        for i, sql in enumerate(statements)
+        if sql.strip().startswith("INSERT INTO audit_events")
+    )
     commit = next(
         i for i, sql in enumerate(statements) if sql.strip().startswith("COMMIT")
     )
-    assert begin < select < update < commit
+    assert begin < select < update < audit_insert < commit
 
 
 def test_a_concurrent_writer_cannot_interleave_with_the_reset(

@@ -1268,6 +1268,9 @@ def test_reset_alarms_succeeds_and_prints_the_audit(run_dir: Path) -> None:
     assert "reason=CLI 验收重置" in result.stdout
     assert "previous_state_decodable=true" in result.stdout
     assert "archived_reset_count=0" in result.stdout
+    assert "audit_sequence=1" in result.stdout
+    assert "audit_previous_hash=null" in result.stdout
+    assert "audit_event_hash=" in result.stdout
     assert "new_state_consecutive_breaches=0" in result.stdout
     assert "tables_untouched=processed_chunks,feature_windows,alarms,runs" in (
         result.stdout
@@ -1277,11 +1280,19 @@ def test_reset_alarms_succeeds_and_prints_the_audit(run_dir: Path) -> None:
     connection = sqlite3.connect(str(database))
     try:
         found = connection.execute("SELECT state_json FROM alarm_states").fetchone()
+        audit = connection.execute("""
+            SELECT event_sequence, action, reason, previous_hash, event_hash
+            FROM audit_events
+            """).fetchone()
     finally:
         connection.close()
     assert found is not None
     payload = json.loads(str(found[0]))
     assert payload["reset_event"]["reason"] == "CLI 验收重置"
+    assert audit is not None
+    assert audit[0:4] == (1, "alarm_state.reset", "CLI 验收重置", None)
+    assert len(str(audit[4])) == 64
+    assert f"audit_event_hash={audit[4]}" in result.stdout
 
 
 @pytest.mark.parametrize(

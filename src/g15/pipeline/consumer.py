@@ -136,6 +136,10 @@ class AlarmResetResult:
         previous_state_decodable: Whether strict decoding succeeded. Legacy
             rows without a version, future versions and damaged JSON all give
             ``False``.
+        audit_sequence: Monotonic sequence in the append-only audit table.
+        audit_previous_hash: Hash of the preceding audit event, or ``None``
+            for the first event.
+        audit_event_hash: Hash of this event's canonical content.
     """
 
     run_id: str
@@ -149,6 +153,9 @@ class AlarmResetResult:
     new_state: AlarmState
     archived_reset_count: int
     previous_state_decodable: bool
+    audit_sequence: int
+    audit_previous_hash: str | None
+    audit_event_hash: str
 
 
 @dataclass(frozen=True)
@@ -258,11 +265,12 @@ def reset_alarm_state(  # pylint: disable=R0913
     """Explicitly archive one alarm streak and start a fresh one.
 
     This is the public, consumer-level entry frozen in
-    ``docs/interface.md`` section 8.5 (Issue #127). It is a thin wrapper: it
+    ``docs/interface.md`` section 8.4 (Issue #127). It is a thin wrapper: it
     first reads ``run_id`` from ``run_dir/manifest.json``, checks that
-    ``device_id`` agrees with that manifest, then delegates the atomic
-    read/decode/archive/write to the repository. No SQL, no schema changes and
-    no path policy beyond ``database_path`` live here.
+    ``device_id`` agrees with that manifest, idempotently initialises the
+    database schema, then delegates the atomic read/decode/archive/write to the
+    repository. No domain SQL or path policy beyond ``database_path`` lives
+    here.
 
     A reset only replaces one ``alarm_states`` row. It never deletes alarms,
     never recomputes a run, and never touches ``processed_chunks``,
@@ -312,6 +320,7 @@ def reset_alarm_state(  # pylint: disable=R0913
 
     connection = connect(database)
     try:
+        initialize_database(connection)
         audit = ConsumptionRepository(connection).reset_alarm_state_audited(
             manifest.run_id,
             device_id,
@@ -334,6 +343,9 @@ def reset_alarm_state(  # pylint: disable=R0913
         new_state=audit.new_state,
         archived_reset_count=audit.archived_reset_count,
         previous_state_decodable=audit.previous_state_decodable,
+        audit_sequence=audit.audit_sequence,
+        audit_previous_hash=audit.audit_previous_hash,
+        audit_event_hash=audit.audit_event_hash,
     )
 
 
