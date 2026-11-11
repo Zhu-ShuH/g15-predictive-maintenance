@@ -2,7 +2,7 @@
 
 本项目用可复现的 NumPy 仿真生成振动/温度数据，经 NPZ + Manifest 文件接口交给独立消费者，完成特征、健康评分、告警、SQLite 持久化和 JSON/Markdown 报告。它是教学沙盘，不是已在真实设备上验证的诊断或自动控制系统。
 
-> **当前基线（2026-11-11，`main@b9788a5c`）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms` 与部署脚本均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。最终独立保留集验收仍按 #56 → #9 执行；查询/容量增量仍按 #135 → #136 执行，不能把计划写成已通过。
+> **当前基线（2026-11-11，`main@a9951403`）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms` 与部署脚本均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。最终独立保留集验收仍按 #56 → #9 执行；#135 只读授权查询已由 #149 合入；容量仍按 #136 Gate 0 执行，不能把计划写成已通过。
 
 ## 从全新克隆开始
 
@@ -60,7 +60,7 @@ G15_ACCEPTANCE_EVIDENCE_ROOT="$HOME/g15-evidence" bash scripts/acceptance.sh
 | 百万点 | Ubuntu/RHEL 已有 1,000,000 点、10 分片、3 轮/系统的真实基准证据 | 只证明冻结配置和对应 SHA；不证明工业准确率 |
 | 双 Linux 闭环 | `545a598c` 已在两机公开克隆执行 setup→clean→demo→verify→benchmark，均退出 0 | 不能替代 #56/#9 的独立保留集检出率 |
 | 故障恢复 | 坏分片/SHA 拒收、Linux `kill -9` 重放与五表对账已有测试和双机记录 | 不宣称断电零丢失，也不宣称 soak 已完成 |
-| 当前开放验收 | #56、#9、#135、#136 及期末标准对齐 #142 | 100k、p95/EXPLAIN、独立保留集未执行时必须写“待执行” |
+| 当前开放验收 | #56、#9、#136（Gate 0）及本单 #142 | 100k、p95/EXPLAIN、独立保留集未执行时必须写“待执行” |
 
 实测数字、环境和原始边界见 [测试报告](docs/test_report.md)，计划与现场用例见 [测试计划](docs/test_plan.md)。
 
