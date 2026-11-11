@@ -70,9 +70,7 @@ secret 和认证头不得进入日志、报告、异常文本或测试快照。
 
 ## 5. 审计边界
 
-`reset-alarms` 已要求显式 `--yes` 和非空原因，但当前历史仍位于可更新的状态
-信封中，不能据此宣称满足“append-only”。独立只增审计和防 UPDATE/DELETE
-约束由 Issue #143 交付；在其合入并实测前，本项状态为**未满足**。
+`reset-alarms` 已要求显式 `--yes` 和非空原因。`state_json` 信封本身可更新；独立的 `audit_events` append-only 审计链与 UPDATE/DELETE/REPLACE 拒绝已由 Issue #143/#147 落地并通过 C4 非作者复核，因此应用级“只增不改”**已满足**；文件级防篡改仍不声称。
 
 任何审计记录都不得包含密码、token、认证头、真实个人身份或 `private_truth`
 原文。应用级只增和哈希链也不能抵抗拥有数据库文件或 DDL 权限的管理员，答辩
