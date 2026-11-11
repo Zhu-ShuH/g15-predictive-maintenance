@@ -167,11 +167,11 @@ python -m g15 benchmark --config configs/benchmark_1m.yaml
 - 如果未来增加口令，必须使用 PBKDF2-HMAC/scrypt/bcrypt/Argon2、随机盐和受审迁移；禁止明文或可逆存储。
 - trace/actor 使用脱敏标识，日志扫描应证明无 token、PII 和真值。
 
-### 抽答 5：现有 reset 历史为什么还不能叫 append-only 审计？
+### 抽答 5：append-only 审计的边界在哪里？
 
-- 它保存在可更新的 `alarm_states.state_json` 中，虽然保留历史，但物理记录仍可被 UPDATE 覆盖。
-- 红线需要独立 INSERT-only 事件、禁止 UPDATE/DELETE，并有篡改失败测试；该变更必须独立 Issue、ADR 和 C2 Review。
-- `reset-alarms --yes --reason` 已满足显式人工确认，但不等于不可改审计已经完成。
+- `alarm_states.state_json` 仍是可更新业务副本，不能单独充当不可改审计。
+- 独立 `audit_events` 表 + 三触发器已由 #143/#147 落地，UPDATE/DELETE/REPLACE 被拒，并有篡改负向测试与 C4 非作者复核；应用级“只增不改”已满足。
+- 但应用级只增不防拥有数据库文件或 DDL 权限者替换库，也不检测尾锚/尾缀删除；文件级防篡改不声称。
 
 ### 抽答 6：为什么选择 SQLite，怎样看并发能力？
 
