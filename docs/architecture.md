@@ -1,8 +1,8 @@
 # G15 系统架构与集成状态
 
 > Issue [#2](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/2)；负责人 A；
-> 2026-11-10 按 [Issue #142](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/142)
-> 核对到 `main@997acaebef2d4ab72639954afe8078bd9a04452b`。本页描述现有实现、
+> 2026-11-11 按 [Issue #142](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/142)
+> 核对到 `main@a9951403fb8af5e1729bb62f780769d162d00acc`。本页描述现有实现、
 > 安全边界和待验收扩展；公共契约仍以 [interface](interface.md) 及实际 Review 为准。
 
 ## 1. 当前主线与目标边界
@@ -78,7 +78,7 @@ flowchart TB
 
 1. 未经新 Issue、ADR、变更单、只读旁路、回退方案和两位非作者 Review，不得接入真实设备。
 2. 告警不得直接触发停机或维护动作；未来控制动作必须独立授权、人工确认、append-only 审计和故障回退。
-3. `reset-alarms --yes --reason` 只重置告警 streak，不删除历史告警、不控制设备，也不等于安全审计红线完成。
+3. `reset-alarms --yes --reason` 只重置告警 streak，不删除历史告警、不控制设备；其 `state_json` 中的历史是可更新业务副本，不是审计源。独立 `audit_events` 审计链已由 #143/#147 落地并通过 C4 非作者复核，应用级只增已满足，文件级防篡改不声称。
 4. 当前产品不存储密码；#135 如引入口令须先冻结认证契约并使用强哈希。任何凭据、PII、真值和自由文本审计原文不得进入普通查询响应或日志。
 5. 主链数据均为本地仿真；真实工业数据不得进入公开仓库、fixture 或第三方 AI，外发必须经脱敏和授权。
 
