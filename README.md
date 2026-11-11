@@ -2,7 +2,7 @@
 
 本项目用可复现的 NumPy 仿真生成振动/温度数据，经 NPZ + Manifest 文件接口交给独立消费者，完成特征、健康评分、告警、SQLite 持久化和 JSON/Markdown 报告。它是教学沙盘，不是已在真实设备上验证的诊断或自动控制系统。
 
-> **当前基线（2026-11-10，`main@997acaeb`）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms` 与部署脚本均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。最终独立保留集验收仍按 #56 → #9 执行；查询/容量增量仍按 #135 → #136 执行，不能把计划写成已通过。
+> **当前基线（2026-11-11，`main@b9788a5c`）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms` 与部署脚本均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。最终独立保留集验收仍按 #56 → #9 执行；查询/容量增量仍按 #135 → #136 执行，不能把计划写成已通过。
 
 ## 从全新克隆开始
 
