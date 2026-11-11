@@ -418,3 +418,28 @@ Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
 - 高负载（100→500→1,000→…→100k）未授权未执行；
 - 双 Linux 低负载兼容留证归 C6，本节未做；
 - `server_queued / server_executing` 两层传输事件产品侧未发，见 `docs/test_plan.md` §11.3。
+
+### 10.5 A 接管后的固定源码复测（2026-11-12）
+
+实现固定提交 `5b59b89f0c9d20c48926bfcfa4ac2ee07dd08e4a`，两次 CLI 测量时工作树均 clean。环境为 Windows 11/AMD64、pp03 Python 3.12.15、SQLite 3.53.4、16 逻辑 CPU；这是本次机器观察，与 §10.2 的历史主机分别记录。随后只追加本节与证据摘要，不改变该实现。
+
+| 检查 | 命令（pytest 的 basetemp/TMP/TEMP 均在笔记库外） | 结果 |
+|---|---|---|
+| 全量回归 | `python -m pytest -q` | 961 passed、15 skipped，87.82s，exit 0 |
+| 容量定向及默认 opt-in | `python -m pytest -q tests/integration/test_query_capacity_accounting.py tests/performance/query/test_query_load.py` | 29 passed、1 skipped，4.04s，exit 0 |
+| opt-in | `G15_RUN_QUERY_LOAD=1 python -m pytest -q -s tests/performance/query/test_query_load.py` | 1 passed，1.88s，exit 0；这只验证工具与本次10波次，不代表完整 Gate 0 |
+| 静态 | `python -m black --check src tests tools`；`python -m pylint src/g15 --fail-under=8.5`；`python tools/check_doc_references.py --root .` | 80 文件 unchanged；9.89；0 issue；均 exit 0 |
+| 变异检查 | 仅内存删除 windows count/set、alarms count/set 四个 guard，分别运行对应负例 | 四轮各 1 failed、exit 1（预期）；实现文件未改，证明断言有回归保护 |
+
+命令为 `python -m tools.query_load.driver --concurrent 10 --output <新的10波次证据目录>`，第二轮仅将并发改50且使用另一新目录；默认 serial=10、workers=64。每轮只有一次固定提交观察，未为达标延迟业务或反复挑最好值。
+
+| 波次 | 原始核验/消费覆盖/三方对账 | 客户端峰值/对应用户数 | 服务端峰值/对应用户数 | 延迟 p50/p95/p99（秒，包含串行和翻页） | 目标/退出码 |
+|---|---|---|---|---|---|
+| 10 | 全部无问题 | 10/10 | 10/10 | n=30，0.010094 / 0.039068 / 0.039071 | 达到10，exit 0 |
+| 50 | 全部无问题 | 50/50 | **23/23** | n=70，0.108741 / 0.581241 / 0.584952 | **未达到服务端50，exit 1** |
+
+两轮原始窗口/消费/丢弃均为100/100/0；告警为10/1/9。消费后恰好1告警不代表服务端原始无重复；raw coverage observations 保留原始10条告警与预期1条的差异。每轮70条 EXPLAIN 是10库×7类实际 SELECT helper 探针，包含告警续页分支，不是整个HTTP请求成本。资源仅是同进程前后快照，不能拆成独立两端或负载峰值。计时用 Windows QPC 单调高精度时钟，避免15.625ms的 GetTickCount64 量化误差。
+
+可公开摘要、命令、源码、机器、实际峰值/延迟、资源限制及原始报告 SHA-256 见 [本次证据摘要](../tests/fixtures/query/evidence_136_20261112.json)。完整原始 JSON 和失败轮次由 A 留档；摘要不冒充原始证据。开发期一次日志阶段数量误判、一组测试fixture混用时钟的失败及其修复记录亦保留，不计为最终通过记录。
+
+**完整 Gate 0 仍未通过**：50波次未达到服务端实际峰值；两 Linux 未执行（现有VM均未运行、连接方式未确认）；queued/executing阶段与独立两端资源仍缺。等待 B1/C4 对最终 head 真实复核；本 PR 不升档，不修改 #56/#9 的 seed、数据或冻结状态。
