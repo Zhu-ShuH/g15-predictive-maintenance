@@ -29,6 +29,28 @@ conda run --no-capture-output -n pp03 python -m g15 consume --run-dir runs/<run_
 conda run --no-capture-output -n pp03 python -m g15 report --run-dir runs/<run_id>
 ```
 
+## 现场一键验收（Issue #144）
+
+完整前置条件、证据判定、退出码和平台边界见
+[现场一键验收运行手册](docs/acceptance_runbook.md)。
+
+依赖已由 `scripts/setup.sh` 安装后，在仓库根运行：
+
+```sh
+bash scripts/acceptance.sh
+```
+
+入口不安装或下载依赖。它默认拒绝脏工作树，并用 `git archive <SHA>` 将固定提交复制到系统 `mktemp` 目录，在仓库外依次运行 `verify.sh`、离线/坏数据/`kill -9` 相关故障注入和 `benchmark.sh`；任一步非零，整体立即非零。源仓库的 `runs/` 不会被使用，测试临时目录也不会放入 Obsidian 规划库或其 `output/`。默认证据目录为系统临时目录下的 `g15-acceptance-<SHA>.*`，其中记录提交 SHA/tree、快照模式、系统与 Python/NumPy/PyYAML 版本、逐条原始退出码和日志。需要长期留档时，把根目录显式指向仓库和规划库之外：
+
+```sh
+mkdir -p "$HOME/g15-evidence"
+G15_ACCEPTANCE_EVIDENCE_ROOT="$HOME/g15-evidence" bash scripts/acceptance.sh
+```
+
+只有开发未提交实现时才可显式设置 `G15_ACCEPTANCE_ALLOW_DIRTY=1`；这类运行会醒目标注 `formal_evidence_eligible=false`，只能用于预检，不能作为最终 SHA 证据。总入口把质量/测试/故障/性能门禁失败统一返回 4，把日志/验收框架故障返回 5；子命令原始退出码保留在 `steps.tsv`。
+
+离线用例会先证明 DNS 与网络 socket 自检被测试专用守卫拒绝，再真实运行小型 `validate → simulate → consume → report`。该守卫只覆盖 Python `socket` 审计事件，**不等于操作系统已经断网**，也不能排除绕过 Python 审计 API 的原生代码；最终提交 SHA 仍须在关闭网卡或隔离网络命名空间后复跑同一入口并保存证据。Windows 没有 POSIX `SIGKILL`，该项会按既有用例明确 skip，正式 `kill -9` 证据必须来自 Linux。本入口不执行 #56 的未公开保留集；退出 0 也不等于“独立保留集检出已通过”。
+
 ## 已有证据与未完成项
 
 | 范围 | 当前事实 | 证据边界 |
@@ -47,7 +69,7 @@ conda run --no-capture-output -n pp03 python -m g15 report --run-dir runs/<run_i
 - **不存密码**：当前主链没有账号登录或密码数据库，不得为了演示把明文密码写进 YAML、源码、日志或仓库。未来若引入口令，必须先走契约评审并使用带随机盐的 PBKDF2/等价强哈希与恒时比较。
 - **数据不出域**：运行数据默认只保存在本机 `runs/`；运行阶段不联网。对外发出的报告、日志和截图必须先做脱敏并取得授权，禁止包含 token、密码、真实个人身份、真实厂区信息、私人绝对路径或 `private_truth` 原文。
 - **无设备执行器**：系统只产生告警，不下发停机、维修或控制命令。`reset-alarms` 是显式运维动作，必须提供 `--yes` 和非空原因；未来真实设备接入必须另有变更单、旁路方案和两位非作者复核，任何停机动作必须人工确认。
-- **审计诚实性**：现有 reset 历史可追溯，但独立、不可 UPDATE/DELETE 的 append-only 安全审计仍需单独 Issue/ADR 落地；在此之前不得宣称满足该红线。
+- **审计诚实性**：reset 历史与 append-only 审计链已由 #143/#147 落地，UPDATE/DELETE/REPLACE 被触发器拒绝；这是应用级只增，拥有文件/DDL 权限者仍可替换数据库，尾锚和尾缀删除不可检，不得宣称文件级防篡改。
 
 ## 文档入口
 
