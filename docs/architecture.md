@@ -44,7 +44,7 @@ flowchart LR
 | consumer / storage | C2 | 五表、按片事务、幂等、只读连接、状态恢复与 reset-alarms | reset 历史在可变状态信封中，不满足 append-only 安全审计；须独立立项实现 |
 | reporting / verifier | B1 承接原 C5 | JSON/Markdown 报告、真值对账、独立原始分片校验 | #56→#9 的独立保留集未完成；verifier 不读真值，不能与报告层职责混写 |
 | scripts / environment | C6 | setup/demo/verify/benchmark/clean、依赖锁、双 Linux 历史证据 | 最终候选 SHA 仍需 clean clone、禁网与现场故障同批复验 |
-| query / service | A/B1 | ADR-0007、需求和候选契约已入库 | `src/g15/query`/`service` 尚未实现；#135→#136 之前不得声称 p95、EXPLAIN 或 100k 通过 |
+| query / service | A/B1 | ADR-0007、需求和候选契约已入库 | `src/g15/query`/`service` 已实现并合入（#149）；#136 Gate 0 之前不得声称 p95、EXPLAIN 或 100k 通过 |
 
 ## 3. 文件交换与持久化责任
 
