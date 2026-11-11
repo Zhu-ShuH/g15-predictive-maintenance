@@ -14,7 +14,7 @@
 | 三类独立故障注入 | 业务故障 ✔　文件损坏/SHA ✔　Linux `kill -9` ✔（C6 于 #51 在 Ubuntu 24.04.4 与 RHEL 9.7 各跑出 9 passed、无 skip；本机 Windows 仍按平台 skip，留证与边界见 §4.3） |
 | Issue 验收命令 | `pytest -q tests/integration tests/fault_injection` → **155 passed, 6 skipped，退出码 0**（main `195f5aa`，2026-11-04 复跑，与 `2054bb5` 一致） |
 | 工程门禁 | black ✔（53 files）　pylint **9.91/10** ✔　全量 pytest **755 passed, 14 skipped** ✔（main `195f5aa`） |
-| 双 Linux 实测 | 部分完成：`kill -9`（§4.3）、百万点基准（§5.3 A 表）、**公开仓库现场全新克隆**（`2054bb59`，两机 `clone_exit=0`/`setup_exit=0`/`benchmark_exit=0`，#10 评论 6582119780）已有 Ubuntu 24.04.4 / RHEL 9.7 双系统留证。**仍未完成**的是 G4 闭环（`simulate`/`report` 合并后）的双系统取证与检出率结论；§3 的检出率数据全部来自 Windows |
+| 双 Linux 实测 | `kill -9`（§4.3）、百万点基准（§5.3 A 表）、公开仓库全新克隆已有 Ubuntu 24.04.4 / RHEL 9.7 留证；主链接通后的 `545a598c` 还在两机完成 setup→clean→demo→verify→benchmark（均退出 0，#10 评论 `6759021839`）。**仍未完成**的是 #56/#9 独立保留集检出率的双系统复现及最终候选 SHA 整包复证 |
 
 ## 2 被测身份与环境
 
@@ -333,7 +333,7 @@ A 在 `5646201287` 上给了六条 CHANGES_REQUESTED（R1–R6），第三轮 `5
 
 ## 7 未覆盖与风险（不得在答辩中宣称）
 
-1. **双 Linux 实测（部分完成）**：`kill -9` 的双系统留证见 §4.3（C6，2026-11-02，把已有测试树拿到 Linux 上跑）。**公开仓库现场全新克隆**已由 C6 于 2026-11-03 在两台虚拟机上补证：`2054bb59`，`clone_exit=0` / `setup_exit=0` / `benchmark_exit=0`，3/3 成功、verification passed，未用代理或 bundle（#10 评论 `6582119780`，同见 `docs/deployment.md` §5）。所以「没在 Linux 上从公开仓库拉下来跑过」这句已不成立，不能再写。**仍未完成的是两件事**：①G4 闭环（`simulate`/`report` 合并后）的双系统端到端取证；②检出率与误报结论的双系统复现。本报告 §3 的检出率与受控轮廓数据全部来自 Windows，不能替代。
+1. **双 Linux 实测（G4 已补、最终发布待复证）**：`kill -9` 见 §4.3，百万点见 §5.3；公开仓库全新克隆见 #10 评论 `6582119780`。主链接通后的 `545a598c` 又在 RHEL 9.7 / Ubuntu 24.04.4 完成 setup→clean→demo→verify→benchmark，均退出 0，并各跑 abrupt-stop 1 passed、故障注入 9 passed（#10 评论 `6759021839`）。仍未完成的是 #56/#9 独立保留集检出率的双系统复现，以及 `main@997acaeb` 之后最终候选 SHA 的整包复证；本报告 §3 的开发期检出率不能替代。
 2. **`kill -9` 恢复**：Linux 侧已有双系统留证（§4.3，Ubuntu 24.04.4 / RHEL 9.7 各 9 passed 无 skip）。本机 Windows 无 POSIX 信号语义，仍按平台 skip，不在 Windows 上伪造该项。
 3. **百万点 60 秒的结论**：生产基准计时方法见 `docs/test_plan.md` §5.3、实测数字见 §5.3（含 C6 的双 Linux 正式留证）。本报告 §3 的受控轮廓只有 65536 点，两套口径不能互换，也不能拿受控轮廓的成绩代替生产基准。
 4. **真实工业准确率**：本报告的"100%"只指 §3 预定义教学测试集上的事件召回率。
@@ -367,3 +367,19 @@ consume_run(s.run_dir, db, load_consumer_config(Path('configs/consumer.yaml')))
 print(build_report(s.run_dir, db))
 "
 ```
+
+## 9 期末 100 分标准增量状态（Issue #142）
+
+本节只登记截至 `main@997acaeb` 可核对的事实与缺口；Issue #142 的文档修改没有新增运行证据，也没有在本轮执行测试。
+
+| 评分/红线 | 已有证据 | 尚缺证据 | 本轮状态 |
+|---|---|---|---|
+| 功能与硬指标 | 主链、双 Linux 百万点、坏数据与 kill 恢复 | #56→#9 独立保留集；最终 SHA 全量现场包 | 待执行，不改既有成绩 |
+| 可靠性 | SHA 拒收、部分提交重放、五表逐行对账 | 最终 SHA 断网运行、教师现场随机注入、soak | 待执行 |
+| 工程规范 | 测试数量、配置外置、CI、Pylint≥8.5 | 新国标追踪和最终发布复证 | 文档对齐中 |
+| 技术深度 | ADR、百万点、并发/竞态探针 | #135 已实现（#149）；#136 p50/p95/p99 与 EXPLAIN | 查询实现已交付；容量待执行 |
+| 数据安全 | 运行期离线、真值隔离、日志禁敏感信息 | 最终 SHA 自动日志扫描、外发授权记录 | 待执行 |
+| 人工确认 | 系统无执行器；`reset-alarms --yes --reason` 有实现/测试 | 真实设备接入不在本项目范围；未来需变更单/旁路/双人复核 | no-actuation 边界，不冒充设备验证 |
+| append-only 审计 | reset 历史随状态保留 | 独立 INSERT-only 审计及 UPDATE/DELETE 拒绝 | **已满足（应用级只增，#143/#147）**；文件级防篡改未声称 |
+
+完整新增用例及判据见 `docs/test_plan.md` §10。实际执行后应追加日期、精确 SHA、环境、命令、退出码、原始证据路径与失败记录；不得直接把表中“已有历史证据”改写成最终候选通过。

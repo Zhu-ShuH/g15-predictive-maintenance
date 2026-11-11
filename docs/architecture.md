@@ -1,12 +1,17 @@
 # G15 系统架构与集成状态
 
-> Issue [#2](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/2)；负责人 A；2026-10-30。实现快照：main `b3daf15ee8d53d7515f32b13b57de149f6767561`。本页描述现有实现和目标链路，公共契约仍以 [interface](interface.md) 及其实际评审记录为准。
+> Issue [#2](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/2)；负责人 A；
+> 2026-11-11 按 [Issue #142](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/142)
+> 核对到 `main@a9951403fb8af5e1729bb62f780769d162d00acc`。本页描述现有实现、
+> 安全边界和待验收扩展；公共契约仍以 [interface](interface.md) 及实际 Review 为准。
 
 ## 1. 当前主线与目标边界
 
-配置、仿真、故障注入、Schema/NPZ/Manifest、生产入口、分析、消费及 SQLite 已合入主线。共享 `SimulationChunk` 已由 [#31](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/31) 迁到 `common/types.py`，不再处于“等待迁移”状态。
-
-上述模块可通过 Python 入口组合；**命令行和报告闭环尚未全部集成**。当前 `cli.py` 只实现 validate；simulate、consume、report、verify、benchmark、doctor 仍走占位分支。主线 `reporting/builder.py`、`metrics.py` 为空；shell 脚本虽已补可执行位，内容仍失败退出。不能直接按下图的完整目标链宣称演示可运行。
+配置、仿真、故障注入、Schema/NPZ/Manifest、生产入口、分析、消费、SQLite、报告与
+完整性校验均已落入主线。`validate`、`simulate`、`consume`、`report`、`benchmark`、
+`reset-alarms` 已接线；`verify` 与 `doctor` 的 Python CLI 仍未接线，但独立
+`scripts/verify.sh` 已具备质量、测试、配置和闭环门禁。脚本或模块存在不等于最终候选 SHA
+已经完成教师现场验收。
 
 ```mermaid
 flowchart LR
@@ -26,19 +31,20 @@ flowchart LR
     VERIFY -.-> REPORT
 ```
 
-实线表达已合入模块之间的数据职责，不代替本次执行记录；虚线部分为尚待集成的验证/报告路径。真值分目录属于代码访问约定，不是操作系统权限隔离。真值只由报告层（`reporting.builder` / `reporting.metrics`）读取用于真值对账；`reporting.verifier` / `g15 verify` 只做 Manifest/NPZ 完整性校验，不读真值；consumer/analysis 不能用真值决定预测结果。
+实线表达当前主链的数据职责，不代替本次运行记录。真值分目录属于代码访问约定，不是操作系统权限隔离。真值只由报告层（`reporting.builder` / `reporting.metrics`）读取用于真值对账；`reporting.verifier` 只做 Manifest/NPZ 完整性校验，不读真值；consumer/analysis 不能用真值决定预测结果。
 
 ## 2. 模块、证据与接线状态
 
-| 模块 | 主责 | 主线实物 / 证据 | 当前限制 |
+| 模块 | 主责 | 当前主线实物 | 当前限制 / 终验边界 |
 |---|---|---|---|
-| config / CLI | C3 | `config.py` 与 validate，[#26](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/26)、[#55](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/55) | consume 接线为 [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71) 候选，其余占位命令不能当业务成功 |
-| simulation | B1 / C1 | engine/degradation/noise/faults，[#15](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/15)、[#27](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/27)、[#42](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/42)、[#47](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/47) | 仿真只产测量/真值，不计算健康分、不读取 SQLite |
-| schema / serialization / producer | C4 | [#29](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29)、[#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)、[#43](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/43)、[#48](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/48) | Manifest/四数组/完整发布语义按契约，不自行增加字段或改计时范围 |
-| analysis | B2 | 特征、健康评分、告警，[#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54) | #73 数值边界整改已合入 `0a637fc2`，A/B1/C4/C2 均在 `e4814b65` 批准；#82 已由 #91 合入 `51cd99ad`，1.0/1.1 时期 `np.ma.MaskedArray` 掩码被静默使用的历史行为，已在 1.2 改为掩码非空即 `ValueError` 拒收，空掩码继续接受。`load_health_rules(path)` 实际读取规则 YAML，是 interface §6 文件 I/O 分层约束的已知例外；不读取运行数据或真值 |
-| consumer / storage | C2 | 公开文件消费、窗口结果、恢复状态与事务，[#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64) | [#76](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/76) 末片上界预检已集成；真实强杀与公共契约仍待收口 |
-| reporting / verify | 原分工 C5；#9/#51 当前相关实现由 B1 接手 | 候选 [#70](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70)、[#72](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72) | 主线模块仍空；#70场景类型依赖名称的判定问题已由B2提出、A复证并请求修改，待B1方案/修复；真值只由 `reporting.builder` / `reporting.metrics` 做对账，`reporting.verifier` / `g15 verify` 只做 Manifest/NPZ 完整性校验且不读真值；原始分片校验不等于真值匹配、检出率或完整时间轴验证 |
-| scripts / environment | C6；A 协调依赖与验收 | [#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) 修正执行位；[environment](environment.md) | setup/demo/verify/benchmark 仍是占位；[#10](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/10)、[#28](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/28) 保留 |
+| config / CLI | C3 | YAML 严格校验；validate/simulate/consume/report/benchmark/reset-alarms 已接线 | Python CLI `verify`/`doctor` 未接线；公共参数/退出码仍按 interface 变更流程 |
+| simulation / faults | B1 / C1 | 趋势、噪声、spike/step/burst、确定性随机流与真值生成 | 只产测量/真值，不计算健康分；最终百万点需同一 SHA 双 Linux 三次复证 |
+| schema / producer | C4 | Schema 2.0、NPZ、SHA、原子 complete Manifest、末片上界 | 真值隔离是代码边界，不是 OS 权限；不得擅自扩字段或改变计时窗口 |
+| analysis | B2 | FEATURES_VERSION 1.2；特征、健康评分、告警、掩码/数值边界 | 启发式教学模型，不宣称真实工业诊断精度；规则更改须版本化和复验 |
+| consumer / storage | C2 | 五表、按片事务、幂等、只读连接、状态恢复与 reset-alarms | reset 历史在可变状态信封中；独立 `audit_events` append-only 审计链已由 #143/#147 落地，应用级只增满足；文件级防篡改未声称 |
+| reporting / verifier | B1 承接原 C5 | JSON/Markdown 报告、真值对账、独立原始分片校验 | #56→#9 的独立保留集未完成；verifier 不读真值，不能与报告层职责混写 |
+| scripts / environment | C6 | setup/demo/verify/benchmark/clean、依赖锁、双 Linux 历史证据 | 最终候选 SHA 仍需 clean clone、禁网与现场故障同批复验 |
+| query / service | A/B1 | ADR-0007、需求和候选契约已入库 | `src/g15/query`/`service` 已实现并合入（#149）；#136 Gate 0 之前不得声称 p95、EXPLAIN 或 100k 通过 |
 
 ## 3. 文件交换与持久化责任
 
@@ -63,9 +69,20 @@ flowchart TB
     RV --> RR[本地 NPZ SQLite 日志 报告]
 ```
 
-这是目标部署图。两个系统须各自全新克隆、安装、运行；CI 的两个 Python 版本不能替代两个 Linux。安装可联网，业务运行不依赖在线服务。C6 需确认 RHEL 软件源、解释器、离线备用包并记录真实失败；依赖锁定和两系统证据完成前不标部署通过。
+两个系统已有历史部署证据，但最终候选 SHA 仍须各自全新克隆、安装、运行；CI 的两个 Python 版本不能替代两个 Linux。安装可联网，主链业务运行不依赖在线服务。C6 需在依赖预装后实施禁网 demo/verify，并记录系统、硬件、命令、退出码、失败与恢复。断网运行不等于离线安装已经验证。
 
-## 5. 决策、候选与下一步
+## 5. 安全与真实设备边界
+
+当前组件图中没有设备协议适配器、执行器或自动停机控制：系统只生成数据、健康分、告警和报告。
+因此“真实设备变更单/旁路/双人复核”和“误停人工确认”对当前运行路径为不适用，但构成禁止扩展边界：
+
+1. 未经新 Issue、ADR、变更单、只读旁路、回退方案和两位非作者 Review，不得接入真实设备。
+2. 告警不得直接触发停机或维护动作；未来控制动作必须独立授权、人工确认、append-only 审计和故障回退。
+3. `reset-alarms --yes --reason` 只重置告警 streak，不删除历史告警、不控制设备；其 `state_json` 中的历史是可更新业务副本，不是审计源。独立 `audit_events` 审计链已由 #143/#147 落地并通过 C4 非作者复核，应用级只增已满足，文件级防篡改不声称。
+4. 当前产品不存储密码；#135 如引入口令须先冻结认证契约并使用强哈希。任何凭据、PII、真值和自由文本审计原文不得进入普通查询响应或日志。
+5. 主链数据均为本地仿真；真实工业数据不得进入公开仓库、fixture 或第三方 AI，外发必须经脱敏和授权。
+
+## 6. 决策、候选与下一步
 
 | 议题 | 已有实物 / 决定 | 后续责任与证据 |
 |---|---|---|

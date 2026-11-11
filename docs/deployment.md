@@ -34,15 +34,15 @@ bash scripts/benchmark.sh    # 百万点基准 ×3（结果留档 runs/evidence/
 |---|---|---|
 | `setup.sh` | **可用（RHEL 9.7 / Ubuntu 24.04 双机实测）** | 建环境/校验版本/装依赖/导入检查 |
 | `g15 validate` | 可用 | Issue #4 已实现 |
-| `g15 consume` | 可用 | Issue #65/#71 已合入 main（`30ad92b`） |
 | `g15 consume/benchmark` | 可用 | consume #71、benchmark #92 已合入 main |
-| `g15 simulate/report/verify/doctor` | 待实现 | 接口已冻结（interface.md §10），对应模块在途 |
-| `verify.sh` G1–G3 | 可用 | black/pylint/pytest/validate |
-| `verify.sh` G4 | 阻塞于 simulate | consume 已可用；G4 当前先阻塞在 simulate（CLI 退出 5） |
-| `demo.sh` | 部分可用 | 推进到仿真步骤诚实失败（CLI 报子命令未实现，退出 3） |
+| `g15 simulate/report` | 可用 | #110 / PR #125 已合入 main，完整业务链已接通 |
+| `g15 reset-alarms` | 可用 | #127 / PR #139 已合入；必须显式 `--yes` 与非空 `--reason` |
+| `g15 verify/doctor` | 待接线 | Python 子命令尚未实现；不得与已可用的 `scripts/verify.sh` 混淆 |
+| `verify.sh` G1–G4 | 可用 | black/pylint/pytest/validate/完整闭环；任一门禁失败整体非零 |
+| `demo.sh` | 可用 | validate→simulate→consume→report，从空 `runs/` 重建闭环 |
 | `benchmark.sh` | **可用（双机实测 3/3 成功）** | 百万点 production_window 三轮 0.12–0.15 s（预算 60 s），10 分片 shape 9×102400+78400，verification passed，日志留档 runs/evidence/ |
 
-> 诚实声明：simulate/report 合并前，demo 不得宣称任何闭环结论（G4 阻塞于 simulate，退出 4 是预期行为，不是脚本缺陷）；benchmark 已随 #92 可用并完成双机取证（见 §5），但其数字仅覆盖生产基准口径，不构成检出率、误报或闭环结论。
+> 诚实声明：闭环与脚本可运行不等于最终检出率验收完成。benchmark 数字只覆盖生产基准口径；#56/#9 的独立保留集、#135/#136 的查询与容量门禁、soak 和断电持久性均不能由本节替代。
 
 ## 4. RHEL 9.7 实测记录（2026-11-01，C6）
 
@@ -63,7 +63,7 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 3. 手工创建 `~/.ssh/authorized_keys` 后需 `restorecon -R -v ~/.ssh` 修正 SELinux 标签，否则 sshd 公钥认证被拒（部署跳板机时相关）。
 4. 网络受限环境（GitHub 直连重置）：可在宿主机代理开启"允许局域网连接"后为 git 配置 `http.proxy`，或在可信网络内用 `git bundle`/受控拷贝中转；正式验收仍须按 acceptance.md §1 从公开仓库全新克隆。
 
-## 5. 双系统实测状态（Issue #10，2026-11-01/02/03 双机实测，绑定 main `2054bb5`）
+## 5. 双系统历史基线（Issue #10，2026-11-01/02/03，绑定 main `2054bb5`）
 
 | 命令 | RHEL 9.7（实测） | Ubuntu 24.04.4（实测） |
 |---|---|---|
@@ -76,12 +76,27 @@ RHEL 9 特有注意事项（实测遇到并已解决）：
 
 本表在 main `2054bb5`（含 #86 脚本、#90 依赖锁、#92 benchmark 实现、#85 并发用例）上实测得出，两列均为真实独立执行（RHEL 9.7 虚拟机与 Ubuntu 24.04.4 虚拟机，Conda 26.9.4 / Python 3.12.16 一致）；验证/演示证据日志留档 `~/g15-evidence/issue10-*-2054bb5-*.log`，基准轮次日志留存于两机 `runs/evidence/benchmark_Linux-x86_64_*_20261102T15*.log`（三轮原始数值见上表）。表内 benchmark 数字取自 11-02 那次双机实测；2026-11-03 公开仓库现场全新克隆轮的基准数字（RHEL 0.1315/0.1491/0.1996 s、Ubuntu 0.2721/0.2486/0.2757 s）见 #10 评论 `6582119780`。历史版本（2026-11-01，head `60fc6b4`，pytest 738 passed）的记录由本轮取代。**遗留说明**：两台虚拟机已从公开 GitHub 仓库现场全新克隆 `2054bb59` 并跑通 `setup.sh` 与 `benchmark.sh`（#10 评论 6582119780；两机 `clone_exit=0` / `setup_exit=0` / `benchmark_exit=0`、3/3 成功、verification passed，未使用代理或 bundle 中转）。仍未完成的是：`simulate`/`report` 合并后的 G4 闭环取证、双 Linux 正式验收、检出率与峰值内存结论。
 
+### 5.1 主链接通后的双系统 G4 证据（2026-11-10）
+
+在 `545a598c` 上，RHEL 9.7 与 Ubuntu 24.04.4 均从公开仓库全新克隆并依次执行 `setup.sh → clean.sh → demo.sh → verify.sh → benchmark.sh`，五步退出码均为 0；两机还分别执行了 opt-in abrupt-stop 压力用例（1 passed）与故障注入套件（9 passed）。原始回执见 #10 评论 `6759021839`，#10 已据此关闭。
+
+该轮证明对应 SHA 的安装、G4 闭环、质量门禁、百万点基准与 Linux 故障用例可以在两套系统复现；它**不证明** #56/#9 的独立保留集检出率、长时间 soak、100k 查询容量或断电零丢失。`main@997acaeb` 比该 SHA 新增后续文档和 reset-alarms 变更，期末候选发布仍须在同一最终 SHA 上重跑并保存完整日志。
+
 ## 6. 双 Linux 验收记录模板（acceptance.md §1）
 
 每台机器留存：Git 提交 SHA、configs/health_rules 版本摘要、系统版本（`/etc/os-release`）、CPU/内存/存储（`lscpu`/`free -h`/`df -h`）、Python/NumPy/Conda 版本（`pip freeze`）、每条命令与退出码、完整日志和报告文件。建议逐条 `tee` 到 `runs/evidence/`（clean.sh 会清空，归档前先移出仓库目录）。
 
-## 7. 故障恢复演示指引（acceptance.md §4，待可产出运行数据的仿真入口交付后执行）
+## 7. 故障恢复与离线演示指引（acceptance.md §4）
 
 - SHA/文件损坏隔离：篡改某个 `runs/<id>/raw/part-*.npz` 字节后重跑消费，预期被拒收并留日志（退出 3）。
 - `kill -9` 恢复：消费进程运行中强杀后重启，预期从 `processed_chunks` 重放、结果与未中断运行一致。
-- 以上两项演示均保留命令与日志；未实测前不得声称零数据损失。
+- 断网运行：依赖预装完成后禁用网络，依次运行 `clean.sh`、`demo.sh`、`verify.sh`；预期主链不发起网络连接且结果与联网状态一致。该项在最终 SHA 尚无统一原始证据，执行前保持“待执行”。
+- 对账恒等：报告同时核对 `processed + rejected = total` 与 `analysed + dropped = processed`；任一不成立即失败，不用截断或补零掩盖。
+- 以上演示均保留命令、退出码、SHA、机器信息与失败日志；未实测前不得声称零数据损失或已完成现场故障验收。
+
+## 8. 数据与设备安全边界
+
+- 运行阶段离线；`runs/` 数据不自动外发。外发日志、报告或截图前必须脱敏并取得授权，禁止携带 token、密码、真实个人身份、真实厂区信息、私人绝对路径或 `private_truth` 原文。
+- 本项目没有真实设备执行器，只输出告警。不得将告警自动转换为停机或维修指令。
+- 未来接入真实设备前必须有变更单、旁路接入方案和两位非作者复核；任何停机/控制动作必须由人明确确认。
+- `reset-alarms` 不是停机操作，但属于有状态运维动作，必须使用 `--yes` 和非空原因并留存输出。独立的 `audit_events` append-only 审计链已由 #143/#147 落地并通过 C4 非作者复核，应用级只增已满足；文件级防篡改仍不声称。
