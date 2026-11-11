@@ -41,6 +41,7 @@ from tools.query_load.driver import (  # noqa: E402
     run_serial,
     start_server,
     verify_all,
+    verify_paging_coverage,
 )
 from g15.query.auth import issue_token  # noqa: E402
 
@@ -101,7 +102,7 @@ def test_gate0_low_load_query_measurement(tmp_path: Path) -> None:
         concurrent_seconds = time.perf_counter() - started
 
         started = time.perf_counter()
-        paging = run_paging(client, 0, db_paths)
+        paging, paging_summary = run_paging(client, 0, db_paths)
         paging_seconds = time.perf_counter() - started
     finally:
         server.shutdown()
@@ -110,6 +111,8 @@ def test_gate0_low_load_query_measurement(tmp_path: Path) -> None:
     all_results = serial + concurrent + paging
     assert all((status == 200 for status, _body, _run in all_results))
     assert verify_all(all_results, db_paths) == []
+    assert verify_paging_coverage(paging_summary) == []
+    assert paging_summary.discarded_alarm_duplicates == 9
     assert accounting.conservation_report() == []
 
     print("machine:", _machine_facts())

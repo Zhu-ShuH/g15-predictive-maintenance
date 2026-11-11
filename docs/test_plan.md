@@ -315,6 +315,8 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 现有传输层 `src/g15/service/http.py` 的 event_sink 只发 3 个阶段 `server_received / rejected / response_completed`，不发 `server_queued / server_executing`。因此 harness 的 `server_in_flight` 只能按 `received - completed` 近似，`server_queued / server_executing` 两层暂时无法直接量测。这是产品侧缺口，harness 不 hack、不改 src，写清后留待后续。
 
+另：耗尽流（`next_cursor` 返回 `null`）无法在请求中表达“已读完”，客户端只能省略该游标；服务端把省略游标当第一页，于是每个后续翻页都会重发已耗尽流的第一页。harness 保留原始响应交 oracle 逐条对账，并在客户端去重计数后丢弃重发页（丢弃数落盘），跨页完整性只按去重后的集合断言。
+
 ### 11.4 Gate 0 六步（#136）
 
 1. harness / oracle / 计数定义 / 失败留存 / 停止条件 Review；

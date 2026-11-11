@@ -36,6 +36,7 @@ from tools.query_load.d0_fixture import (  # noqa: E402
     build_d0_runs,
     device_id,
     device_run_id,
+    window_start_seq,
 )
 from tools.query_load.driver import (  # noqa: E402
     BEARER_AUDIENCE,
@@ -47,6 +48,7 @@ from tools.query_load.driver import (  # noqa: E402
     start_server,
     verify_all,
     verify_paging_coverage,
+    PagingSummary,
 )
 from tools.query_load.oracle import verify_response  # noqa: E402
 from g15.query.auth import issue_token  # noqa: E402
@@ -97,7 +99,7 @@ def test_serial_concurrent_paging_reconcile_and_oracle_clean(
     try:
         serial = run_serial(client, 10, d0_store)
         concurrent = run_concurrent(client, 10, d0_store)
-        paging = run_paging(client, 0, d0_store)
+        paging, paging_summary = run_paging(client, 0, d0_store)
     finally:
         server.shutdown()
         server.server_close()
@@ -105,7 +107,11 @@ def test_serial_concurrent_paging_reconcile_and_oracle_clean(
     all_results = serial + concurrent + paging
     assert all((status == 200 for status, _body, _run in all_results))
     assert verify_all(all_results, d0_store) == []
-    assert verify_paging_coverage(paging) == []
+    assert verify_paging_coverage(paging_summary) == []
+    # D0 walks 10 windows pages; the alarm stream exhausts on page one, so the
+    # server re-serves alarm page one on every subsequent window page.  The
+    # driver de-duplicates and must report exactly 9 discarded re-served alarms.
+    assert paging_summary.discarded_alarm_duplicates == 9
     assert accounting.conservation_report() == []
     # The concurrent wave must actually reach 10 in flight on the client side.
     assert accounting.peak_client_in_flight >= 10
@@ -144,3 +150,48 @@ def test_oracle_detects_window_divergence(d0_store: list[Path]) -> None:
     problems = verify_response(body, db_path, run_id, device, 10)
     assert problems, "oracle must flag the fabricated start_seq"
     assert any("start_seq -1 not committed" in p for p in problems)
+
+
+def _summary(
+    window_start_seqs: list[int],
+    alarm_keys: list[tuple[int, str]],
+) -> PagingSummary:
+    return PagingSummary(
+        window_start_seqs=window_start_seqs,
+        alarm_keys=alarm_keys,
+        discarded_alarm_duplicates=0,
+    )
+
+
+def test_coverage_flags_duplicate_window_page() -> None:
+    """A re-served window page (one start_seq twice) must fail coverage."""
+    seqs = [window_start_seq(i) for i in range(D0_WINDOWS_PER_DEVICE)]
+    seqs.append(seqs[0])  # duplicate page one
+    summary = _summary(
+        seqs, [(window_start_seq(D0_WINDOWS_PER_DEVICE - 1), "health-d0")]
+    )
+    problems = verify_paging_coverage(summary)
+    assert problems
+    assert any("windows total 101" in p for p in problems)
+
+
+def test_coverage_flags_missing_window_page() -> None:
+    """A missing window page (one start_seq absent) must fail coverage."""
+    seqs = [window_start_seq(i) for i in range(D0_WINDOWS_PER_DEVICE)]
+    seqs.pop()  # drop the last window
+    summary = _summary(
+        seqs, [(window_start_seq(D0_WINDOWS_PER_DEVICE - 1), "health-d0")]
+    )
+    problems = verify_paging_coverage(summary)
+    assert problems
+    assert any("windows total 99" in p for p in problems)
+
+
+def test_coverage_flags_reserved_alarm() -> None:
+    """A re-served alarm (same key twice) must fail coverage."""
+    seqs = [window_start_seq(i) for i in range(D0_WINDOWS_PER_DEVICE)]
+    alarm = (window_start_seq(D0_WINDOWS_PER_DEVICE - 1), "health-d0")
+    summary = _summary(seqs, [alarm, alarm])
+    problems = verify_paging_coverage(summary)
+    assert problems
+    assert any("alarms total 2" in p for p in problems)

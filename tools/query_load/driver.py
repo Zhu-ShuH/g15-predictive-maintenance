@@ -24,6 +24,7 @@ import platform
 import secrets
 import threading
 import time
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -133,6 +134,24 @@ def run_concurrent(
     return results
 
 
+@dataclass
+class PagingSummary:
+    """Raw paging observations plus duplicate accounting for cross-page coverage.
+
+    ``window_start_seqs`` holds every window ``start_seq`` the walk saw, in
+    order; coverage asserts it is exactly the 100 distinct D0 windows with no
+    duplicate or missing page.  ``alarm_keys`` holds only the first occurrence
+    of each ``(start_seq, rule_id)``; ``discarded_alarm_duplicates`` counts the
+    alarm items dropped because the server re-served an already-exhausted alarm
+    stream's page one, so the driver reports the server's raw count and the
+    de-duplicated count instead of silently discarding.
+    """
+
+    window_start_seqs: list[int]
+    alarm_keys: list[tuple[int, str]]
+    discarded_alarm_duplicates: int
+
+
 MAX_PAGING_PAGES = 20
 
 
@@ -140,17 +159,27 @@ def run_paging(
     client: QueryClient,
     device_index: int,
     db_paths: list[Path],
-) -> list[tuple[int, dict[str, object], str]]:
+) -> tuple[list[tuple[int, dict[str, object], str]], PagingSummary]:
     """Walk all pages of one device, verifying each page via the oracle.
 
     Windows and alarms paginate independently.  A ``None`` ``next_cursor``
     means that stream is exhausted; it must not be re-sent as an empty cursor,
-    because the server treats an absent cursor as page one and the driver
-    would silently re-walk the first page.  The two exhausted flags stop the
-    walk; an absent cursor on a live stream still means page one.
+    because the server treats an absent cursor as page one and would silently
+    re-serve the first page.  The two exhausted flags stop the walk; an absent
+    cursor on a live stream still means page one.
+
+    The raw response bodies are returned untouched so the oracle can verify the
+    server's actual output, including any re-served alarm page-one items.  A
+    ``PagingSummary`` is also returned that de-duplicates alarms (recording how
+    many were discarded as re-served duplicates) so coverage can assert the
+    logical result without the driver silently swallowing anything.
     """
     run_id = device_run_id(device_index)
     results: list[tuple[int, dict[str, object], str]] = []
+    window_start_seqs: list[int] = []
+    alarm_keys: list[tuple[int, str]] = []
+    seen_alarms: set[tuple[int, str]] = set()
+    discarded_alarm_duplicates = 0
     windows_cursor: str | None = ""
     alarms_cursor: str | None = ""
     windows_done = False
@@ -167,13 +196,16 @@ def run_paging(
             windows_cursor=windows_cursor,
             alarms_cursor=alarms_cursor,
         )
-        if alarms_done and isinstance(body.get("alarms"), dict):
-            # The alarm stream exhausted on an earlier page.  A request that
-            # omits alarms_cursor makes the server re-serve alarm page one, so
-            # discard those duplicates: the driver already consumed the single
-            # alarm and must not count it again in coverage.
-            body["alarms"]["items"] = []
         results.append((status, body, run_id))
+        for item in body.get("windows", {}).get("items", []):
+            window_start_seqs.append(int(item.get("start_seq")))
+        for item in body.get("alarms", {}).get("items", []):
+            key = (int(item.get("start_seq")), str(item.get("rule_id")))
+            if key in seen_alarms:
+                discarded_alarm_duplicates += 1
+            else:
+                seen_alarms.add(key)
+                alarm_keys.append(key)
         next_windows = body.get("windows", {}).get("next_cursor")
         next_alarms = body.get("alarms", {}).get("next_cursor")
         if next_windows is None:
@@ -184,32 +216,29 @@ def run_paging(
             alarms_done = True
         else:
             alarms_cursor = str(next_alarms)
-    return results
+    summary = PagingSummary(
+        window_start_seqs=window_start_seqs,
+        alarm_keys=alarm_keys,
+        discarded_alarm_duplicates=discarded_alarm_duplicates,
+    )
+    return results, summary
 
 
-def verify_paging_coverage(
-    results: list[tuple[int, dict[str, object], str]],
-) -> list[str]:
+def verify_paging_coverage(summary: PagingSummary) -> list[str]:
     """Assert the paging walk covered every window exactly once and the alarm
-    exactly once total.
+    exactly once after de-duplication.
 
     The server re-serves page one of an exhausted stream whenever that stream's
-    cursor is absent, so a driver that silently re-walks page one would still
-    pass item-by-item verification.  This cross-page check counts window
-    ``start_seq`` values and alarm occurrences, so a re-served page shows up as
-    a duplicate and fails the check.
+    cursor is absent.  The driver keeps raw responses for the oracle (so the
+    oracle sees every re-served item) and de-duplicates alarms in the summary,
+    recording how many were discarded.  This cross-page check therefore proves
+    the windows are neither duplicated nor missing, exactly one alarm key
+    survives de-duplication, and the discarded-alarm count is reported rather
+    than swallowed.
     """
     problems: list[str] = []
-    windows: list[int] = []
-    alarms: list[tuple[int, str]] = []
-    for position, (status, body, _run) in enumerate(results):
-        if status != 200:
-            problems.append(f"paging[{position}] status {status} != 200")
-            continue
-        for item in body.get("windows", {}).get("items", []):
-            windows.append(int(item.get("start_seq")))
-        for item in body.get("alarms", {}).get("items", []):
-            alarms.append((int(item.get("start_seq")), str(item.get("rule_id"))))
+    windows = summary.window_start_seqs
+    alarms = summary.alarm_keys
     expected_windows = set(window_start_seq(i) for i in range(D0_WINDOWS_PER_DEVICE))
     got_windows = set(windows)
     if len(windows) != D0_WINDOWS_PER_DEVICE:
@@ -282,10 +311,11 @@ def main() -> int:
             started = time.monotonic()
             serial_results = run_serial(client, args.serial, db_paths)
             concurrent_results = run_concurrent(client, args.concurrent, db_paths)
-            paging_results = run_paging(client, 0, db_paths)
+            paging_results, paging_summary = run_paging(client, 0, db_paths)
             elapsed = time.monotonic() - started
             all_results = serial_results + concurrent_results + paging_results
             problems = verify_all(all_results, db_paths)
+            coverage = verify_paging_coverage(paging_summary)
             conservation = accounting.conservation_report()
             print(
                 "serial",
@@ -299,13 +329,19 @@ def main() -> int:
             )
             print("peak_client_in_flight", accounting.peak_client_in_flight)
             print("peak_server_in_flight", accounting.peak_server_in_flight)
+            print(
+                "discarded_alarm_duplicates", paging_summary.discarded_alarm_duplicates
+            )
             print("oracle_problems", len(problems))
+            print("coverage_problems", len(coverage))
             print("conservation_problems", len(conservation))
+            for problem in coverage:
+                print("COVERAGE:", problem)
             for problem in problems:
                 print("ORACLE:", problem)
             for problem in conservation:
                 print("CONSERVATION:", problem)
-            failed = bool(problems or conservation)
+            failed = bool(problems or coverage or conservation)
         finally:
             server.shutdown()
             server.server_close()

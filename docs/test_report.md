@@ -393,7 +393,7 @@ print(build_report(s.run_dir, db))
 |---|---|
 | 集成测试（oracle + 可信计数） | **3 passed，退出码 0**（`tests/integration/test_query_capacity_accounting.py`，1.86s） |
 | 性能低负载（opt-in） | **1 passed**（`G15_RUN_QUERY_LOAD=1`，1.59s；默认 1 skipped） |
-| D0 响应正确性 | 全部 200，逐页逐项一致；跨页 start_seq 全覆盖且告警去重后恰好 1 条，0 违例 |
+| D0 响应正确性 | 全部 200，逐页逐项一致；跨页 start_seq 全覆盖；告警流在首页即耗尽，后续每页重发首页告警，客户端丢弃重发页后剩 1 条（丢弃 9 条已计数落盘），0 违例 |
 | 计数守恒 | `client_in_flight==0`、`server_in_flight==0`、`server_received==client_total`、`response_completed==received`、request_id 集合一致，0 违例 |
 | 在途峰值 | client 10 / server 10 |
 
@@ -416,3 +416,5 @@ Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
 - 高负载（100→500→1,000→…→100k）未授权未执行；
 - 双 Linux 低负载兼容留证归 C6，本节未做；
 - `server_queued / server_executing` 两层传输事件产品侧未发，见 `docs/test_plan.md` §11.3。
+
+> 本表数字绑定 `main` = `c75bb9d6`（#154 合入后基线），命令、退出码、机器规格见 `docs/test_plan.md` §11.4 第 6 步留证；时长同机重复运行可波动约 2 倍，不作门禁判据。
