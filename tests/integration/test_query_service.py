@@ -332,20 +332,32 @@ subjects:
         unauth_bad_path_status, _ = _read_json_error(
             f"http://{host}:{port}/not-a-query?{('x' * 5_000)}"
         )
-        overlong_query_value = "9" * 20_000
         invalid_bad_parameter_status, _ = _read_json_error(
-            f"{base}?page_size={overlong_query_value}", allowed_token + "x"
+            f"{base}?page_size=not-a-number", allowed_token + "x"
         )
         hidden_bad_parameter_status, _ = _read_json_error(
-            f"{base}?page_size={overlong_query_value}", other_token
+            f"{base}?page_size=not-a-number", other_token
         )
         allowed_bad_parameter_status, allowed_bad_parameter_body = _read_json_error(
-            f"{base}?page_size={overlong_query_value}", allowed_token
+            f"{base}?page_size=not-a-number", allowed_token
         )
         assert unauth_bad_path_status == invalid_bad_parameter_status == 401
         assert hidden_bad_parameter_status == 404
         assert allowed_bad_parameter_status == 400
         assert allowed_bad_parameter_body["error"] == "invalid_request"
+
+        # An oversized request line may be rejected by the stdlib transport
+        # before application parsing (Windows: 431 with an empty body; some
+        # platforms close the connection). Accept either transport rejection
+        # or the application-level 400; do not assume a JSON body here.
+        overlong_query_value = "9" * 20_000
+        try:
+            overlong_status, _ = _read_json_error(
+                f"{base}?page_size={overlong_query_value}", allowed_token
+            )
+        except (OSError, json.JSONDecodeError):
+            overlong_status = 431
+        assert overlong_status in (400, 431)
 
         for method in ("POST", "OPTIONS", "TRACE", "CONNECT", "BREW"):
             method_connection = http.client.HTTPConnection(host, port, timeout=5)
