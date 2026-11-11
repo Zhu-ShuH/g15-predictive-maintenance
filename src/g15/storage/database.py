@@ -1,6 +1,7 @@
 """SQLite storage for the consumer (Issue #8, owner C2).
 
-This module owns the *shape* of the database: the five tables of
+This module owns the *shape* of the database: the five processing tables and
+the append-only audit table of
 ``docs/interface.md`` section 9, the connection pragmas, and the transaction
 helper the repository uses. It deliberately owns no analysis logic and no
 knowledge of the alarm rules -- it only knows how to open a database, create
@@ -78,8 +79,9 @@ class DatabaseReadOnlyError(DatabaseError):
     """
 
 
-#: The five tables of ``docs/interface.md`` section 9, in the order they are
-#: created. The column lists are taken verbatim from the section 9 SQL; the
+#: The processing and audit tables of ``docs/interface.md`` section 9, in the
+#: order they are created. The five processing-table column lists are taken
+#: verbatim from the section 9 SQL; the
 #: only additions are ``IF NOT EXISTS`` (so re-initialising an existing
 #: database is a no-op) and two indexes, which section 9 does not forbid -- it
 #: says the core tables' fields may be extended and that the primary and
@@ -142,12 +144,66 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS audit_events (
+      event_sequence INTEGER PRIMARY KEY,
+      event_time_utc TEXT NOT NULL,
+      action TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      device_id TEXT,
+      rule_id TEXT,
+      actor_ref TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      previous_hash TEXT,
+      event_hash TEXT NOT NULL UNIQUE,
+      FOREIGN KEY (run_id) REFERENCES runs(run_id)
+    )
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS audit_events_append_guard
+    BEFORE INSERT ON audit_events
+    WHEN
+      NEW.event_sequence != COALESCE(
+        (SELECT MAX(event_sequence) + 1 FROM audit_events), 1
+      )
+      OR NEW.previous_hash IS NOT (
+        SELECT event_hash
+        FROM audit_events
+        ORDER BY event_sequence DESC
+        LIMIT 1
+      )
+      OR EXISTS (
+        SELECT 1 FROM audit_events WHERE event_hash = NEW.event_hash
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_events is append-only');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS audit_events_no_update
+    BEFORE UPDATE ON audit_events
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_events is append-only');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
+    BEFORE DELETE ON audit_events
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_events is append-only');
+    END
+    """,
+    """
     CREATE INDEX IF NOT EXISTS idx_feature_windows_run
       ON feature_windows (run_id, start_seq)
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_alarms_run
       ON alarms (run_id, start_seq)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_audit_events_run
+      ON audit_events (run_id, event_sequence)
     """,
 )
 

@@ -421,8 +421,26 @@ def test_the_schema_is_created_once_and_is_idempotent(tmp_path: Path) -> None:
         "feature_windows",
         "alarms",
         "alarm_states",
+        "audit_events",
     }
     assert expected.issubset(names)
+
+    connection = connect(database)
+    try:
+        triggers = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+            ).fetchall()
+        }
+    finally:
+        connection.close()
+
+    assert {
+        "audit_events_append_guard",
+        "audit_events_no_update",
+        "audit_events_no_delete",
+    }.issubset(triggers)
 
 
 def test_every_schema_statement_is_repeatable(tmp_path: Path) -> None:

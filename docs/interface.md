@@ -383,7 +383,7 @@ verify_run(run_dir: Path, *, expected_total_points: int | None = None) -> Verifi
 
 `consume_run(run_dir, database_path, config)` 返回的 `ConsumptionSummary` 包含 `run_id/device_id/windows_written/alarms_written/shards_processed/shards_skipped/windows_dropped`。`windows_dropped` 沿用既有名称，单位是被丢弃的**样本点数**，不是窗口数；改名会破坏既有调用接口，本次不改名；如需改名，按 §13 接口变更流程办理。重复消费已提交同 SHA 的片只跳过分析，不丢失已提交状态。
 
-SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。`consume` 薄接线已由 #71 合入主线。显式重置的 consumer 级公开入口、审计返回与 `g15 reset-alarms` 子命令由 #127 实施，冻结契约见 §8.5；库级 `ConsumptionRepository.reset_alarm_state` 保留原有签名，不与 consumer 级入口混用。契约已裁定不等于功能已交付，在 #127 的实现与非作者复核齐备前不得写成已接线。
+SQL 与计算留在 storage/consumer；CLI 只加载配置、解析参数、选择既定输出路径和映射错误码。`consume` 薄接线已由 #71 合入主线。显式重置的 consumer 级公开入口与 `g15 reset-alarms` 子命令已由 #127 进入主线，冻结契约见 §8.4；#143 在此基础上增加独立只增审计返回。库级 `ConsumptionRepository.reset_alarm_state` 保留原有签名，不与 consumer 级入口混用。
 
 ## 7. 仿真模型规范
 
@@ -458,9 +458,10 @@ crc32(stream.encode("utf-8")) & 0xFFFFFFFF, b & 0xFFFFFFFFFFFFFFFF]))`，
 
 显式重置与正常恢复分开：操作者重置留旧原文、原因和 UTC 时刻，后续状态写入及重开库不得抹掉审计，多次重置按最旧到最新保留历史。未来版本/损坏 JSON 纳入公共运维策略，但必须由返回值 `previous_state_decodable=False` 明示旧行原文不可严格解码；宽容重置不等于旧数据可信。`allow_legacy=False` 的严格路径保留在库级（`StateCompatibilityError` 映射退出码 3）；CLI 固定 `allow_legacy=True` 且不暴露该参数，因此该分支不在 CLI 可达性承诺内。
 
-#127 冻结的 consumer 级契约为 `reset_alarm_state(run_dir, database_path, device_id, rule_id, *, reason, allow_legacy=True) -> AlarmResetResult`：`reason` 为非空自由文本，不用封闭枚举；`previous_state` 为 `AlarmState | None`，`previous_state_json` 保留旧行原文，`previous_state_decodable` 仅当前信封严格解码成功时为 `True`；`archived_reset_count` 是本次之前的归档重置数、不含本次。`device_id` 必须与 Manifest 一致，不一致抛 `ConsumptionError`（CLI 映射 3）。读旧行、解码/归档与写新行必须在同一 `transaction()` 中完成。重置只清空 streak、保留 `last_end_seq_exclusive` 锚点，**重置后下一窗仍可能重新告警**；不删除历史告警、不重算 run、不改其余四表。CLI 使用 `--run-dir/--device-id/--rule-id/--reason/--yes`，不提供 `--database`；子命令名 `reset-alarms`，退出码为 0（成功）、2（空 `reason` 或缺参数）、3（Manifest/device/库/无存量状态/兼容错误）、5（未预期）。
+#127 冻结的 consumer 级契约为 `reset_alarm_state(run_dir, database_path, device_id, rule_id, *, reason, allow_legacy=True) -> AlarmResetResult`：`reason` 为非空自由文本，不用封闭枚举；`previous_state` 为 `AlarmState | None`，`previous_state_json` 保留旧行原文，`previous_state_decodable` 仅当前信封严格解码成功时为 `True`；`archived_reset_count` 是本次之前的归档重置数、不含本次。#143 在返回值末尾增补 `audit_sequence`、`audit_previous_hash`、`audit_event_hash`，用于引用独立只增审计事件；不改变原字段语义。`device_id` 必须与 Manifest 一致，不一致抛 `ConsumptionError`（CLI 映射 3）。读旧行、解码/归档、写新状态与审计 INSERT 必须在同一 `transaction()` 中完成。重置只清空 streak、保留 `last_end_seq_exclusive` 锚点，**重置后下一窗仍可能重新告警**；不删除历史告警、不重算 run、不改其余四张业务表。CLI 使用 `--run-dir/--device-id/--rule-id/--reason/--yes`，不提供 `--database`；子命令名 `reset-alarms`，退出码为 0（成功）、2（空 `reason` 或缺参数）、3（Manifest/device/库/无存量状态/兼容错误）、5（未预期）。
 
-本条为 #127 的契约基线；功能未合入前状态仍是待实现。
+本条为 #127 的契约基线；#143 扩展需以 PR 合入与实测证据为准，不以文档文字
+单独记为已验收。
 
 **重置 streak 不等于重新分析 run**：该动作不清除旧结果/`processed_chunks`，不更新 `runs.scoring_version`，不能作为变更规则/窗宽后“整 run 重算”的承诺。当前更换分析配置应保留原库、向新数据库消费；任何覆盖旧库或新增选择参数必须另行明确操作和审计。不得在消费失败时自动重置。
 
@@ -523,6 +524,20 @@ CREATE TABLE alarm_states (
   PRIMARY KEY (run_id, device_id, rule_id),
   FOREIGN KEY (run_id) REFERENCES runs(run_id)
 );
+CREATE TABLE audit_events (
+  event_sequence INTEGER PRIMARY KEY,
+  event_time_utc TEXT NOT NULL,
+  action TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  device_id TEXT,
+  rule_id TEXT,
+  actor_ref TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  previous_hash TEXT,
+  event_hash TEXT NOT NULL UNIQUE,
+  FOREIGN KEY (run_id) REFERENCES runs(run_id)
+);
 ```
 
 `PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;`（在数据库连接/初始化环节执行并验证）。主键和外键语义需测试。所有写入使用 `with connection:` 事务；**特征/健康分/告警/分片完成标记在同一事务内提交**。遭遇 kill -9，未提交事务自动回滚；重启时从 `processed_chunks` 判断需重放的输入，依唯一键避免重复结果。此处 kill -9 恢复是设计预期，真实进程强杀的 Linux 实测证据仍待 #10 交付，不得据此记为已验证。若同名 `part_id` 的 SHA-256 被改变，必须拒绝重放并报契约冲突，不得静默覆盖。
@@ -530,7 +545,8 @@ CREATE TABLE alarm_states (
 
 ### 9.1 JSON 信封、追溯与重放
 
-上述五表、字段、主键和外键不因 JSON 信封新增或改变：
+上述五张业务表、字段、主键和外键不因 JSON 信封新增或改变；
+`audit_events` 是独立只增表，不属于分片消费结果：
 
 - `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
 - 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION` 是另一个常量（当前主线值为 `1.2`，随算法接受域演进）。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
@@ -538,6 +554,29 @@ CREATE TABLE alarm_states (
 - `runs.status` 镜像 Manifest 状态，不代表消费已完成；完成进度由已提交 `processed_chunks` 与 Manifest 对照。相同 run 的已记录元数据/评分版本与已有窗口宽度冲突时拒收。
 - 同片同 SHA 重放跳过分析、保留已提交状态；同 ID 异 SHA 拒收。片事务成功后才推进内存状态，失败/重启从提交态恢复，不继承未提交的计算结果。
 - 当前对同版本号规则内容、`incomplete_window` 变化没有完整持久化指纹/自动检测，不能声称已验证全部分析身份。变更配置须保留旧结果并在新数据库重算；C2 提出指纹/兼容方案后按 §13 更新，不能静默扩 schema。本条披露限制，不把未实现的检测写成验收通过。
+
+### 9.2 高风险操作审计
+
+Issue #143 / ADR-0008 为 `reset-alarms` 增加应用级 append-only 审计。
+`audit_events` 只允许在链尾 INSERT；`BEFORE UPDATE` 与 `BEFORE DELETE` 拒绝改删，
+`BEFORE INSERT` 只接受严格下一序号、当前尾哈希和全新事件哈希，阻断
+`INSERT OR REPLACE`、序号复用、跳号与错误前驱。违规必须
+`RAISE(ABORT, 'audit_events is append-only')`。reset 的旧状态读取、
+`alarm_states` 更新和审计 INSERT 处在同一个 `BEGIN IMMEDIATE` 事务，任一步失败
+都回滚，禁止“状态改了但审计没写”或相反。
+
+事件按 `event_sequence` 严格递增；`event_hash` 是当前规范化事件内容与
+`previous_hash` 的 SHA-256。首条事件的 `previous_hash` 为 `NULL`。实现必须提供
+全链校验 `verify_audit_chain() -> int`，成功时返回已校验事件数；序号断档、
+前驱不符、payload 被改或哈希不符均明确失败，不得降级成
+“无审计”。`payload_json` 只存最小证据（旧状态 SHA-256、版本、可解码性、进度
+锚点与历史计数），不复制 token、密码、`private_truth` 或完整旧状态原文。
+
+`actor_ref="local-cli"` 只表示本地命令入口，不证明自然人身份。拥有数据库文件或
+DDL 权限者仍可删除触发器、替换文件或重算整条链；且没有独立尾锚时，删除最后
+一条或整段尾缀不可检。因此本契约只能称“应用级只增 + 有限篡改可检”，不得称
+绝对不可篡改；完整威胁边界见 ADR-0008。所有消费与 reset 写入口都必须先幂等
+初始化 schema，使旧库首次 reset 能建立审计表/触发器后再原子追加。
 
 ## 10. CLI 契约和退出码
 
@@ -554,7 +593,7 @@ python -m g15 benchmark --config configs/benchmark_1m.yaml
 python -m g15 doctor
 ```
 
-输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上表是统一接口规格，不代表每个子命令都已实现；其中 `consume` 已由 #71 合入主线，`simulate` 与 `report` 已由 #110 / PR #125 合入主线，`validate` 与 `benchmark` 亦已实现；`reset-alarms` 由 #127 实施（契约见 §8.5，#127 的实现与非作者复核齐备前不得写成已接线）；`verify` 与 `doctor` 尚未接线，其余按各自实现与验收记录判断。**
+输出给人的摘要可以是中文，但结构化 JSON 字段、CLI 参数、路径和返回码不使用中文命名。退出码：`0` 成功；`2` 参数/配置不合法；`3` I/O 或 Schema 验证失败；`4` 验收门禁失败；`5` 未预期错误。命令必须支持 `--help` 和非交互模式。**上表是统一接口规格，不代表每个子命令都已实现；其中 `consume` 已由 #71 合入主线，`simulate` 与 `report` 已由 #110 / PR #125 合入主线，`validate` 与 `benchmark` 亦已实现；`reset-alarms` 已由 #127 进入主线（契约见 §8.4），#143 扩展只增审计；`verify` 与 `doctor` 尚未接线，其余按各自实现与验收记录判断。**
 
 `verify` 与 `report` 的职责不得互换。`g15 verify` 未来薄接 `verify_run`，只读 Manifest/NPZ，不读 SQLite 或 `private_truth/`、不写报告；完整性校验实际执行后 `passed=True` 返回 `0`、`passed=False` 返回 `4`，无法执行的 Manifest/Schema/I/O/路径错误返回 `3`，未预期异常返回 `5`。`g15 report` 调用 `build_report(run_dir, run_dir/artifacts/results.sqlite)`，负责真值对账并生成 JSON/Markdown；两份产物成功生成即返回 `0`，即使报告字段为 `passed=false` 或 `passed=null`，因为这些是报告数据而非普通生成命令的进程失败。`ReportError`、`DataContractError` 家族及数据库/文件 I/O 返回 `3`，未预期异常返回 `5`；不得把 `EXIT_ACCEPTANCE=4` 扩到普通 `report`。
 
@@ -564,7 +603,7 @@ python -m g15 doctor
 
 退出码 `4`（验收门禁未达标）供 `verify` 及约定使用该码的验收入口表达未达标结果，不用于普通 `consume`；`consume` 的失败分类为 `2`/`3`/`5`。这是返回码的职责划分，不表示当前验证器或验收脚本已实现该分支。
 
-若本次 `shards_processed > 0` 且 `windows_dropped > 0`，stderr 必须给出丢弃样本数；同片全 skip 且无本次丢点不误报警。0 窗口成功不是“已完成故障检出验收”。`reset-alarms` 的契约已在 §8.5 冻结，不在本节重复；consume 失败绝不自动触发重置。
+若本次 `shards_processed > 0` 且 `windows_dropped > 0`，stderr 必须给出丢弃样本数；同片全 skip 且无本次丢点不误报警。0 窗口成功不是“已完成故障检出验收”。`reset-alarms` 的契约已在 §8.4 冻结，不在本节重复；consume 失败绝不自动触发重置。成功的 `reset-alarms` 还输出 `audit_sequence`、`audit_previous_hash`（首条为 `null`）和 `audit_event_hash`，供现场固定证据；不得打印旧状态原文。
 
 ## 11. 报告与运行目录
 

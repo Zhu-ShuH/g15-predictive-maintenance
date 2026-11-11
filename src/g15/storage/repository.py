@@ -3,7 +3,7 @@
 The repository is the only place that turns analysis results into rows. It
 owns four things:
 
-* the row shapes of the five section 9 tables;
+* the row shapes of the five processing tables and append-only audit table;
 * the JSON envelopes used for ``feature_windows.features_json`` and
   ``alarm_states.state_json``;
 * the idempotency rules -- which rows are skipped on a repeat, and which
@@ -41,11 +41,13 @@ window position, the rule identity, and a human-readable explanation of the
 score.
 """
 
-# One contract lives here on purpose: five tables, two JSON envelopes and the
+# One contract lives here on purpose: processing/audit tables, two JSON
+# envelopes and the
 # per-shard transaction rules are read together or not at all.
 # pylint: disable=too-many-lines
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -65,6 +67,7 @@ __all__ = [
     "ChunkConflictError",
     "RunConflictError",
     "StateCompatibilityError",
+    "AuditChainError",
     "WindowRecord",
     "ResetAudit",
     "ConsumptionRepository",
@@ -151,6 +154,10 @@ class StateCompatibilityError(StorageError):
     """
 
 
+class AuditChainError(StorageError):
+    """Raised when the append-only audit hash chain cannot be verified."""
+
+
 @dataclass(frozen=True)
 class WindowRecord:
     """One analysed window, ready to be written.
@@ -191,6 +198,10 @@ class ResetAudit:
             versions and damaged JSON alike.
         previous_state: The archived state when strict decoding succeeded.
         previous_state_schema_version: Version declared by the archived row.
+        audit_sequence: Monotonic sequence of the append-only audit event.
+        audit_previous_hash: Hash of the preceding audit event, or ``None``
+            for the first event.
+        audit_event_hash: Hash of this event's canonical content.
     """
 
     new_state: AlarmState
@@ -200,6 +211,9 @@ class ResetAudit:
     previous_state_decodable: bool
     previous_state: AlarmState | None
     previous_state_schema_version: str | None
+    audit_sequence: int
+    audit_previous_hash: str | None
+    audit_event_hash: str
 
 
 def utc_now_text() -> str:
@@ -573,6 +587,53 @@ def _text_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _canonical_json(value: Any) -> str:
+    """Encode one audit value deterministically for hashing and storage."""
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _audit_event_hash(
+    *,
+    event_sequence: int,
+    event_time_utc: str,
+    action: str,
+    run_id: str,
+    device_id: str | None,
+    rule_id: str | None,
+    actor_ref: str,
+    reason: str,
+    payload_json: str,
+    previous_hash: str | None,
+) -> str:
+    """Return the SHA-256 of one canonical audit event.
+
+    The previous event hash is part of the document, making reordering,
+    interior deletion and in-place edits detectable by
+    :meth:`verify_audit_chain`. Without an independently stored tail anchor,
+    deleting only the final event (or a final suffix) is not detectable. This
+    is an application integrity check, not a claim that a database owner with
+    file and DDL access cannot replace the whole database.
+    """
+    document = {
+        "event_sequence": event_sequence,
+        "event_time_utc": event_time_utc,
+        "action": action,
+        "run_id": run_id,
+        "device_id": device_id,
+        "rule_id": rule_id,
+        "actor_ref": actor_ref,
+        "reason": reason,
+        "payload_json": payload_json,
+        "previous_hash": previous_hash,
+    }
+    return hashlib.sha256(_canonical_json(document).encode("utf-8")).hexdigest()
+
+
 # --------------------------------------------------------------------------
 # repository
 # --------------------------------------------------------------------------
@@ -899,6 +960,133 @@ class ConsumptionRepository:
         ).fetchone()
         return None if row is None else str(row[0])
 
+    def _append_audit_event(
+        self,
+        *,
+        event_time_utc: str,
+        action: str,
+        run_id: str,
+        device_id: str | None,
+        rule_id: str | None,
+        actor_ref: str,
+        reason: str,
+        payload: dict[str, Any],
+    ) -> tuple[int, str | None, str]:
+        """Append one audit event inside the caller's write transaction.
+
+        Returns:
+            ``(sequence, previous_hash, event_hash)``.
+
+        Raises:
+            StorageError: if called without an active transaction.
+        """
+        if not self._connection.in_transaction:
+            raise StorageError("audit events must be appended inside a transaction")
+        if not actor_ref.strip():
+            raise StorageError("audit actor_ref must be non-empty")
+        if not reason.strip():
+            raise StorageError("audit reason must be non-empty")
+
+        latest = self._connection.execute("""
+            SELECT event_sequence, event_hash
+            FROM audit_events
+            ORDER BY event_sequence DESC
+            LIMIT 1
+            """).fetchone()
+        if latest is None:
+            sequence = 1
+            previous_hash = None
+        else:
+            sequence = int(latest[0]) + 1
+            previous_hash = str(latest[1])
+
+        payload_json = _canonical_json(payload)
+        event_hash = _audit_event_hash(
+            event_sequence=sequence,
+            event_time_utc=event_time_utc,
+            action=action,
+            run_id=run_id,
+            device_id=device_id,
+            rule_id=rule_id,
+            actor_ref=actor_ref,
+            reason=reason,
+            payload_json=payload_json,
+            previous_hash=previous_hash,
+        )
+        self._connection.execute(
+            """
+            INSERT INTO audit_events
+              (event_sequence, event_time_utc, action, run_id, device_id,
+               rule_id, actor_ref, reason, payload_json, previous_hash,
+               event_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                sequence,
+                event_time_utc,
+                action,
+                run_id,
+                device_id,
+                rule_id,
+                actor_ref,
+                reason,
+                payload_json,
+                previous_hash,
+                event_hash,
+            ),
+        )
+        return sequence, previous_hash, event_hash
+
+    def verify_audit_chain(self) -> int:
+        """Verify every stored append-only audit event in sequence order.
+
+        Returns:
+            The number of verified events.
+
+        Raises:
+            AuditChainError: if a sequence, link or event hash is invalid.
+        """
+        rows = self._connection.execute("""
+            SELECT event_sequence, event_time_utc, action, run_id, device_id,
+                   rule_id, actor_ref, reason, payload_json, previous_hash,
+                   event_hash
+            FROM audit_events
+            ORDER BY event_sequence
+            """).fetchall()
+        previous_hash: str | None = None
+        for expected_sequence, row in enumerate(rows, start=1):
+            sequence = int(row[0])
+            if sequence != expected_sequence:
+                raise AuditChainError(
+                    f"audit sequence gap: expected {expected_sequence}, got {sequence}"
+                )
+            stored_previous = None if row[9] is None else str(row[9])
+            if stored_previous != previous_hash:
+                raise AuditChainError(
+                    f"audit event {sequence} has previous_hash {stored_previous!r}; "
+                    f"expected {previous_hash!r}"
+                )
+            expected_hash = _audit_event_hash(
+                event_sequence=sequence,
+                event_time_utc=str(row[1]),
+                action=str(row[2]),
+                run_id=str(row[3]),
+                device_id=None if row[4] is None else str(row[4]),
+                rule_id=None if row[5] is None else str(row[5]),
+                actor_ref=str(row[6]),
+                reason=str(row[7]),
+                payload_json=str(row[8]),
+                previous_hash=stored_previous,
+            )
+            stored_hash = str(row[10])
+            if stored_hash != expected_hash:
+                raise AuditChainError(
+                    f"audit event {sequence} hash mismatch: stored "
+                    f"{stored_hash!r}, computed {expected_hash!r}"
+                )
+            previous_hash = stored_hash
+        return len(rows)
+
     # -- explicit reset (Issue #57 S3) ------------------------------------
 
     # The whole read/decode/archive/write cycle stays in one scope on purpose:
@@ -913,6 +1101,7 @@ class ConsumptionRepository:
         reset_at: str | None = None,
         scoring_version: str | None = None,
         allow_legacy: bool = True,
+        actor_ref: str = "local-cli",
     ) -> ResetAudit:
         """Archive a stored state and return its audit in one transaction.
 
@@ -934,6 +1123,10 @@ class ConsumptionRepository:
                 row, if any.
             allow_legacy: Accept an old row the strict decoder refuses. Set to
                 ``False`` to require a decodable current-version envelope.
+            actor_ref: Non-secret, pseudonymous source of the operation. The
+                current local CLI uses ``"local-cli"`` because it has no
+                identity provider; future transports must pass their
+                authenticated actor reference without logging credentials.
 
         Returns:
             The audit of this reset, including the new empty streak and the
@@ -1020,6 +1213,27 @@ class ConsumptionRepository:
                     rule_id,
                 ),
             )
+            audit_sequence, audit_previous_hash, audit_event_hash = (
+                self._append_audit_event(
+                    event_time_utc=reset_at_utc,
+                    action="alarm_state.reset",
+                    run_id=run_id,
+                    device_id=device_id,
+                    rule_id=rule_id,
+                    actor_ref=actor_ref,
+                    reason=reason,
+                    payload={
+                        "archived_reset_count": len(history),
+                        "last_end_seq_exclusive": int(current[1]),
+                        "previous_state_decodable": previous is not None,
+                        "previous_state_schema_version": archived_version,
+                        "previous_state_sha256": hashlib.sha256(
+                            raw_text.encode("utf-8")
+                        ).hexdigest(),
+                        "state_schema_version": STATE_SCHEMA_VERSION,
+                    },
+                )
+            )
 
         return ResetAudit(
             reset_at_utc=reset_at_utc,
@@ -1031,6 +1245,9 @@ class ConsumptionRepository:
             new_state=new_state,
             archived_reset_count=len(history),
             previous_state_decodable=previous is not None,
+            audit_sequence=audit_sequence,
+            audit_previous_hash=audit_previous_hash,
+            audit_event_hash=audit_event_hash,
         )
 
     def reset_alarm_state(
