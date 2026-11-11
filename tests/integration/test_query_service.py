@@ -281,6 +281,38 @@ subjects:
         assert body["windows"]["next_cursor"]
         assert body["versions"]["manifest_schema_version"] == "2.0"
 
+        first_request_id = body["request_id"]
+        assert body["trace_id"] == first_request_id
+        with urlopen(request, timeout=5) as response:
+            second_body = json.loads(response.read())
+        assert second_body["request_id"] != first_request_id
+        request_events = [
+            event for event in events if event.get("request_id") == first_request_id
+        ]
+        stages = [str(event["stage"]) for event in request_events]
+        for earlier, later in (
+            ("authn_checked", "authz_checked"),
+            ("authz_checked", "db_opened"),
+            ("db_opened", "query_started"),
+            ("query_started", "query_completed"),
+        ):
+            assert stages.index(earlier) < stages.index(later)
+        for event in request_events:
+            assert {
+                "timestamp_utc",
+                "request_id",
+                "trace_id",
+                "stage",
+                "query_shape",
+                "result",
+            } <= set(event)
+            assert not {
+                "reason",
+                "previous_state_json",
+                "private_truth",
+                "authorization",
+            } & set(event)
+
         serialized = json.dumps(body, sort_keys=True)
         for forbidden in (
             "private_truth",
