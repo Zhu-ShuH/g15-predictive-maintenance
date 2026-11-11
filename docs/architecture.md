@@ -41,7 +41,7 @@ flowchart LR
 | simulation / faults | B1 / C1 | 趋势、噪声、spike/step/burst、确定性随机流与真值生成 | 只产测量/真值，不计算健康分；最终百万点需同一 SHA 双 Linux 三次复证 |
 | schema / producer | C4 | Schema 2.0、NPZ、SHA、原子 complete Manifest、末片上界 | 真值隔离是代码边界，不是 OS 权限；不得擅自扩字段或改变计时窗口 |
 | analysis | B2 | FEATURES_VERSION 1.2；特征、健康评分、告警、掩码/数值边界 | 启发式教学模型，不宣称真实工业诊断精度；规则更改须版本化和复验 |
-| consumer / storage | C2 | 五表、按片事务、幂等、只读连接、状态恢复与 reset-alarms | reset 历史在可变状态信封中，不满足 append-only 安全审计；须独立立项实现 |
+| consumer / storage | C2 | 五表、按片事务、幂等、只读连接、状态恢复与 reset-alarms | reset 历史在可变状态信封中；独立 `audit_events` append-only 审计链已由 #143/#147 落地，应用级只增满足；文件级防篡改未声称 |
 | reporting / verifier | B1 承接原 C5 | JSON/Markdown 报告、真值对账、独立原始分片校验 | #56→#9 的独立保留集未完成；verifier 不读真值，不能与报告层职责混写 |
 | scripts / environment | C6 | setup/demo/verify/benchmark/clean、依赖锁、双 Linux 历史证据 | 最终候选 SHA 仍需 clean clone、禁网与现场故障同批复验 |
 | query / service | A/B1 | ADR-0007、需求和候选契约已入库 | `src/g15/query`/`service` 已实现并合入（#149）；#136 Gate 0 之前不得声称 p95、EXPLAIN 或 100k 通过 |
