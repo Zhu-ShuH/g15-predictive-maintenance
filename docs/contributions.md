@@ -28,7 +28,7 @@ PR 数、代码行数或贡献价值。别名只在 `docs/contributors.md` 已�
 | C3 | `Www9191` | 8 | YAML、配置校验、薄 CLI | 有 commit |
 | C4 | `wxm-1` | 10 | Schema、NPZ/Manifest、生产入口 | 有 commit |
 | C5 | `Gyy-yyy` | 0 | 原独立验证/报告角色 | **未满足“人人有 commit”**；B1 承接不能改署 |
-| C6 | `Ran2149975600` + `La Palome`（同一邮箱） | 8* | 脚本、双 Linux、运维证据 | 5 条显示名已确认；另 3 条别名须 C6 本人确认后定稿 |
+| C6 | `Ran2149975600` + `La Palome`（同一邮箱） | 8* | 脚本、双 Linux、运维证据 | C6 本人已确认：显示名与登录名为同一 GitHub 账号，同邮箱 8 条提交均归属 C6 |
 
 `*` 同邮箱是核查线索，不等于本人签字。最终表需要成员确认账号/邮箱和具体提交，
 不得仅凭邮箱相同强行归属。
@@ -45,7 +45,7 @@ PR 数、代码行数或贡献价值。别名只在 `docs/contributors.md` 已�
 | C3 | 1 | 1 | 1 | 3 | 2 | **不满足** |
 | C4 | 0 | 5 | 0 | 4 | 1 | **不满足** |
 | C5 | 0 | 0 | 0 | 0 | 0 | **不满足** |
-| C6 | 1 | 1 | 0 | 6 | 0 | **不满足**；含待本人确认别名 |
+| C6 | 1 | 1 | 0 | 6 | 0 | **不满足**；别名已由 C6 本人确认 |
 
 W42 是项目起始周、W46 是截至 11-10 的未结束周；是否按完整周评分由教师裁定，
 本表不擅自把部分周改判为通过。历史频次不能用空 commit、拆分同一改动或改写 main
@@ -87,10 +87,10 @@ Release 冻结时把 `HEAD` 换成完整候选 SHA，并同时核对：
 | B2 / [ryj-teach1](https://github.com/ryj-teach1) | 特征、健康评分、告警及规则 [#54](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54)；数值边界修复候选 #73；[#72 R5正式评审](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72#pullrequestreview-5677015028) | #54已合入；#73已提交e4814b65769fa6da45ca070daac89af02d03d0e9整改候选（含大端字节序修复），A已在该head复审APPROVED5698934386，其他成员审查/集成未齐；R5由B2发现与复现，并已本人[复审APPROVED5684239091](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72#pullrequestreview-5684239091)覆盖其旧CR；这是评审贡献，修复实现属于B1，A另有独立复证；另在#70提出场景类型判定风险，A复证并请求修改，整改实现仍归B1 |
 | C1 / [wzs-1234](https://github.com/wzs-1234) | spike/step/burst可控注入与真值 [#27](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/27) | 已合入；波形用例不自动等于三类可靠性故障注入或正式检出率验收 |
 | C2 / [zty-78](https://github.com/zty-78) | 消费入口、SQLite、窗口/告警状态与恢复 [#64](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64)；末片上界修复 #76；[#57本人契约答复](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/57#issuecomment-6358549345) | #64已合入；#76已合入；公开接口确认、真实Linux强杀证据分别跟踪，不用单元恢复结果代替 |
-| C3 / [Www9191](https://github.com/Www9191) | 配置/YAML/validate [#26](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/26)、配置采样率上限 [#55](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/55)；消费CLI候选 #71 | #26/#55已合入；#71未合入；薄CLI职责不等于实现上游仿真或下游业务公式 |
+| C3 / [Www9191](https://github.com/Www9191) | 配置/YAML/validate [#26](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/26)、配置采样率上限 [#55](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/55)；消费 CLI 接线 [#71](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71)；benchmark [#92](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/92) | #26/#55/#71/#92 均已合入；薄 CLI 职责不等于实现上游仿真或下游业务公式 |
 | C4 / [wxm-1](https://github.com/wxm-1) | Schema/NPZ读写 [#29](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29)、生产入口 [#30](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30)、契约收口 [#43](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/43)、真值写入失败语义 [#48](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/48)、末片含等号勘误 [#68](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/68) | 均已合入；#68是契约修订，#76是C2的消费端实现，分别登记 |
 | C5 / [Gyy-yyy](https://github.com/Gyy-yyy) | 名义主责为独立验证/报告/测试汇总；本快照未登记到可核验的C5本人独立PR交付条目 | 待本人补具体链接/文件/结果；不根据名义角色把B1的#70/#72归给C5，也不据本表缺记录推断其全部工作情况；A已于2026-10-25将#9/#51原C5相关任务转派B1（见两Issue转派评论），当前交付不再等待C5 |
-| C6 / [Ran2149975600](https://github.com/Ran2149975600) | shell脚本可执行位修复 [#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) | 已合入；仅证明执行位修正，脚本实现、部署/运维、依赖锁定、双Linux与真实强杀继续待交付 |
+| C6 / [Ran2149975600](https://github.com/Ran2149975600) | 部署脚本与双 Linux 部署/运维文档 [#86](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/86)、benchmark 状态同步与双机基准 [#97](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/97)；执行位修复 [#59](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59) | #86/#97/#59 均已合入；依赖锁定与双解释器由 #28 关闭，双 Linux 五步 G4 与 SIGKILL 由 #10 关闭；不再写“继续待交付” |
 
 ## 3. A 的评审、治理与证据交付
 
