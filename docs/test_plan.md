@@ -265,3 +265,42 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 - 复用 §3 匹配判据：TP=6 / FN=0、normal 零告警且 `detection_rate=null`、degradation 单独报告不并入 normal 误报、FP / redundant / unmatched 分开；
 - 负向/边界（C4 复核点）：真值隔离（§6.4）、非自报匹配（§4）、窗口右开 + 2 窗宽限、一对一最大匹配；
 - 数据由新 seed 经同一受控轮廓（单设备、100 Hz、`window_points=256`、`chunk_points=10240`、`total_points=65536`）生成；seed 未选定、数据未生成前，测试不落地。
+
+## 10 用户查询容量门禁（Issue #136，Gate 0 计划）
+
+> 本节属 #136（父单 #133，ADR-0007），与 #9 的「受控事件检出」是两个不同主题。负责人 B1（kittywent）承接，A 共同负责，C4 非作者复核，A 门禁。只授权 Gate 0（oracle / 可信计数 / D0 / 低负载），不授权高负载；D1/D2 与十万级逐档重新授权。
+
+### 10.1 边界与数据口径
+
+- 数据口径（ADR-0007 §5）：D0=10 设备 × 100 窗口（正确性 / 量测可信）；D1=1,000 设备 × 3,906 窗口 = 3,906,000 行 = 1,000 个 run 库；D2=10,000 设备 × 3,906 窗口 = 39,060,000 行 = 10,000 个 run 库。禁止把 D1/D2 合成一个大库。
+- 文件白名单：`tools/query_load/**`、`tests/performance/query/**`、`tests/integration/test_query_capacity_accounting.py`、`tests/fixtures/query/**`、`docs/test_plan.md`、`docs/test_report.md`、`.github/CODEOWNERS`；负载配置在 `tests/performance/query/workloads/**`。明确排除 `src/g15/**`、`scripts/**`、部署文件、#56/#9 保留集。
+- 不改产品代码：harness 只 import 并驱动 `src/g15/query/**` 与 `src/g15/service/**` 的公开入口，不改这些文件。
+
+### 10.2 可信计数口径（ADR-0007 §3）
+
+- 每请求同一 request/trace ID 记录 `client_started / client_waiting / client_completed` 与 `server_received / server_queued / server_executing / server_completed`。
+- `client_in_flight = started - completed`，`server_in_flight = received - completed`。
+- oracle 独立读已提交 SQLite 逐项对照，不 mock 认证 / 授权 / repository / SQLite，不读 `private_truth`。
+- 禁止 handler sleep / 人工延迟 / 网络限速制造在途峰值。
+
+### 10.3 已知缺口（文档化，不伪造）
+
+现有传输层 `src/g15/service/http.py` 的 event_sink 只发 3 个阶段 `server_received / rejected / response_completed`，不发 `server_queued / server_executing`。因此 harness 的 `server_in_flight` 只能按 `received - completed` 近似，`server_queued / server_executing` 两层暂时无法直接量测。这是产品侧缺口，harness 不 hack、不改 src，写清后留待后续。
+
+### 10.4 Gate 0 六步（#136）
+
+1. harness / oracle / 计数定义 / 失败留存 / 停止条件 Review；
+2. D0 逐请求验证响应 / 授权 / 分页 / 版本 / 日志；
+3. 1 用户 / 10 请求 → 10 / 50 实际在途低负载；
+4. 对账 client / server / request-log 证明计数可信；
+5. Windows 开发回归 + 两 Linux 低负载兼容（不改 C6 脚本）；
+6. 固定 SHA 留命令 / 退出码 / 机器规格 / 延迟分布 / 资源指标 / 失败。
+
+### 10.5 测试层级
+
+| 层级 | 位置 | 命令 |
+|---|---|---|
+| 集成（oracle + 计数） | `tests/integration/test_query_capacity_accounting.py` | `python -m pytest -q tests/integration/test_query_capacity_accounting.py` |
+| 性能（opt-in） | `tests/performance/query/test_query_load.py` | `G15_RUN_QUERY_LOAD=1 python -m pytest -q -s tests/performance/query/test_query_load.py` |
+
+harness 在 `tools/query_load/`：`d0_fixture.py`（D0 建库）、`accounting.py`（可信计数）、`oracle.py`（独立对账）、`client.py`（真实 HTTP 客户端）、`driver.py`（串行 + 并发 + 翻页全链驱动）。实测数字见 `docs/test_report.md` §9。
