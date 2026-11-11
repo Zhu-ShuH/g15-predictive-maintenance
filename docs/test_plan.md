@@ -264,7 +264,7 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 - 位置：`tests/integration/test_holdout_validation.py`（本 PR 不建文件、不写测试代码，仅登记轮廓）；
 - 复用 §3 匹配判据：TP=6 / FN=0、normal 零告警且 `detection_rate=null`、degradation 单独报告不并入 normal 误报、FP / redundant / unmatched 分开；
 - 负向/边界（C4 复核点）：真值隔离（§6.4）、非自报匹配（§4）、窗口右开 + 2 窗宽限、一对一最大匹配；
-- 数据由新 seed 经同一受控轮廓（单设备、100 Hz、`window_points=256`、`chunk_points=10240`、`total_points=65536`）生成；seed 未选定、数据未生成前，测试不落地。
+- 数据仅在 §9.5 完成 A 冻结后，才由新 seed 经同一受控轮廓（单设备、100 Hz、`window_points=256`、`chunk_points=10240`、`total_points=65536`）首次生成并运行。选择方法获批、候选 seed 选定且本人接触声明齐备后，可以先编写未执行的精确配置与测试，须经再次 Review 并进入同一集成 SHA，再由 A 冻结；冻结前不得生成、读取或运行新保留数据。
 
 ## 10 期末 100 分标准的现场验收增量（Issue #142）
 
