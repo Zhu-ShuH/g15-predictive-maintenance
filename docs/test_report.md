@@ -389,11 +389,13 @@ print(build_report(s.run_dir, db))
 
 ### 10.1 结论摘要
 
+本小节至 §10.3 保留 #153（实现 head `c6ff2cbc`）的历史 Windows 数字，不是本次最终提交复测。时长是单次观察，复跑需另附源码 SHA、主机与命令，不将不同源码树的观察合并为稳定性能范围或门槛。
+
 | 项 | 结果 |
 |---|---|
 | 集成测试（oracle + 可信计数） | **3 passed，退出码 0**（`tests/integration/test_query_capacity_accounting.py`，1.86s） |
 | 性能低负载（opt-in） | **1 passed**（`G15_RUN_QUERY_LOAD=1`，1.59s；默认 1 skipped） |
-| D0 响应正确性 | 全部 200，逐页逐项一致；跨页 start_seq 全覆盖且告警去重后恰好 1 条，0 违例 |
+| D0 响应正确性 | 历史工具报告全部 200、处理后窗口全覆盖和告警 1 条；告警重发由客户端丢弃，原始条目当时未全部进入 oracle，不能解读成服务端原始响应无重复或原始 0 违例 |
 | 计数守恒 | `client_in_flight==0`、`server_in_flight==0`、`server_received==client_total`、`response_completed==received`、request_id 集合一致，0 违例 |
 | 在途峰值 | client 10 / server 10 |
 

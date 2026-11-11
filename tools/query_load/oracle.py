@@ -33,9 +33,25 @@ def verify_response(
     run_id: str,
     device_id: str,
     page_size: int,
+    *,
+    first_page: bool = False,
 ) -> list[str]:
     """Check one response body against the committed store; return violations."""
     problems: list[str] = []
+    if body.get("run_id") != run_id or body.get("device_id") != device_id:
+        problems.append("response run/device identity mismatch")
+    for stream in ("windows", "alarms"):
+        section = body.get(stream)
+        if not isinstance(section, dict) or not isinstance(section.get("items"), list):
+            return problems + [f"{stream}.items missing or malformed"]
+        if len(section["items"]) > page_size:
+            problems.append(f"{stream} exceeds requested page_size")
+        if any(not isinstance(item, dict) for item in section["items"]):
+            return problems + [f"{stream} item malformed"]
+    if not isinstance(body.get("states"), list) or any(
+        not isinstance(item, dict) for item in body["states"]
+    ):
+        return problems + ["states missing or malformed"]
     connection = sqlite3.connect(str(db_path))
     try:
         run_row = _row(
@@ -45,6 +61,34 @@ def verify_response(
         )
         if run_row is None:
             return ["oracle: run row missing"]
+        if first_page:
+            for stream, table, keys, order in (
+                ("windows", "feature_windows", ("start_seq",), "start_seq DESC"),
+                (
+                    "alarms",
+                    "alarms",
+                    ("start_seq", "rule_id"),
+                    "start_seq DESC, rule_id DESC",
+                ),
+            ):
+                expected = connection.execute(
+                    f"SELECT {', '.join(keys)} FROM {table} "
+                    f"WHERE run_id = ? AND device_id = ? ORDER BY {order} LIMIT ?",
+                    (run_id, device_id, page_size),
+                ).fetchall()
+                actual = [
+                    tuple(item.get(key) for key in keys)
+                    for item in body[stream]["items"]
+                ]
+                if actual != expected:
+                    problems.append(f"{stream} first-page keys/order mismatch")
+        expected_states = connection.execute(
+            "SELECT rule_id FROM alarm_states WHERE run_id = ? AND device_id = ? ORDER BY rule_id",
+            (run_id, device_id),
+        ).fetchall()
+        actual_states = [(item.get("rule_id"),) for item in body["states"]]
+        if sorted(actual_states, key=str) != sorted(expected_states, key=str):
+            problems.append("states key coverage mismatch")
         if str(body.get("run_status")) != str(run_row[2]):
             problems.append("run_status mismatch")
         versions = body.get("versions")
@@ -138,6 +182,9 @@ def verify_response(
                 state_json, last_end_seq_exclusive = state_row
                 committed = _load_state_json(state_json)["state"]
                 got = item.get("state", {})
+                if not isinstance(got, dict):
+                    problems.append(f"state[{rule_id}] malformed state object")
+                    continue
                 for key in (
                     "active_level",
                     "consecutive_breaches",

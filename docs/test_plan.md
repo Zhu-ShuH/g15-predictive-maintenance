@@ -302,7 +302,7 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 - 数据口径（ADR-0007 §5）：D0=10 设备 × 100 窗口（正确性 / 量测可信）；D1=1,000 设备 × 3,906 窗口 = 3,906,000 行 = 1,000 个 run 库；D2=10,000 设备 × 3,906 窗口 = 39,060,000 行 = 10,000 个 run 库。禁止把 D1/D2 合成一个大库。
 - 文件白名单：`tools/query_load/**`、`tests/performance/query/**`、`tests/integration/test_query_capacity_accounting.py`、`tests/fixtures/query/**`、`docs/test_plan.md`、`docs/test_report.md`、`.github/CODEOWNERS`；负载配置在 `tests/performance/query/workloads/**`。明确排除 `src/g15/**`、`scripts/**`、部署文件、#56/#9 保留集。
-- 不改产品代码：harness 只 import 并驱动 `src/g15/query/**` 与 `src/g15/service/**` 的公开入口，不改这些文件。
+- 不改产品代码：负载沿 `src/g15/query/**` 与 `src/g15/service/**` 的公开 HTTP 入口执行；EXPLAIN 只读探针绑定实际内部 SELECT helper 的源码位置与摘要，不能冒充完整请求追踪，后续 helper 变更须复核探针。上述产品文件均不在本单修改范围。
 
 ### 11.2 可信计数口径（ADR-0007 §3）
 
@@ -313,7 +313,11 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 ### 11.3 已知缺口（文档化，不伪造）
 
-现有传输层 `src/g15/service/http.py` 的 event_sink 只发 3 个阶段 `server_received / rejected / response_completed`，不发 `server_queued / server_executing`。因此 harness 的 `server_in_flight` 只能按 `received - completed` 近似，`server_queued / server_executing` 两层暂时无法直接量测。这是产品侧缺口，harness 不 hack、不改 src，写清后留待后续。
+现有传输层 `src/g15/service/http.py` 的 event_sink 只发 3 个阶段 `server_received / rejected / response_completed`，不发 `server_queued / server_executing`。工具据此量测 `received - completed` 区间；排队/执行分层仍为 null，不以线程数或调用次数代替。过载路径只发 rejected 时保留原始事件并报告对账失败，不补造 received/completed。
+
+窗口与告警 cursor 独立，但协议不能表达“这一流已耗尽”；省略该 cursor 会重发首页。工具保留每页原始响应并先做 SQLite oracle，再从副本中丢弃已耗尽流；分别报告原始/消费/丢弃数量。D0 的原始告警重发不等于服务端无重复，消费后覆盖通过不能代替原始无重复结论。ADR-0007 的“无重复错序”验收要求保持不变。
+
+当前客户端/服务端同进程，资源快照不能拆分两端，也不能证明负载区间峰值；双 Linux、完整 Gate 0 与更高档位仍需独立证据及 Review。
 
 ### 11.4 Gate 0 六步（#136）
 
@@ -332,3 +336,12 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 | 性能（opt-in） | `tests/performance/query/test_query_load.py` | `G15_RUN_QUERY_LOAD=1 python -m pytest -q -s tests/performance/query/test_query_load.py` |
 
 harness 在 `tools/query_load/`：`d0_fixture.py`（D0 建库）、`accounting.py`（可信计数）、`oracle.py`（独立对账）、`client.py`（真实 HTTP 客户端）、`driver.py`（串行 + 并发 + 翻页全链驱动）。实测数字见 `docs/test_report.md` §10。
+
+### 11.6 A 接管后的验证与证据入口（2026-11-12，#136）
+
+- CLI、集成与 opt-in 共用 `runner.run_measurement` / `validate_run`：原始 oracle、消费后完整分页覆盖、计数守恒、应用日志三方对账分别给结论。`paging.py` 留原始与消费视图，`evidence.py` 保存每轮 `report.json`；已有目录拒绝覆盖，失败轮次也留档。
+- `python -m tools.query_load.driver --concurrent 10 --output <新目录>`；50 波次使用 `--concurrent 50`。串行最多 10、并发只允许 10/50、workers 最多 64；发送前 barrier 仅同步起跑，不人为延迟请求/处理/响应。每个并发客户端有独立已认证且获授权的合成主体，应用 actor_ref 与客户端标签逐请求核对。
+- 提交请求数与实测峰值分列：在途按高精度单调 `perf_counter` 起止区间计算，同时报告峰值时刻不同用户数、全程不同用户数与无法关联数量。目标要求客户端、服务端实际请求与用户峰值都达到该档；不足如实退出 1，不能拿 submitted=50 代替 server=50。基础检查与目标均满足时退出 0，仍不自动宣告完整 Gate 0。
+- 证据包括源码 SHA/dirty/内容摘要、环境、命令模板、全部原始响应和失败、应用/传输日志、每请求原始延迟与 nearest-rank p50/p95/p99、资源点快照。EXPLAIN 调用实际 application SELECT helpers，记录 SQL/参数/源码行/hash；这是独立探针，不是整个 HTTP 路径追踪，D0 告警续页只是 SQL 分支探针。
+- 负例覆盖重复页、缺页、等量替换、乱序、告警重复/缺失/错键，以及仅损坏将被丢弃的原始告警；单项 oracle 正确也不能掩盖跨页重复/缺失。异常 JSON/超时等仍完成客户端记账，ID 重复/错配/完成缺失必须失败。
+- 产品阶段量测的后续最小影响面为 `src/g15/service/http.py` 与对应 `tests/unit/test_service_http.py`，需先 Review 事件阶段、过载/异常终态及每请求关联契约；本次工具改动不修改这些路径。
