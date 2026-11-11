@@ -380,6 +380,6 @@ print(build_report(s.run_dir, db))
 | 技术深度 | ADR、百万点、并发/竞态探针 | #135 后的真实查询；#136 p50/p95/p99 与 EXPLAIN | 未实现/未执行 |
 | 数据安全 | 运行期离线、真值隔离、日志禁敏感信息 | 最终 SHA 自动日志扫描、外发授权记录 | 待执行 |
 | 人工确认 | 系统无执行器；`reset-alarms --yes --reason` 有实现/测试 | 真实设备接入不在本项目范围；未来需变更单/旁路/双人复核 | no-actuation 边界，不冒充设备验证 |
-| append-only 审计 | reset 历史随状态保留 | 独立 INSERT-only 审计及 UPDATE/DELETE 拒绝 | **不满足，须独立 Issue/ADR** |
+| append-only 审计 | reset 历史随状态保留 | 独立 INSERT-only 审计及 UPDATE/DELETE 拒绝 | **已满足（应用级只增，#143/#147）**；文件级防篡改未声称 |
 
 完整新增用例及判据见 `docs/test_plan.md` §9。实际执行后应追加日期、精确 SHA、环境、命令、退出码、原始证据路径与失败记录；不得直接把表中“已有历史证据”改写成最终候选通过。
