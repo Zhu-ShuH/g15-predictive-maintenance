@@ -278,8 +278,8 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 | ACC-IDEMP-01 | 完成一次消费 | 对同一 run/库再消费两次 | 第二、三次不新增分片、窗口或告警 | 自动化已有；现场记录五表计数 |
 | ACC-RECON-01 | 完整或受控部分消费 run | 生成报告并读取 JSON/Markdown | `processed+rejected=total`；`analysed+dropped=processed`；两份报告同源 | 自动化已有；最终 SHA 现场保存产物 |
 | PERF-1M-01 | 空运行目录、固定 benchmark 配置、目标 Linux | 每系统独立进程连续运行 3 次 `benchmark.sh` | 每轮 1,000,000 点、10 分片、独立校验通过、生产窗口严格 <60s；报告中位/最大/RSS | 双 Linux 历史证据已有；最终 SHA 重跑 |
-| PERF-QUERY-01 | #135 已实现并冻结精确 SHA、D0 数据就绪 | 按 #136 Gate 0 跑冷热查询、oracle 与 `EXPLAIN QUERY PLAN` | 响应逐项等于独立 SQL；给出 p50/p95/p99、计划、资源、计数守恒 | **未实现/未执行**；禁止以 ADR 目标代替数据 |
-| SEC-LOG-01 | 完成一轮主链及任何已实现查询服务 | 扫描仓库外运行日志/报告 | 无 token、密码、真实个人身份、真实厂区信息、私人绝对路径或 `private_truth` 原文 | 主链最终 SHA 待执行；查询服务依赖 #135 |
+| PERF-QUERY-01 | #135 已实现（#149）；#136 Gate 0、D0 数据待执行 | 按 #136 Gate 0 跑冷热查询、oracle 与 `EXPLAIN QUERY PLAN` | 响应逐项等于独立 SQL；给出 p50/p95/p99、计划、资源、计数守恒 | **#135 已实现；#136 Gate 0 未执行**；禁止以 ADR 目标代替数据 |
+| SEC-LOG-01 | 完成一轮主链及已实现查询服务 | 扫描仓库外运行日志/报告 | 无 token、密码、真实个人身份、真实厂区信息、私人绝对路径或 `private_truth` 原文 | 主链最终 SHA 待执行；查询服务已实现（#149） |
 | SAFE-NOACT-01 | 使用发布 CLI/脚本清单 | 搜索并演示告警、reset 边界 | 系统无停机/控制命令；reset 必须 `--yes`+原因；任何未来执行动作需人工确认 | no-actuation 为架构边界；reset 自动化已有 |
 
 ### 10.1 失败、降级与补偿记录
@@ -293,4 +293,4 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 ### 10.2 最终发布门禁
 
-只有同一个最终候选 SHA 在 Ubuntu 与 RHEL 上完成 clean-clone、setup、离线 demo/verify、百万点、坏数据和 kill 演练，并完成 #56→#9 独立保留集后，才可在期末矩阵中把这些项标为“通过”。#135/#136 未完成时，查询 p95/EXPLAIN 和 100k 必须保留“未实现/未执行”，不得降级成文档完成。
+只有同一个最终候选 SHA 在 Ubuntu 与 RHEL 上完成 clean-clone、setup、离线 demo/verify、百万点、坏数据和 kill 演练，并完成 #56→#9 独立保留集后，才可在期末矩阵中把这些项标为“通过”。#136 容量 Gate 未完成时，查询 p95/EXPLAIN 和 100k 必须保留“未执行”，不得降级成文档完成。
