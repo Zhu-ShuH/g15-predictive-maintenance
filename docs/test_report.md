@@ -383,3 +383,36 @@ print(build_report(s.run_dir, db))
 | append-only 审计 | reset 历史随状态保留 | 独立 INSERT-only 审计及 UPDATE/DELETE 拒绝 | **已满足（应用级只增，#143/#147）**；文件级防篡改未声称 |
 
 完整新增用例及判据见 `docs/test_plan.md` §10。实际执行后应追加日期、精确 SHA、环境、命令、退出码、原始证据路径与失败记录；不得直接把表中“已有历史证据”改写成最终候选通过。
+## 10 用户查询容量门禁（Issue #136，Gate 0 实测）
+
+> 计划见 `docs/test_plan.md` §11；本节只写真实跑过的结果，属 #136，与 #9 受控事件检出是不同主题。
+
+### 10.1 结论摘要
+
+| 项 | 结果 |
+|---|---|
+| 集成测试（oracle + 可信计数） | **3 passed，退出码 0**（`tests/integration/test_query_capacity_accounting.py`，1.86s） |
+| 性能低负载（opt-in） | **1 passed**（`G15_RUN_QUERY_LOAD=1`，1.59s；默认 1 skipped） |
+| D0 响应正确性 | 全部 200，逐页逐项一致；跨页 start_seq 全覆盖且告警去重后恰好 1 条，0 违例 |
+| 计数守恒 | `client_in_flight==0`、`server_in_flight==0`、`server_received==client_total`、`response_completed==received`、request_id 集合一致，0 违例 |
+| 在途峰值 | client 10 / server 10 |
+
+### 10.2 环境
+
+Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
+
+### 10.3 低负载量测数字
+
+| 项 | 值 |
+|---|---|
+| 串行 10 请求（page_size=10） | 0.11 s |
+| 并发 10 在途（ThreadPoolExecutor） | 0.02 s |
+| 翻页（windows 逐页 10 页、alarms 首页即耗尽） | 0.15 s |
+| 客户端延迟（n=30） | min 0.000 s / p50 0.015 s / p95 0.032 s / max 0.032 s |
+
+### 10.4 明确未覆盖
+
+- D1（1,000 设备 / 3,906,000 行）与 D2（10,000 设备 / 39,060,000 行）未建、未跑；
+- 高负载（100→500→1,000→…→100k）未授权未执行；
+- 双 Linux 低负载兼容留证归 C6，本节未做；
+- `server_queued / server_executing` 两层传输事件产品侧未发，见 `docs/test_plan.md` §11.3。
