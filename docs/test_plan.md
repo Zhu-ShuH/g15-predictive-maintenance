@@ -278,7 +278,7 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 ### 11.2 可信计数口径（ADR-0007 §3）
 
-- 每请求同一 request/trace ID 记录 `client_started / client_waiting / client_completed` 与 `server_received / server_queued / server_executing / server_completed`。
+- 每请求同一 request/trace ID 记录 `client_started / client_waiting / client_completed` 与 `server_received / server_queued / server_executing / server_completed`（口径定义；实际可用阶段见 §11.3）。
 - `client_in_flight = started - completed`，`server_in_flight = received - completed`。
 - oracle 独立读已提交 SQLite 逐项对照，不 mock 认证 / 授权 / repository / SQLite，不读 `private_truth`。
 - 禁止 handler sleep / 人工延迟 / 网络限速制造在途峰值。

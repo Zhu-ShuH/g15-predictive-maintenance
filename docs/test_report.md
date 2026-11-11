@@ -392,7 +392,7 @@ Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
 |---|---|
 | 串行 10 请求（page_size=10） | 0.11 s |
 | 并发 10 在途（ThreadPoolExecutor） | 0.02 s |
-| 翻页（双 cursor 翻到空） | 0.15 s |
+| 翻页（windows 逐页 10 页、alarms 首页即耗尽） | 0.15 s |
 | 客户端延迟（n=30） | min 0.000 s / p50 0.015 s / p95 0.032 s / max 0.032 s |
 
 ### 10.4 明确未覆盖
