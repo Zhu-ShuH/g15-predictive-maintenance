@@ -167,6 +167,12 @@ def run_paging(
             windows_cursor=windows_cursor,
             alarms_cursor=alarms_cursor,
         )
+        if alarms_done and isinstance(body.get("alarms"), dict):
+            # The alarm stream exhausted on an earlier page.  A request that
+            # omits alarms_cursor makes the server re-serve alarm page one, so
+            # discard those duplicates: the driver already consumed the single
+            # alarm and must not count it again in coverage.
+            body["alarms"]["items"] = []
         results.append((status, body, run_id))
         next_windows = body.get("windows", {}).get("next_cursor")
         next_alarms = body.get("alarms", {}).get("next_cursor")
@@ -184,18 +190,18 @@ def run_paging(
 def verify_paging_coverage(
     results: list[tuple[int, dict[str, object], str]],
 ) -> list[str]:
-    """Assert the paging walk covered every window exactly once and each alarm
-    exactly once after deduplication.
+    """Assert the paging walk covered every window exactly once and the alarm
+    exactly once total.
 
-    The server re-serves page one of an exhausted stream whenever that stream’s
+    The server re-serves page one of an exhausted stream whenever that stream's
     cursor is absent, so a driver that silently re-walks page one would still
-    pass item-by-item verification.  This cross-page check collects the full
-    set of window ``start_seq`` values and the deduplicated alarm keys, and
-    fails on any duplicate or gap.
+    pass item-by-item verification.  This cross-page check counts window
+    ``start_seq`` values and alarm occurrences, so a re-served page shows up as
+    a duplicate and fails the check.
     """
     problems: list[str] = []
     windows: list[int] = []
-    alarms: set[tuple[int, str]] = set()
+    alarms: list[tuple[int, str]] = []
     for position, (status, body, _run) in enumerate(results):
         if status != 200:
             problems.append(f"paging[{position}] status {status} != 200")
@@ -203,7 +209,7 @@ def verify_paging_coverage(
         for item in body.get("windows", {}).get("items", []):
             windows.append(int(item.get("start_seq")))
         for item in body.get("alarms", {}).get("items", []):
-            alarms.add((int(item.get("start_seq")), str(item.get("rule_id"))))
+            alarms.append((int(item.get("start_seq")), str(item.get("rule_id"))))
     expected_windows = set(window_start_seq(i) for i in range(D0_WINDOWS_PER_DEVICE))
     got_windows = set(windows)
     if len(windows) != D0_WINDOWS_PER_DEVICE:
@@ -216,9 +222,13 @@ def verify_paging_coverage(
         extra = sorted(got_windows - expected_windows)
         problems.append(f"paging windows set mismatch: missing={missing} extra={extra}")
     expected_alarms = {(window_start_seq(D0_WINDOWS_PER_DEVICE - 1), D0_RULE_ID)}
-    if alarms != expected_alarms:
+    if len(alarms) != 1:
         problems.append(
-            f"paging alarms dedup set {sorted(alarms)} != {sorted(expected_alarms)}"
+            f"paging alarms total {len(alarms)} != 1 (duplicate re-served page)"
+        )
+    if set(alarms) != expected_alarms:
+        problems.append(
+            f"paging alarms set {sorted(set(alarms))} != {sorted(expected_alarms)}"
         )
     return problems
 
