@@ -36,11 +36,13 @@ from .accounting import RunAccounting
 from .client import QueryClient
 from .d0_fixture import (
     D0_DEVICE_COUNT,
+    D0_RULE_ID,
     D0_WINDOWS_PER_DEVICE,
     build_d0_runs,
     build_policy_yaml,
     device_id,
     device_run_id,
+    window_start_seq,
 )
 from .oracle import verify_response
 
@@ -131,17 +133,33 @@ def run_concurrent(
     return results
 
 
+MAX_PAGING_PAGES = 20
+
+
 def run_paging(
     client: QueryClient,
     device_index: int,
     db_paths: list[Path],
 ) -> list[tuple[int, dict[str, object], str]]:
-    """Walk all pages of one device, verifying each page via the oracle."""
+    """Walk all pages of one device, verifying each page via the oracle.
+
+    Windows and alarms paginate independently.  A ``None`` ``next_cursor``
+    means that stream is exhausted; it must not be re-sent as an empty cursor,
+    because the server treats an absent cursor as page one and the driver
+    would silently re-walk the first page.  The two exhausted flags stop the
+    walk; an absent cursor on a live stream still means page one.
+    """
     run_id = device_run_id(device_index)
     results: list[tuple[int, dict[str, object], str]] = []
-    windows_cursor = ""
-    alarms_cursor = ""
-    while True:
+    windows_cursor: str | None = ""
+    alarms_cursor: str | None = ""
+    windows_done = False
+    alarms_done = False
+    while not (windows_done and alarms_done):
+        if len(results) >= MAX_PAGING_PAGES:
+            raise RuntimeError(
+                f"paging exceeded {MAX_PAGING_PAGES} pages: cursor never exhausted"
+            )
         status, body = client.query(
             run_id,
             device_id(device_index),
@@ -150,18 +168,59 @@ def run_paging(
             alarms_cursor=alarms_cursor,
         )
         results.append((status, body, run_id))
-        windows = body.get("windows", {})
-        alarms = body.get("alarms", {})
-        next_windows = windows.get("next_cursor") or ""
-        next_alarms = alarms.get("next_cursor") or ""
-        if not next_windows and not next_alarms:
-            break
-        windows_cursor = next_windows
-        alarms_cursor = next_alarms
-        # Safety valve: a device has at most 100 windows / page size 10 = 10 pages.
-        if len(results) > 20:
-            break
+        next_windows = body.get("windows", {}).get("next_cursor")
+        next_alarms = body.get("alarms", {}).get("next_cursor")
+        if next_windows is None:
+            windows_done = True
+        else:
+            windows_cursor = str(next_windows)
+        if next_alarms is None:
+            alarms_done = True
+        else:
+            alarms_cursor = str(next_alarms)
     return results
+
+
+def verify_paging_coverage(
+    results: list[tuple[int, dict[str, object], str]],
+) -> list[str]:
+    """Assert the paging walk covered every window exactly once and each alarm
+    exactly once after deduplication.
+
+    The server re-serves page one of an exhausted stream whenever that stream’s
+    cursor is absent, so a driver that silently re-walks page one would still
+    pass item-by-item verification.  This cross-page check collects the full
+    set of window ``start_seq`` values and the deduplicated alarm keys, and
+    fails on any duplicate or gap.
+    """
+    problems: list[str] = []
+    windows: list[int] = []
+    alarms: set[tuple[int, str]] = set()
+    for position, (status, body, _run) in enumerate(results):
+        if status != 200:
+            problems.append(f"paging[{position}] status {status} != 200")
+            continue
+        for item in body.get("windows", {}).get("items", []):
+            windows.append(int(item.get("start_seq")))
+        for item in body.get("alarms", {}).get("items", []):
+            alarms.add((int(item.get("start_seq")), str(item.get("rule_id"))))
+    expected_windows = set(window_start_seq(i) for i in range(D0_WINDOWS_PER_DEVICE))
+    got_windows = set(windows)
+    if len(windows) != D0_WINDOWS_PER_DEVICE:
+        problems.append(
+            f"paging windows total {len(windows)} != {D0_WINDOWS_PER_DEVICE} "
+            "(duplicate or missing pages)"
+        )
+    if got_windows != expected_windows:
+        missing = sorted(expected_windows - got_windows)
+        extra = sorted(got_windows - expected_windows)
+        problems.append(f"paging windows set mismatch: missing={missing} extra={extra}")
+    expected_alarms = {(window_start_seq(D0_WINDOWS_PER_DEVICE - 1), D0_RULE_ID)}
+    if alarms != expected_alarms:
+        problems.append(
+            f"paging alarms dedup set {sorted(alarms)} != {sorted(expected_alarms)}"
+        )
+    return problems
 
 
 def verify_all(
