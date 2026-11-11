@@ -64,7 +64,7 @@
 | ID | 保持的要求 | 当前证据边界与补齐方式 |
 |---|---|---|
 | N01 | 1,000,000 个采样时刻；生成、序列化、哈希和 complete Manifest 发布合计严格 <60 秒；双信号共 2,000,000 标量另报 | 沿用 acceptance §2，双 Linux 各三次；#53 的 Windows 结果不替代 Linux，不把内核计时或事后校验混进生产窗口 |
-| N02 | 预设受控集事件召回 100%，同时报告误报和延迟；零事件召回为 null | 保持 acceptance §3；开发已查看数据与独立保留验证分开，#56 未冻结前不选/跑新保留 seed |
+| N02 | 预设受控集事件召回 100%，同时报告误报和延迟；零事件召回为 null | 保持 acceptance §3；开发已查看数据与独立保留验证分开，seed 选择方法获 A 批准后仅产生候选值并作接触声明；#56 冻结前不生成/读取/运行新保留数据 |
 | N03 | 配置/seed/版本可追溯；UTC、绝对序号和单位明确 | 保留仿真确定性；最终记录源码、配置/规则摘要与依赖，不以当前机器时钟生成测量 |
 | N04 | 参数/配置 2，I/O/Schema 3，实际验收失败 4，未知错误 5，成功 0 | 沿用 interface §10。`cli.py` 已定义 `EXIT_OK=0`、`EXIT_INVALID=2`、`EXIT_IO=3`、`EXIT_ACCEPTANCE=4`、`EXIT_UNEXPECTED=5`；`validate`、`simulate`、`consume`、`report`、`benchmark` 已接线，`verify`、`doctor` 尚未接线并返回 5。I/O/Schema 失败使用 3；4 只用于实际运行且未通过的验收门禁（当前 `benchmark`，未来 `verify`），不得扩到普通 `report`；报告产物成功生成即返回 0，即使报告字段为 `passed=false` 或 `passed=null` |
 | N05 | 安装可联网，业务运行不依赖网络或在线 AI | C6 实测现场网络、运行离线与备用依赖；尚未完成的离线安装准备保持待办 |
