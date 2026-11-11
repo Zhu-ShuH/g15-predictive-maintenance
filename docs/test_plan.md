@@ -10,7 +10,7 @@
 
 1. 只有 `g15.reporting` 读 `private_truth/faults.json`；`simulation`、`pipeline`、`analysis`、`storage` 全程不读真值（见 §6.4 的可证伪用例）。
 2. 匹配由报告层（`reporting.builder` / `reporting.metrics`）按 `device_id` 与事件区间自行计算，被测代码不产出 `event_id`，因此"检出"不是被测方自报的；`reporting.verifier` 与 `g15 verify` 只做完整性校验，不读真值。
-3. 验证 seed `20261016` 不参与阈值调参：`configs/health_rules.yaml` 在验证前已提交并记录摘要（§2），本轮未修改任何规则、阈值或测试期望。
+3. seed `42` 与 `20261016` 均为开发期已暴露数据（B2 已披露查看过其特征分布），只作开发/回归证据，不构成独立保留验证；`configs/health_rules.yaml` 在验证前已提交并记录摘要（§2），本轮未修改任何规则、阈值或测试期望。
 
 ## 2 被测身份与配置摘要
 
@@ -221,3 +221,47 @@ spike / step / burst 六个受控事件，见 §3。
 - **真实工业准确率**：本计划的"100%"只指 §3 那套预定义教学测试集上的事件召回率，不代表现场设备表现。
 - **去抖/升级/恢复（N>1）**：受控轮廓固定 N=1，不能用它冒充去抖已验证。
 - **C5 之外的模块单测**：各模块单测由各自负责人交付，本计划只统计真实跑过的总数（§5），不代写。
+## 9 独立保留集计划（未执行）
+
+A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未参与开发的保留集」；方向 2（用开发/回归证据 + 方案 C + scenario_kind 收尾）不采纳。本节只登记计划与待评审建议，**尚未选择 seed、尚未生成数据、尚未运行任何新保留集**。
+
+### 9.1 状态
+
+- 未选择具体 seed 值；未生成、读取、运行任何新保留数据；旧集（42/20261016）全部结果与失败原样保留，不覆盖历史。
+- `docs/adr/0006-independent-validation-baseline.json` 保持 `status=proposed_unfrozen`、`integrated_validation_commit=null`、`new_holdout_seed=null`、`new_holdout_generated=false`、`rules_frozen=false`。
+- 本计划的「真值隔离 / 非自报匹配」证明的是隔离与匹配边界，不单独证明数据独立性。
+
+### 9.2 两个新 seed 的矩阵（待评审建议，非已批准门槛）
+
+- 两个尚未选择的新 seed，每个 seed 各含 normal、degradation、spike、step、burst；
+- 合计 10 配置、6 故障事件（spike/step/burst 各一事件 × 2 seed）；
+- 沿用口径：W=256、N=1、一对一最大匹配、允许区间右开且结束后 2 窗宽限；
+- normal 为 0 告警；degradation 单独报告，不并入 normal 误报；
+- FP / redundant / unmatched / FN、逐事件映射及全部失败原始证据均保留。
+
+数量、矩阵与记录结构须经 B1 计划、B2/C1 反馈、C4 与非作者 Review、A 审核后才可能进入标准。
+
+### 9.3 记录结构建议（两 seed 方案）
+
+现有 baseline JSON 只有单数 `new_holdout_seed`。若保留两 seed 方案，建议改为可审查的数组结构（本 PR 只提建议，不改 JSON）：
+
+- `new_holdout_seeds`：数组，每项含 `seed`、`selection_method`、`selected_at`、`entropy_source`、`contact_declarations`（B2/C1/执行方对具体值的本人披露）、`configs`（该 seed 下 5 份配置路径与 git blob / raw SHA-256）；
+- `rules_frozen`、`integrated_validation_commit` 仅在 A 记录真实冻结后写入，不静默填值、不倒填历史附件。
+
+### 9.4 seed 选择方法与接触声明（未执行）
+
+- 选择方法经评审后，只产生候选**值**，仍不生成数据；
+- 候选值产生后，B2、C1、执行方 B1 及任何生成者/保管者须对具体候选值作本人接触声明；任一候选有接触记录，即在首次数据生成前作废并另选；
+- A 不代任何角色签署「未接触」。
+
+### 9.5 Review 与冻结顺序（A-T151 七步）
+
+1. B1 提交本计划 PR（未执行）；2. C4 复核真值隔离、匹配口径、seed 选择方法、负向/边界测试，并取得至少一位非作者 Review；3. A 只批准 seed 选择方法，不批准尚不存在的值或结果；4. 按已批准方法产生候选值（不生成数据），各角色对具体值作接触声明；5. 获确认候选值对应的精确配置/测试差异补入 PR，再次 Review；6. 全部进入同一集成提交后 A 记录真实冻结（含 `integrated_validation_commit`、配置 blob/SHA、规则摘要、环境、匹配参数、接触声明与 Review 链接）；7. A 记录 `rules_frozen=true` 后才首次生成并运行保留数据。
+
+首次运行须保留命令、退出码、环境、固定 SHA、完整原始输出、逐事件映射与所有失败；看到结果后修改规则、阈值、配置、验证器语义或测试期望，该保留集即转已暴露开发数据，须重新 Review、重新冻结、换新 seed。
+### 9.6 测试轮廓（待 seed 选定后实现，未生成数据）
+
+- 位置：`tests/integration/test_holdout_validation.py`（本 PR 不建文件、不写测试代码，仅登记轮廓）；
+- 复用 §3 匹配判据：TP=6 / FN=0、normal 零告警且 `detection_rate=null`、degradation 单独报告不并入 normal 误报、FP / redundant / unmatched 分开；
+- 负向/边界（C4 复核点）：真值隔离（§6.4）、非自报匹配（§4）、窗口右开 + 2 窗宽限、一对一最大匹配；
+- 数据由新 seed 经同一受控轮廓（单设备、100 Hz、`window_points=256`、`chunk_points=10240`、`total_points=65536`）生成；seed 未选定、数据未生成前，测试不落地。
