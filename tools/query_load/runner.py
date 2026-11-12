@@ -91,6 +91,7 @@ def validate_run(
     events: list[dict[str, object]],
     *,
     page_size: int = 10,
+    paging_page_size: int = 10,
 ) -> dict[str, object]:
     """Use raw oracle, consumed coverage and three-way request reconciliation."""
     logs = []
@@ -159,7 +160,7 @@ def validate_run(
         "raw_oracle": verify_all(
             results, db_paths, first_page=True, page_size=page_size
         )
-        + verify_all(paging.raw, db_paths)
+        + verify_all(paging.raw, db_paths, page_size=paging_page_size)
         + paging.oracle_problems,
         "consumed_coverage": verify_paging_coverage(paging.consumed),
         "traversal": paging.traversal_problems,

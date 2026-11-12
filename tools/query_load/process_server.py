@@ -15,10 +15,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from g15.service.http import create_query_server
+from g15.service.http import QueryHTTPServer
 
 from .driver import build_application
 from .evidence import resource_snapshot
+from .network import SocketNetworkMeter
 
 
 def _io_counters() -> dict[str, int] | None:
@@ -275,11 +276,53 @@ def serve_endpoint(
     condition = threading.Condition()
     stream_lock = threading.Lock()
     stream_errors: list[str] = []
+    current_wave_id: str | None = None
+    last_wave_finished = True
+    active_handlers = 0
+    thread_context = threading.local()
+    network_meter = SocketNetworkMeter("server")
+
+    class ObservedQueryServer(QueryHTTPServer):
+        """Observe actual worker return and accepted sockets without delays."""
+
+        def get_request(self):
+            request, address = super().get_request()
+            try:
+                return network_meter.wrap(request), address
+            except BaseException:
+                request.close()
+                raise
+
+        def process_request_thread(self, request, client_address):
+            nonlocal active_handlers
+            with condition:
+                active_handlers += 1
+            try:
+                try:
+                    local = request.getsockname()
+                    peer = request.getpeername()
+                    thread_context.connection_ref = {
+                        "local": {"host": str(local[0]), "port": int(local[1])},
+                        "peer": {"host": str(peer[0]), "port": int(peer[1])},
+                    }
+                except OSError:
+                    # Observation failure must not skip the real handler's
+                    # shutdown_request/worker-slot cleanup.
+                    thread_context.connection_ref = None
+                    stream_errors.append("accepted connection metadata unavailable")
+                super().process_request_thread(request, client_address)
+            finally:
+                with condition:
+                    active_handlers -= 1
+                    condition.notify_all()
+                thread_context.connection_ref = None
 
     def stream_event(kind: str, event: dict[str, object]) -> None:
         try:
             with stream_lock:
-                event_stream.send({"kind": kind, "event": dict(event)})
+                event_stream.send(
+                    {"kind": kind, "event": dict(event), "wave_id": current_wave_id}
+                )
         except (OSError, EOFError) as exc:
             stream_errors.append(type(exc).__name__)
 
@@ -289,8 +332,12 @@ def serve_endpoint(
     def transport_event(event: dict[str, object]) -> None:
         # Keep origin timestamps/pid intact. Never stamp on IPC delivery.
         with condition:
-            events.append(dict(event))
-            stream_event("transport", event)
+            origin = dict(event)
+            connection_ref = getattr(thread_context, "connection_ref", None)
+            if connection_ref is not None:
+                origin["connection_ref"] = dict(connection_ref)
+            events.append(origin)
+            stream_event("transport", origin)
             condition.notify_all()
 
     try:
@@ -301,8 +348,11 @@ def serve_endpoint(
             users=users,
             event_sink=application_event,
         )
-        server = create_query_server(
-            application, event_sink=transport_event, max_workers=workers
+        server = ObservedQueryServer(
+            ("127.0.0.1", 0),
+            application,
+            event_sink=transport_event,
+            max_workers=workers,
         )
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
@@ -316,32 +366,85 @@ def serve_endpoint(
         )
         while True:
             command = control.recv()
-            if command["kind"] == "begin":
-                if sampler is not None:
-                    raise RuntimeError("resource interval already started")
+            if command["kind"] in ("begin", "begin_wave"):
+                if sampler is not None or not last_wave_finished:
+                    raise RuntimeError(
+                        "resource interval already started or not drained"
+                    )
+                if command["kind"] == "begin_wave":
+                    wave_id = command.get("wave_id")
+                    if (
+                        not isinstance(wave_id, str)
+                        or not wave_id.isascii()
+                        or not 1 <= len(wave_id) <= 64
+                    ):
+                        raise ValueError("invalid wave identity")
+                    with condition:
+                        if active_handlers != 0:
+                            raise RuntimeError("prior handler still active")
+                    network_meter.reset_closed()
+                    events.clear()
+                    application_events.clear()
+                    stream_errors.clear()
+                    current_wave_id = wave_id
+                    stream_event(
+                        "marker",
+                        {
+                            "marker": "begin",
+                            "wave_id": wave_id,
+                            "process_id": os.getpid(),
+                            "monotonic_ns": time.perf_counter_ns(),
+                        },
+                    )
+                last_wave_finished = False
                 sampler = EndpointSampler(
                     "server", on_sample=lambda sample: stream_event("resource", sample)
                 )
                 sampler.start()
-                control.send({"kind": "begun"})
-            elif command["kind"] == "finish":
+                control.send(
+                    {
+                        "kind": (
+                            "wave_started" if current_wave_id is not None else "begun"
+                        ),
+                        "wave_id": current_wave_id,
+                    }
+                )
+            elif command["kind"] in ("finish", "finish_wave"):
                 expected = command["expected_completed"]
                 with condition:
                     drained = condition.wait_for(
                         lambda: sum(
                             row.get("stage") == "response_completed" for row in events
                         )
-                        >= expected,
+                        >= expected
+                        and active_handlers == 0,
                         timeout=10,
                     )
                     transport = list(events)
                 resources = sampler.stop() if sampler is not None else None
+                sampler = None
+                network = network_meter.snapshot()
+                last_wave_finished = drained and network["active_connections"] == 0
+                if current_wave_id is not None:
+                    stream_event("network", network)
+                    stream_event(
+                        "marker",
+                        {
+                            "marker": "end",
+                            "wave_id": current_wave_id,
+                            "process_id": os.getpid(),
+                            "monotonic_ns": time.perf_counter_ns(),
+                        },
+                    )
                 control.send(
                     {
                         "kind": "finished",
                         "transport_events": transport,
                         "application_events": list(application_events),
                         "resources": resources,
+                        "network": network,
+                        "wave_id": current_wave_id,
+                        "active_handlers": active_handlers,
                         "stream_errors": list(stream_errors),
                         "drain_problems": (
                             [] if drained else ["server completion drain timed out"]

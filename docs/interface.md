@@ -702,3 +702,5 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 每个传输事件包含服务端生成的同一 `request_id=trace_id`、UTC、原发 `monotonic_ns=time.perf_counter_ns()` 与 `process_id`。导入事件时保留原时钟，按同一个服务端进程计算区间；不跨进程相减或混合两套时钟扫峰值。重复、缺失、错序、未知 ID、原发时钟缺失或进程不一致均使低负载对账失败。按唯一响应 ID 与实际授权 actor 关联用户，同时保留峰值对应请求和用户集合。
 
 当前实现使用非阻塞 worker 准入，无应用任务队列；`server_queued=null`、`application_queue=absent`、`listen_backlog=unmeasured`。TCP backlog 不能当作排队用户；是否将 queued 记为验收 N/A 仍须非作者复核与 A 明确裁定，不能自动通过完整 Gate 0。
+
+容量观察工具可在event_sink边界附实际socket的 `connection_ref`（local/peer host:port），用于将request_id与独立网络计数对应；不修改外部HTTP响应或认证授权。网络适配是每实例显式包装，不全局替换socket，不记录请求头或payload。服务端每波结束须等真实worker返回、连接关闭与采样结束后，依原发wave_id/PID/单调时钟发送end marker；下一波才允许清空已成功归档的closed计数。活跃、失败、未知部分字节或错误关闭不得reset，跨波数据或raw/control快照不一致均使该波失败。
