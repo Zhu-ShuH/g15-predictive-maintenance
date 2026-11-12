@@ -206,6 +206,8 @@ subjects:
 - 健康查询可返回契约允许的窗口/告警业务字段；状态部分只能从 `state_json.state` 做允许列表投影并附获准版本字段。不得返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json`、自由文本 `reason` 或 `private_truth`。
 - 新鲜度只依据当前只读事务可见的已提交序号/状态/持久化时间；服务观察时间不得冒充数据生成时间。
 
+**#162双流选择候选（2026-11-13）**：精确外部shape及错误顺序见[interface §17](../interface.md#17-双流显式选择与发送前准备1622026-11-13-候选)。不传`streams`仍为query_contract_version`"1"`原shape/原行为；显式`both/windows/alarms`为`"2"`，两个分页对象各增严格bool`omitted`。未选流`items=[]`、cursor和对应流/顶层高水位null，仍保留sort/page_size；omitted不是无数据。状态和其提交高水位照实读取，未选windows时返回窗口版本集合为空。未选流带任何非None cursor均400；认证401/资源隐藏404仍先于可选参数校验。选中流维持原签名scope和高水位，旧v1 cursor可按相同scope继续v2选择；不重新采快照来替换旧cursor。遍历在一流耗尽后只请求另一个流，D0目标raw100窗/1告警、discard0，独立oracle先验证全部原始条目与请求期望，再验证跨页完整性。此为产品query候选，须真实非作者Review，不改变旧T17710/1/9事实，也不宣告Gate0通过。
+
 #### 5.1.6 失效、撤销与重放边界
 
 - 第一版是无状态 bearer：同一有效 token 在 `exp` 前可重放；`jti` 只供审计关联，不自动阻止重放。短 TTL、issuer/audience 绑定、TLS 与禁止记录凭据只能降低风险，不能宣称已消除。
@@ -246,7 +248,7 @@ subjects:
 | 授权/隐藏 | 允许、主体无映射、越权、资源不存在、Manifest 不匹配 | 允许路径正确；其余同结构 404；无 403 |
 | YAML/路径 | 坏 YAML、重复/未知键、通配符、>10 device、绝对路径、`..`、符号链接逃逸 | 启动 fail closed；不部分加载、不创建数据库 |
 | 生命周期 | 同 token 在 TTL 内重复使用、过期、整体换 key | 重放按已知风险留证；过期/旧 key 拒绝 |
-| 分页 | 告警并列、翻页间追加、cursor 损坏/跨主体/跨 scope、翻页间撤权 | 无重复错序；新行不越过高水位；每页重查授权。证据限定：当前双流协议不能表达耗尽，省略 cursor 会重发首页；#136 分列原始/消费/丢弃数量，客户端丢弃后的覆盖通过不代表服务端原始无重复；本要求不降低 |
+| 分页 | 告警并列、翻页间追加、cursor 损坏/跨主体/跨 scope、翻页间撤权 | 无重复错序；新行不越过高水位；每页重查授权。证据限定：v1旧双流协议不能表达耗尽，省略 cursor 会重发首页；#136/T177 分列原始/消费/丢弃数量，客户端丢弃后的覆盖通过不代表服务端原始无重复。#162的显式选择v2候选另按请求上下文验证原始覆盖，不回写旧证据；本要求不降低 |
 | 数据/只读 | 响应对独立 SQL/oracle；缺库；检查文件/Schema/业务行 | 结果一致；缺库不创建；查询路径零业务写入 |
 | 版本/投影 | 各实际持久化版本来源、配置版本缺来源、reset 审计字段与真值扫描 | 返回实际版本并省略无来源 config 版本；敏感字段不可达 |
 | trace | 全阶段 ID、401/404、日志扫描 | ID 可关联；无 token、PII、真值或审计原文 |
@@ -310,6 +312,8 @@ subjects:
 6. **压力**：F 候选按 1k→5k→10k→25k→50k→100k 个不同用户逐级同步发起并实测客户端/服务端在途；目标档统计区间待 Review。H 的 VU/think time/soak 结果另报，不得混入或替代 F。
 
 2026-11-12的Gate0补充候选采用test_plan §11.8的持续服务端、多真实波次观察：累计至少60秒质量通过的实际请求发送→完整读取并解码区间，墙钟与空档另列，所有波次峰值分布及失败保留；没有handler延迟、压响应或sleep。单波次10/50证据只证明该次瞬时在途，不替代本条一分钟观察，不外推持续恒定在途。工具CLI最低60秒，预算或任何质量失败停止；本观测统计判据仍待B1/C4真实复核后由A记录阶段结论。
+
+2026-11-13的#162准备与阶段候选在[interface §17.3](../interface.md#173-d0量测准备与a候选阶段裁定)、test_plan §11.9登记。A对旧Win50 wave00192复核的last_accept/first_completion分别距first_received 28.3545/22.7892ms，故新tools adapter只观测真实handler reader安装就绪，经本wave精确四元组控制确认后才释放客户端发送前barrier；就绪不计received或已认证在途。headers在barrier前只内存拼装，计时从其后endheaders真实发送前起至完整读解码；建连/accept/reader/确认/barrier时间单列。服务端不等待、无barrier/延迟/响应hold/队列扩容，准备不能保证峰值N。A候选以received→response_completed验收D0 server在途，executing独立；absent/null的queued有条件N/A并保留backlog未测，N/A不等于门禁通过。AND、累计有效60秒和全部67旧未达波不变，新证据仍需固定SHA及B1/C4复核。
 
 网络资源候选以实际TCP连接的完整HTTP socket应用流字节及错误/生命周期留证，按两端反向四元组逐连接核对。它包含HTTP头/正文，排除TCP/IP开销、重传与物理链路余量；不能用总量巧合一致、正文大小或进程I/O代替逐连接证据，也不能据此宣称跨主机网络容量。精确层次与本阶段充分性须在真实资源/契约Review明确。
 

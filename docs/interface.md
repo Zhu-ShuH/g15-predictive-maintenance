@@ -704,3 +704,37 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 当前实现使用非阻塞 worker 准入，无应用任务队列；`server_queued=null`、`application_queue=absent`、`listen_backlog=unmeasured`。TCP backlog 不能当作排队用户；是否将 queued 记为验收 N/A 仍须非作者复核与 A 明确裁定，不能自动通过完整 Gate 0。
 
 容量观察工具可在event_sink边界附实际socket的 `connection_ref`（local/peer host:port），用于将request_id与独立网络计数对应；不修改外部HTTP响应或认证授权。网络适配是每实例显式包装，不全局替换socket，不记录请求头或payload。服务端每波结束须等真实worker返回、连接关闭与采样结束后，依原发wave_id/PID/单调时钟发送end marker；下一波才允许清空已成功归档的closed计数。活跃、失败、未知部分字节或错误关闭不得reset，跨波数据或raw/control快照不一致均使该波失败。
+
+
+## 17. 双流显式选择与发送前准备（#162，2026-11-13 候选）
+
+本节为[#162](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/162)登记的查询子项候选，须由原属地 B1/C4 按精确 SHA 真实复核；不是合并批准、完整 Gate0 或 D1/D2/100k 授权。不改评分、阈值、存储、cursor编码、应用队列或数据/并发门槛。T177六档固定clean`2bcd639`，包括67个未达波及page10告警原始/消费/丢弃10/1/9，均不回写或追认为通过。
+
+### 17.1 版本与选择
+
+`GET /v1/runs/{run_id}/devices/{device_id}/health`新增可选`streams`；application的同名keyword默认`None`。参数必须是单个精确字符串，不接受空值、大小写变体、列表、数字、bool、未知或重复参数。
+
+| 请求 | query_contract_version | windows.omitted | alarms.omitted |
+|---|---|---|---|
+| 不传streams / application传None | `"1"`，保留旧shape及旧行为 | 不增加该键 | 不增加该键 |
+| `streams=both` | `"2"` | false | false |
+| `streams=windows` | `"2"` | false | true |
+| `streams=alarms` | `"2"` | true | false |
+
+显式v2仍返回两个分页对象，不新增顶层选择回显。`omitted`必须是严格JSON bool。选中流保留原`sort/page_size/items/next_cursor`及高水位；未选流保留相同`sort/page_size`，但`items=[]`、`next_cursor=null`，windows的`high_water_start_seq=null`或alarms的`high_water=null`，顶层`committed_high_water.window_start_seq`或`.alarm`亦为null。`omitted=true`仅指本次未请求该流，不表示无数据或已耗尽。
+
+未选流不执行该表的SELECT。`states`、状态信封版本和`state_last_end_seq_exclusive`仍从当前只读事务真实读取；它们不随窗口/告警cursor冻结。`versions.features_versions`只描述实际返回窗口的版本集合，未选windows时为`[]`，不代表数据库没有窗口或版本。
+
+### 17.2 cursor、错误优先级与遍历
+
+在合法HTTP framing及可解析资源路径下，每请求仍先认证、授权，再校验可选参数；未认证401、无精确资源授权404优先于streams错误。携带未选流的cursor一律400，包括空字符串、损坏或有效签名cursor，不能以omitted跳过验证。选中cursor保持`g15c1`完整性及actor/policy/domain/run/device/query_type/sort/page_size、高水位和末键绑定；结构/签名错误400，跨scope统一404。相同scope的旧v1 cursor可用于v2选择该流，不因切换streams重置高水位。
+
+遍历首屏可用both；一流的`next_cursor=null`后，后续只选另一个尚未耗尽的流并提交其cursor，两流都耗尽即停止，不补发首页。每页仍重新认证授权；追加的新排序键不进入旧cursor快照，新首屏可见新提交。原始响应必须先按请求选择上下文做独立SQL/oracle核对，再对整个遍历检查准确键集合、条数及顺序；不能信响应自报omitted/version而跳过校验。D0新协议目标为原始100窗/1告警、丢弃0；负例必须能击穿重复、缺失、重放、伪omitted、版本降级与scope越界。旧v1省略耗尽cursor重发首屏的行为及T17710/1/9历史边界继续明示，不降低“无重复错序”要求。
+
+### 17.3 D0量测准备与A候选阶段裁定
+
+A对T177 Windows50的`wave-00192`既有记录复核：以first_received为基准，last_accept为28.3545ms、first_completion为22.7892ms，原波存在HTTP发送前尚未全部accept的连接。它仍是旧实现的真实失败，不因新准备方案改判。
+
+新增准备仅在tools观测adapter登记真正handler reader安装完成的就绪事实，不等待、不发received。控制通道须按本wave/PID与精确反向local/peer四元组确认N个连接均已就绪，再释放客户端发送前barrier；缺失、重复、跨wave、错误端点、超时或诊断失败都保留并使本轮失败。请求headers只在barrier前内存拼装，正式计时从barrier后实际endheaders发送前开始，随后立即读取直至完整解码。TCP建连、accept、reader安装、控制确认与barrier准备耗时单列，不填进请求延迟或有效负载时长。
+
+prepared不是received、已认证用户或请求在途；服务端不新增barrier、sleep、响应hold、限速或队列扩容。就绪确认也不保证N峰必达。A的D0候选验收阶段采用`server_received→response_completed`，executing按§16单列，不混算。无应用队列维持absent/null，queued有条件记N/A并保留`listen_backlog=unmeasured`，不能导出排队为0、非瓶颈或Gate0通过。累计有效60秒、全部波次目标AND、所有未达与失败保留不变；socket证据仅为本机HTTP应用字节，不代表物理链路容量，缓存未控制不声称冷/热结果。新协议、准备及阶段/资源充分性仍待B1/C4复核和固定SHA实测后另判。

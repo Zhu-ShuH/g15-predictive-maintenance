@@ -177,6 +177,7 @@ class ObservationClient:
         self.accounting = accounting
         self.meter = meter
         self.evidence_writer = evidence
+        self.confirm_preparation = None
 
     def query(
         self,
@@ -186,7 +187,9 @@ class ObservationClient:
         page_size: int = 50,
         windows_cursor: str | None = "",
         alarms_cursor: str | None = "",
+        streams: str | None = None,
         launch_barrier: threading.Barrier | None = None,
+        on_connected=None,
     ) -> tuple[int, dict[str, object]]:
         connection = MeteredHTTPConnection(
             self.location.hostname,
@@ -195,6 +198,8 @@ class ObservationClient:
             network_meter=self.meter,
         )
         parameters = [f"page_size={page_size}"]
+        if streams is not None:
+            parameters.append(f"streams={quote(streams)}")
         if windows_cursor:
             parameters.append(f"windows_cursor={quote(windows_cursor)}")
         if alarms_cursor:
@@ -218,18 +223,19 @@ class ObservationClient:
                 "peer": {"host": str(peer[0]), "port": int(peer[1])},
             }
             preparation["connected_ns"] = time.perf_counter_ns()
+            # put* only builds the in-memory header buffer. endheaders below is
+            # the first HTTP write; no response is delayed or held.
+            connection.putrequest("GET", target)
+            connection.putheader("Authorization", f"Bearer {self.token}")
+            connection.putheader("Connection", "close")
+            preparation["headers_prepared_ns"] = time.perf_counter_ns()
+            if on_connected is not None:
+                on_connected(connection_ref)
             if launch_barrier is not None:
                 launch_barrier.wait(timeout=10)
                 preparation["barrier_released_ns"] = time.perf_counter_ns()
                 started = self.accounting.client_start()
-            connection.request(
-                "GET",
-                target,
-                headers={
-                    "Authorization": f"Bearer {self.token}",
-                    "Connection": "close",
-                },
-            )
+            connection.endheaders()
             preparation["request_sent"] = True
             waiting = time.perf_counter()
             response = connection.getresponse()
@@ -278,6 +284,18 @@ class ObservationClient:
             mapping = {
                 "request_id": record.server_request_id,
                 "connection_ref": connection_ref,
+                "request_context": {
+                    "streams": streams,
+                    "page_size": page_size,
+                    "first_page_streams": [
+                        name
+                        for name, cursor in (
+                            ("windows", windows_cursor),
+                            ("alarms", alarms_cursor),
+                        )
+                        if not cursor and streams in (None, "both", name)
+                    ],
+                },
                 "preparation": preparation,
                 "latency_basis": (
                     "send to complete read and decode; TCP/barrier excluded"
@@ -291,7 +309,18 @@ class ObservationClient:
 
 
 def _concurrent_wave(clients: list[ObservationClient]) -> list:
-    barrier = threading.Barrier(len(clients))
+    references = []
+    lock = threading.Lock()
+
+    def register(reference):
+        with lock:
+            references.append(reference)
+
+    def confirm():
+        if clients[0].confirm_preparation is not None:
+            clients[0].confirm_preparation(references)
+
+    barrier = threading.Barrier(len(clients), action=confirm)
 
     def one(index: int):
         run_id = device_run_id(index % D0_DEVICE_COUNT)
@@ -300,6 +329,7 @@ def _concurrent_wave(clients: list[ObservationClient]) -> list:
             device_id(index % D0_DEVICE_COUNT),
             page_size=100,
             launch_barrier=barrier,
+            on_connected=register,
         )
         return status, body, run_id
 
@@ -459,6 +489,61 @@ class ObservationSession:
             self.receiver.close()
         return errors + list(self.stream_errors)
 
+    def _confirm_preparation(self, references):
+        from .preparation import verify_preparation
+
+        state = self.current
+        if state is None:
+            raise RuntimeError("no wave for connection preparation")
+        record = {
+            "server": None,
+            "client_references": references,
+            "client_wait_started_ns": time.perf_counter_ns(),
+            "client_confirmed_ns": None,
+            "client_wait_completed_ns": None,
+            "error_type": None,
+            "problems": [],
+            "basis": "accepted TCP and handler reader installed, active as of server snapshot before HTTP send; no lifetime extension; not received/executing or an authenticated user",
+        }
+        failure = None
+        try:
+            self.control.send(
+                {
+                    "kind": "await_prepared",
+                    "wave_id": state.wave_id,
+                    "connections": references,
+                }
+            )
+            ack = _receive(self.control, "prepared")
+            record["server"] = ack
+            record["problems"] = verify_preparation(
+                ack,
+                references,
+                wave_id=state.wave_id,
+                process_id=self.ready["process_id"],
+            )
+            if record["problems"]:
+                raise RuntimeError("invalid connection preparation acknowledgement")
+            record["client_confirmed_ns"] = time.perf_counter_ns()
+        except BaseException as exc:
+            failure = exc
+            record["error_type"] = type(exc).__name__
+            details = getattr(exc, "details", None)
+            if isinstance(details, dict):
+                # The child's error is an exception type, never exception text.
+                name = details.get("error")
+                if isinstance(name, str) and name.isidentifier() and len(name) <= 64:
+                    record["server_control_error_type"] = name
+            raise
+        finally:
+            record["client_wait_completed_ns"] = time.perf_counter_ns()
+            state.report["connection_preparation"] = record
+            try:
+                state.write("preparation", record)
+            except BaseException:
+                if failure is None:
+                    raise
+
     def observe(
         self,
         output: Path,
@@ -614,12 +699,22 @@ class ObservationSession:
                     responses.append((status, body, run_id))
                 walk = run_paging(clients[0], 0, db_paths)
             else:
+                for client in clients:
+                    client.confirm_preparation = self._confirm_preparation
                 responses = _concurrent_wave(clients)
                 if responses:
                     first = responses[0]
                     walk = PagingWalk(
                         raw=[first],
                         consumed=[first],
+                        request_contexts=[
+                            {
+                                "request_id": first[1].get("request_id"),
+                                "streams": None,
+                                "page_size": 100,
+                                "first_page_streams": ["windows", "alarms"],
+                            }
+                        ],
                         discards=[
                             {
                                 "page": 0,
@@ -771,6 +866,7 @@ class ObservationSession:
                 "raw_pages": len(walk.raw),
                 "consumed_pages": len(walk.consumed),
                 "discard_counts": walk.evidence().get("counts"),
+                "request_contexts": walk.request_contexts,
             }
             records = accounting.client_records
             report["load_interval"] = {
@@ -892,7 +988,7 @@ def run_observation(
             "same_server_process_for_all_waves": True,
             "serial_smoke": "one user / ten requests before observation",
             "paging": "complete actual page10 traversal before observation",
-            "arrival": "preconnected real TCP; client-only launch barrier",
+            "arrival": "preconnected real TCP; exact accepted/reader-installed endpoints confirmed over control IPC before client-only launch barrier",
             "duration_basis": "sum of quality-verified actual concurrent send-to-read-and-decode spans; all gaps excluded; failed attempts retained separately",
             "cache": "uncontrolled; no cold-cache claim",
             "delays": "no sleep, response holding, server barrier, throttle or retry",
@@ -911,7 +1007,7 @@ def run_observation(
             "independent non-author review",
             "two Linux evidence on this exact source",
             "application queue absent; N/A scope requires real review and ruling",
-            "exhausted parallel paging stream replays remain explicitly recorded",
+            "selected-stream raw paging on final source requires independent review",
             "TCP/IP/link overhead, retransmissions and host network saturation unmeasured",
             "cache cold/hot evidence requires controlled environment",
         ],

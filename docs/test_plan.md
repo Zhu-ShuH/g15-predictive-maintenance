@@ -367,3 +367,25 @@ ADR §8.3的每档一分钟不能由单个短波次替代。新增显式 opt-in�
 socket网络观测显式包装真实连接，包含HTTP头和正文的应用流收发字节，按反向local/peer四元组逐连接对账并关联request_id；网络计数证据不记录payload/token。部分失败字节保持未知，中断、未真实关闭或错误记录不能被reset抹除。原发网络数据流必须与控制快照一致。此口径排除TCP/IP/链路头、重传和物理链路容量，不把socket应用流、正文长度或进程I/O混称wire容量或链路余量。
 
 Windows、Ubuntu24.04、RHEL9须在同一固定实现SHA各自运行并分开署环境。Linux分别fresh clone、核锁文件Git原始blob、pp03/Python3.12与逐包版本，所有测试、缓存、原始观察目录均在笔记库外；只把普通可读摘要/索引/日志留入规划库，完整较大raw证据保留在库外目录并记录哈希与位置。
+
+
+### 11.9 双流选择与发送前准备（#162，2026-11-13 候选）
+
+实施范围与公共契约见[#162](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/162)及[interface §17](interface.md#17-双流显式选择与发送前准备1622026-11-13-候选)。本节为候选验证计划，不是其他角色批准或完整Gate0通过，不修改AND、数据/并发门槛、评分、队列、#56/#9或旧T177产物。
+
+| 组别 | 可执行验证 | 严格预期 |
+|---|---|---|
+| 版本与投影 | 真实HTTP不传streams及显式both/windows/alarms，独立SQLite核对 | v1旧shape无omitted；v2两流各含严格bool，未选items空、cursor/流及顶层高水位null；states仍真实，未选windows的返回版本集合为空 |
+| 参数与错误顺序 | 空值/非法类型/大小写/重复参数；合法与损坏cursor放进未选流；未认证和无授权主体 | 选值仅三个精确枚举，未选cursor400；401/隐藏404先于可选参数，不能靠omitted吞掉cursor或泄露资源 |
+| scope与快照 | 实际签名cursor逐项跨actor/policy/domain/run/device/type/sort/page_size，签名及高水位破坏；另一线程提交新窗口/告警 | scope跨越404，结构/签名400；选中旧cursor无重复/缺失且高水位不变，新首屏与当前states可见新提交 |
+| 原始完整遍历 | both首屏后只选未耗尽流，保留每次选择/cursor上下文和原始响应 | D0 raw100窗/1告警、discard0；对原始键集合/条数/顺序做独立SQL/oracle，再做跨页coverage，不能信响应自报omitted或版本 |
+| 可证伪负例 | 重复/缺失/重放页、伪omitted、未选流混入条目/高水位、版本降级及统计改写 | 集成、工具CLI和opt-in共享检查均失败留证；保留v1耗尽重发首屏兼容用例 |
+| 只读/准备失败 | 请求前后比较真实SQLite业务/Schema；准备ACK丢失、重复、跨wave/PID/端点或超时 | 零业务写入；准备失败停止并保留，不补造received、授权用户或在途，不忽略诊断失败 |
+
+产品HTTP回归入口：`python -m pytest -q tests/integration/test_query_stream_selection.py`。工具负例及既有stage/identity/network回归按实际改动定向执行；全部运行、TMP/TEMP与pytest basetemp在笔记库外。固定SHA前不得将开发期测试数字写成最终候选通过。
+
+准备方案只在tools adapter观察真正handler reader安装完成，并经控制通道确认本wave N个连接的精确四元组/PID就绪后释放客户端发送前barrier；server无等待或barrier。headers在barrier前只内存准备，barrier后endheaders实际发送前起计并立即读响应。TCP、accept、reader、控制确认和barrier准备时长单列；prepared既不是received也不是已认证用户。不得sleep、压住响应、限速或扩队列造峰；即使全部准备完成，也不保证服务端峰值达到N。
+
+A的D0候选判定阶段为server_received→response_completed；executing独立留存。无应用队列时queued保持null/application_queue=absent，有条件N/A且listen_backlog未测，不能推断排队0或该项通过。累计有效60秒与每波目标AND保持§11.8定义，未达如实exit1，旧67未达波和T177六档clean2bcd639/10:1:9原始语义保留。新三平台D0证据须同一固定实现SHA、前后clean、保留全部失败，再由B1/C4复核阶段/资源充分性及A另作门禁结论；不以本节追认旧结果或自动升档。
+
+网络仅核同机socket HTTP头/正文的双向逐连接应用字节，不含TCP/IP/链路头、重传或物理NIC容量；缓存未控制不外推冷/热性能。新数据不替代独立资源、缓存边界及高档位资源授权评审。
