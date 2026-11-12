@@ -376,6 +376,56 @@ def test_disk_snapshot_does_not_hide_real_io_failures(tmp_path, monkeypatch, fai
         runtime.stop()
 
 
+@pytest.mark.parametrize("directory_name", ["artifacts", "reports"])
+@pytest.mark.parametrize("failure", [PermissionError, OSError, FileNotFoundError])
+def test_disk_snapshot_does_not_hide_directory_scan_failures(
+    tmp_path, monkeypatch, directory_name, failure
+):
+    runtime = _runtime(tmp_path, max_duration_seconds=0.4)
+    blocked = runtime.runs_root / runtime.catalog()[0]["run_id"] / directory_name
+    original_scandir, original_listdir = os.scandir, os.listdir
+    scans = []
+
+    def scan_or_fail(original, path, *args, **kwargs):
+        if (
+            isinstance(path, (str, bytes, os.PathLike))
+            and Path(os.fsdecode(path)) == blocked
+        ):
+            scans.append(path)
+            raise failure("diagnostic-private-directory-detail")
+        return original(path, *args, **kwargs)
+
+    # Inject below pathlib: Python 3.12 glob silently swallows scandir OSError,
+    # while iterdir uses listdir and must let the real directory failure escape.
+    monkeypatch.setattr(
+        os,
+        "scandir",
+        lambda path=".", *args, **kwargs: scan_or_fail(
+            original_scandir, path, *args, **kwargs
+        ),
+    )
+    monkeypatch.setattr(
+        os,
+        "listdir",
+        lambda path=".", *args, **kwargs: scan_or_fail(
+            original_listdir, path, *args, **kwargs
+        ),
+    )
+    runtime.start()
+    try:
+        assert runtime.wait(5)
+        final = runtime.stop()
+        assert scans
+        assert final["status"] == "error"
+        assert final["error"] == "capture_error"
+        assert final["devices"][0]["captured_samples"] == 0
+        errors = (runtime.session_root / "runtime-errors.ndjson").read_text()
+        assert failure.__name__ in errors
+        assert "diagnostic-private-directory-detail" not in errors
+    finally:
+        runtime.stop()
+
+
 def test_descriptor_readers_remain_coherent_during_real_updates(tmp_path):
     runtime = _runtime(tmp_path, max_duration_seconds=0.8).start()
     device = runtime.catalog()[0]

@@ -538,8 +538,8 @@ class LiveRuntime:
             directory = self.runs_root / d.run_id
             for file in [
                 directory / "live-session.json",
-                *list((directory / "artifacts").glob("*")),
-                *list((directory / "reports").glob("*")),
+                *list((directory / "artifacts").iterdir()),
+                *list((directory / "reports").iterdir()),
             ]:
                 total += regular_size(file)
         return total
