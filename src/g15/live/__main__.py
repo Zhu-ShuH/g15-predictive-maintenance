@@ -19,6 +19,7 @@ import threading
 
 from g15.console.server import create_console_server
 from g15.live import LiveConfig, LiveRuntime
+from g15.live.schema import atomic_json
 from g15.live.reporting import render_live_report
 from g15.query.application import HealthQueryApplication
 from g15.query.auth import AuthorizationPolicy, TokenVerifier, issue_token
@@ -31,12 +32,8 @@ def _utc_now() -> str:
 
 
 def _write_json(path: Path, payload: object) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(path)
+    """Publish service state with the same bounded sharing retry as capture."""
+    atomic_json(path, payload)
 
 
 def _source_identity() -> dict:
