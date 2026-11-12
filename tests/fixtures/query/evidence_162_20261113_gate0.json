@@ -1,0 +1,1595 @@
+{
+  "format": "g15-gate0-d0-three-platform-evidence-20261113-v1",
+  "issue": 162,
+  "date": "2026-11-13",
+  "implementation": {
+    "commit": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+    "tree": "c7bd8439caf6771d509026c1409f3bea9b55096c",
+    "parent_pr157_commit": "a10cab2f56cdd109632135ee21645b5c3b9ac064",
+    "source_url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/commit/dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+    "later_report_commit_changes_implementation": false
+  },
+  "scope": {
+    "data_tier": "D0",
+    "devices": 10,
+    "windows_per_device": 100,
+    "concurrent_page_size": 100,
+    "prelude_serial_requests_per_run": 10,
+    "prelude_page10_requests_per_run": 10,
+    "same_real_server_process_for_each_run": true,
+    "different_real_authorized_users": true,
+    "transport": "same-host loopback TCP/HTTP with distinct client/server processes",
+    "duration_requirement_seconds": 60,
+    "duration_basis": "Sum of quality-verified actual concurrent send-to-complete-read-and-decode spans; preparation, prelude, validation, persistence and all between-wave gaps excluded",
+    "prepared_boundary": "Exact accepted connection endpoints and handler-reader installation acknowledged before the client send barrier; prepared is not received, authenticated or in-flight",
+    "forbidden_load_shaping_not_used": [
+      "server barrier",
+      "handler sleep",
+      "response holding",
+      "throttle",
+      "queue enlargement",
+      "best-wave selection",
+      "formal reruns"
+    ],
+    "workers": 64,
+    "max_waves_per_run": 10000,
+    "byte_budget_per_run": 1073741824,
+    "no_higher_tier_authorized_or_measured": true
+  },
+  "verdict": {
+    "gate0_passed": false,
+    "current_all_wave_AND_target_passed": false,
+    "candidate_server_in_flight_stage": "server_received to response_completed",
+    "executing_reported_separately": true,
+    "server_queued": null,
+    "application_queue": "absent",
+    "listen_backlog": "unmeasured",
+    "queued_NA": "conditional; requires real non-author review and explicit A scope ruling, not automatic pass",
+    "A_decision": "Current all-wave AND candidate is not passed; no tier escalation and no acceptance/SLO changes",
+    "next_step": "Real review of synchronization window, load-generator scheduling, selected stage and resource/cache sufficiency before any future source or measurement; retain this result",
+    "completed_evidence": [
+      "Exact implementation-SHA full local regressions on three platforms",
+      "Both Linux distributions have completed the same-SHA D0 10/50 formal observations",
+      "All six formal observations have trusted quality, duration and retained raw evidence"
+    ],
+    "remaining_decision_items": [
+      "One real target-miss wave fails the unchanged all-wave AND candidate",
+      "Real B1/C4 review on the exact candidate head for stream protocol, synchronization statistics and load-generator scheduling",
+      "Real review and A stage ruling for received-to-complete, conditional queued N/A, and resource/cache sufficiency"
+    ],
+    "static_remaining_gates_note": "Original per-run conservative remaining_gates strings are retained in raw summaries, not projected as the latest global status; the two-Linux evidence has now been supplied"
+  },
+  "totals": {
+    "formal_runs": 6,
+    "concurrent_waves": 2792,
+    "target_reached_waves": 2791,
+    "target_missed_waves": 1,
+    "main_concurrent_requests": 43160,
+    "prelude_requests": 120,
+    "http_errors_including_prelude": 0,
+    "all_quality_passed": true,
+    "all_duration_met": true,
+    "all_source_clean_unchanged": true,
+    "all_six_offline_audits_valid": true,
+    "common_public_projection_sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+  },
+  "runs": [
+    {
+      "id": "windows-10",
+      "platform": "windows",
+      "requested_authorized_users": 10,
+      "machine": {
+        "os": "Windows",
+        "release": "11",
+        "architecture": "AMD64",
+        "python": "3.12.15",
+        "sqlite": "3.53.4",
+        "cpu_count": 16
+      },
+      "source": {
+        "git_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+        "git_dirty_before": false,
+        "git_dirty_after": false,
+        "unchanged": true,
+        "content_hash_entries": 64,
+        "source_file_sha256": "973f5bc62dddf07cef18920ebc0db35b70945a3b79d37aa1cf64c79280615492",
+        "source_file_sha256_basis": "SHA256 of the complete archived source.json document bytes, including machine/metadata; not a canonical hash of the content_sha256 map"
+      },
+      "command": "python -m tools.query_load.observation_runner --concurrent 10 --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <fresh-external-directory>",
+      "completed_waves": 1227,
+      "target_reached_waves": 1227,
+      "target_miss_wave_ids": [],
+      "recomputed_target_miss_wave_ids": [],
+      "quality_passed": true,
+      "all_waves_target_reached": true,
+      "duration_met": true,
+      "formal_one_minute_met": true,
+      "gate0_passed": false,
+      "original_exit_code": 0,
+      "failures": [],
+      "shutdown_errors": [],
+      "phase_counts": {
+        "serial10_and_full_paging": {
+          "waves": 1,
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_client": 20,
+          "raw_application": 120,
+          "raw_transport": 80,
+          "stage_server_received": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_response_completed": 20
+        },
+        "concurrent": {
+          "waves": 1227,
+          "client_requests": 12270,
+          "http_errors": 0,
+          "raw_client": 12270,
+          "raw_application": 73620,
+          "raw_transport": 49080,
+          "stage_server_received": 12270,
+          "stage_server_executing": 12270,
+          "stage_server_execution_completed": 12270,
+          "stage_response_completed": 12270
+        }
+      },
+      "phase_peak_ranges": {
+        "client_in_flight": {
+          "min": 10,
+          "max": 10,
+          "users_min": 10,
+          "users_max": 10
+        },
+        "server_received_to_response_completed": {
+          "min": 10,
+          "max": 10,
+          "users_min": 10,
+          "users_max": 10
+        },
+        "server_executing": {
+          "min": 10,
+          "max": 10,
+          "users_min": 10,
+          "users_max": 10
+        }
+      },
+      "effective_load_seconds": 60.05052579991752,
+      "wall_observation_seconds": 170.03390020004008,
+      "between_wave_gap_seconds": 109.98337440012256,
+      "latency_seconds": {
+        "count": 12270,
+        "p50": 0.041104999982053414,
+        "p95": 0.054886345000704745,
+        "p99": 0.07243077402992605,
+        "max": 0.2619614999857731,
+        "method": "All concurrent raw request latencies; global linear interpolation at (n-1)*p; prelude excluded"
+      },
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "rss_bytes": 189718528,
+          "open_fds": null,
+          "open_handles": 693,
+          "cpu_percent_one_core": 118.31967147346228,
+          "cpu_percent_host_capacity": 7.394979467091392,
+          "samples": 6555,
+          "waves": 1228
+        },
+        "server": {
+          "rss_bytes": 166506496,
+          "open_fds": null,
+          "open_handles": 360,
+          "cpu_percent_one_core": 193.5344027296172,
+          "cpu_percent_host_capacity": 12.095900170601075,
+          "samples": 6688,
+          "waves": 1228
+        }
+      },
+      "socket_application_bytes": {
+        "serial10_and_full_paging:client": {
+          "bytes_sent_known": 12416,
+          "bytes_received_known": 224132
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_sent_known": 224132,
+          "bytes_received_known": 12416
+        },
+        "concurrent:client": {
+          "bytes_sent_known": 5368125,
+          "bytes_received_known": 233964360
+        },
+        "concurrent:server": {
+          "bytes_sent_known": 233964360,
+          "bytes_received_known": 5368125
+        }
+      },
+      "network_pair_checked_waves_including_prelude": 1228,
+      "prepared_concurrent_waves": 1227,
+      "public_projection": {
+        "sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc",
+        "counts": {
+          "windows": 1000,
+          "alarms": 10,
+          "states": 10
+        },
+        "basis": "10 actual page100 public responses, remove only top-level request_id/trace_id, sort by run_id and canonical JSON; not a private/raw database checksum"
+      },
+      "page10": {
+        "request_count": 10,
+        "windows": {
+          "raw": 100,
+          "consumed": 100,
+          "discarded": 0
+        },
+        "alarms": {
+          "raw": 1,
+          "consumed": 1,
+          "discarded": 0
+        }
+      },
+      "offline_audit": {
+        "valid": true,
+        "problem_count": 0,
+        "hashed_index_entries": 1228,
+        "hashed_raw_report_index_bytes": 449626885
+      },
+      "artifacts": {
+        "summary": {
+          "label": "formal/windows-10/summary.json",
+          "sha256": "2941e50d61d7f97283b291b4b29e5530c83dea7cabad54ebbc06a4b63b2bc294",
+          "bytes": 9375
+        },
+        "index": {
+          "label": "formal/windows-10/index.ndjson",
+          "sha256": "9626d3ec3b1b5724de6074a73d7acc1178adcc0e721089f8414d38f9733bd4b9",
+          "bytes": 4421634
+        },
+        "source": {
+          "label": "formal/windows-10/source.json",
+          "sha256": "973f5bc62dddf07cef18920ebc0db35b70945a3b79d37aa1cf64c79280615492",
+          "bytes": 7046
+        },
+        "aggregate": {
+          "label": "derived/windows-10.aggregate-v2.json",
+          "sha256": "449d9a67245c4f1f8de9751b6a70377b6b38b6994ff4b7281cd1d703b5188157",
+          "bytes": 337145
+        },
+        "archive": {
+          "label": "archives/windows-dba4dce9-formal-20261113.tar.gz",
+          "sha256": "ec342171d53a5f1168cfd3830631c509418b9e17473dfba431e27c6f7527c25c",
+          "bytes": 34777409,
+          "contains_both_platform_runs": true
+        }
+      }
+    },
+    {
+      "id": "windows-50",
+      "platform": "windows",
+      "requested_authorized_users": 50,
+      "machine": {
+        "os": "Windows",
+        "release": "11",
+        "architecture": "AMD64",
+        "python": "3.12.15",
+        "sqlite": "3.53.4",
+        "cpu_count": 16
+      },
+      "source": {
+        "git_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+        "git_dirty_before": false,
+        "git_dirty_after": false,
+        "unchanged": true,
+        "content_hash_entries": 64,
+        "source_file_sha256": "973f5bc62dddf07cef18920ebc0db35b70945a3b79d37aa1cf64c79280615492",
+        "source_file_sha256_basis": "SHA256 of the complete archived source.json document bytes, including machine/metadata; not a canonical hash of the content_sha256 map"
+      },
+      "command": "python -m tools.query_load.observation_runner --concurrent 50 --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <fresh-external-directory>",
+      "completed_waves": 233,
+      "target_reached_waves": 233,
+      "target_miss_wave_ids": [],
+      "recomputed_target_miss_wave_ids": [],
+      "quality_passed": true,
+      "all_waves_target_reached": true,
+      "duration_met": true,
+      "formal_one_minute_met": true,
+      "gate0_passed": false,
+      "original_exit_code": 0,
+      "failures": [],
+      "shutdown_errors": [],
+      "phase_counts": {
+        "serial10_and_full_paging": {
+          "waves": 1,
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_client": 20,
+          "raw_application": 120,
+          "raw_transport": 80,
+          "stage_server_received": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_response_completed": 20
+        },
+        "concurrent": {
+          "waves": 233,
+          "client_requests": 11650,
+          "http_errors": 0,
+          "raw_client": 11650,
+          "raw_application": 69900,
+          "raw_transport": 46600,
+          "stage_server_received": 11650,
+          "stage_server_executing": 11650,
+          "stage_server_execution_completed": 11650,
+          "stage_response_completed": 11650
+        }
+      },
+      "phase_peak_ranges": {
+        "client_in_flight": {
+          "min": 50,
+          "max": 50,
+          "users_min": 50,
+          "users_max": 50
+        },
+        "server_received_to_response_completed": {
+          "min": 50,
+          "max": 50,
+          "users_min": 50,
+          "users_max": 50
+        },
+        "server_executing": {
+          "min": 47,
+          "max": 50,
+          "users_min": 47,
+          "users_max": 50
+        }
+      },
+      "effective_load_seconds": 60.0121533992351,
+      "wall_observation_seconds": 144.0507025999832,
+      "between_wave_gap_seconds": 84.0385492007481,
+      "latency_seconds": {
+        "count": 11650,
+        "p50": 0.2104832000040915,
+        "p95": 0.2925674249709118,
+        "p99": 0.3343838080071146,
+        "max": 0.45693559997016564,
+        "method": "All concurrent raw request latencies; global linear interpolation at (n-1)*p; prelude excluded"
+      },
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "rss_bytes": 154890240,
+          "open_fds": null,
+          "open_handles": 754,
+          "cpu_percent_one_core": 37.86075749232808,
+          "cpu_percent_host_capacity": 2.366297343270505,
+          "samples": 4483,
+          "waves": 234
+        },
+        "server": {
+          "rss_bytes": 116559872,
+          "open_fds": null,
+          "open_handles": 671,
+          "cpu_percent_one_core": 137.04683610158762,
+          "cpu_percent_host_capacity": 8.565427256349226,
+          "samples": 3819,
+          "waves": 234
+        }
+      },
+      "socket_application_bytes": {
+        "serial10_and_full_paging:client": {
+          "bytes_sent_known": 12396,
+          "bytes_received_known": 224132
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_sent_known": 224132,
+          "bytes_received_known": 12396
+        },
+        "concurrent:client": {
+          "bytes_sent_known": 5089885,
+          "bytes_received_known": 222142200
+        },
+        "concurrent:server": {
+          "bytes_sent_known": 222142200,
+          "bytes_received_known": 5089885
+        }
+      },
+      "network_pair_checked_waves_including_prelude": 234,
+      "prepared_concurrent_waves": 233,
+      "public_projection": {
+        "sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc",
+        "counts": {
+          "windows": 1000,
+          "alarms": 10,
+          "states": 10
+        },
+        "basis": "10 actual page100 public responses, remove only top-level request_id/trace_id, sort by run_id and canonical JSON; not a private/raw database checksum"
+      },
+      "page10": {
+        "request_count": 10,
+        "windows": {
+          "raw": 100,
+          "consumed": 100,
+          "discarded": 0
+        },
+        "alarms": {
+          "raw": 1,
+          "consumed": 1,
+          "discarded": 0
+        }
+      },
+      "offline_audit": {
+        "valid": true,
+        "problem_count": 0,
+        "hashed_index_entries": 234,
+        "hashed_raw_report_index_bytes": 411061241
+      },
+      "artifacts": {
+        "summary": {
+          "label": "formal/windows-50/summary.json",
+          "sha256": "9f788b65516e2c99bdda782caf2a54399d848196f1fc7d741f7e1b9a13a8b917",
+          "bytes": 9368
+        },
+        "index": {
+          "label": "formal/windows-50/index.ndjson",
+          "sha256": "8eeae738ef2b1782ab90cef62aa8069f3a638412af544e50509afb4a74eff0eb",
+          "bytes": 2486175
+        },
+        "source": {
+          "label": "formal/windows-50/source.json",
+          "sha256": "973f5bc62dddf07cef18920ebc0db35b70945a3b79d37aa1cf64c79280615492",
+          "bytes": 7046
+        },
+        "aggregate": {
+          "label": "derived/windows-50.aggregate-v2.json",
+          "sha256": "1f656886d9e175a5dc137f822e7b0587f2175bc739a4d28e5231ba5924a58934",
+          "bytes": 69738
+        },
+        "archive": {
+          "label": "archives/windows-dba4dce9-formal-20261113.tar.gz",
+          "sha256": "ec342171d53a5f1168cfd3830631c509418b9e17473dfba431e27c6f7527c25c",
+          "bytes": 34777409,
+          "contains_both_platform_runs": true
+        }
+      }
+    },
+    {
+      "id": "ubuntu-10",
+      "platform": "ubuntu",
+      "requested_authorized_users": 10,
+      "machine": {
+        "os": "Linux",
+        "release": "7.0.0-34-generic",
+        "architecture": "x86_64",
+        "python": "3.12.16",
+        "sqlite": "3.54.1",
+        "cpu_count": 16
+      },
+      "source": {
+        "git_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+        "git_dirty_before": false,
+        "git_dirty_after": false,
+        "unchanged": true,
+        "content_hash_entries": 64,
+        "source_file_sha256": "6a20005ab841bd0e03726cd369bfc9ae6c1ac3d91a9ad318e513ca72cce7037e",
+        "source_file_sha256_basis": "SHA256 of the complete archived source.json document bytes, including machine/metadata; not a canonical hash of the content_sha256 map"
+      },
+      "command": "python -m tools.query_load.observation_runner --concurrent 10 --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <fresh-external-directory>",
+      "completed_waves": 317,
+      "target_reached_waves": 316,
+      "target_miss_wave_ids": [
+        "wave-00024"
+      ],
+      "recomputed_target_miss_wave_ids": [
+        "wave-00024"
+      ],
+      "quality_passed": true,
+      "all_waves_target_reached": false,
+      "duration_met": true,
+      "formal_one_minute_met": true,
+      "gate0_passed": false,
+      "original_exit_code": 1,
+      "failures": [],
+      "shutdown_errors": [],
+      "phase_counts": {
+        "serial10_and_full_paging": {
+          "waves": 1,
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_client": 20,
+          "raw_application": 120,
+          "raw_transport": 80,
+          "stage_server_received": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_response_completed": 20
+        },
+        "concurrent": {
+          "waves": 317,
+          "client_requests": 3170,
+          "http_errors": 0,
+          "raw_client": 3170,
+          "raw_application": 19020,
+          "raw_transport": 12680,
+          "stage_server_received": 3170,
+          "stage_server_executing": 3170,
+          "stage_server_execution_completed": 3170,
+          "stage_response_completed": 3170
+        }
+      },
+      "phase_peak_ranges": {
+        "client_in_flight": {
+          "min": 10,
+          "max": 10,
+          "users_min": 10,
+          "users_max": 10
+        },
+        "server_received_to_response_completed": {
+          "min": 9,
+          "max": 10,
+          "users_min": 9,
+          "users_max": 10
+        },
+        "server_executing": {
+          "min": 9,
+          "max": 10,
+          "users_min": 9,
+          "users_max": 10
+        }
+      },
+      "effective_load_seconds": 60.05234367795492,
+      "wall_observation_seconds": 83.12792633500067,
+      "between_wave_gap_seconds": 23.075582657045743,
+      "latency_seconds": {
+        "count": 3170,
+        "p50": 0.17303448299571755,
+        "p95": 0.21223557834891832,
+        "p99": 0.2252671500717406,
+        "max": 0.23935367100057192,
+        "method": "All concurrent raw request latencies; global linear interpolation at (n-1)*p; prelude excluded"
+      },
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "rss_bytes": 66723840,
+          "open_fds": 21,
+          "open_handles": null,
+          "cpu_percent_one_core": 54.55167145044443,
+          "cpu_percent_host_capacity": 3.409479465652777,
+          "samples": 5641,
+          "waves": 318
+        },
+        "server": {
+          "rss_bytes": 60682240,
+          "open_fds": 51,
+          "open_handles": null,
+          "cpu_percent_one_core": 160.39953117192684,
+          "cpu_percent_host_capacity": 10.024970698245427,
+          "samples": 2917,
+          "waves": 318
+        }
+      },
+      "socket_application_bytes": {
+        "serial10_and_full_paging:client": {
+          "bytes_sent_known": 12416,
+          "bytes_received_known": 224132
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_sent_known": 224132,
+          "bytes_received_known": 12416
+        },
+        "concurrent:client": {
+          "bytes_sent_known": 1386875,
+          "bytes_received_known": 60445560
+        },
+        "concurrent:server": {
+          "bytes_sent_known": 60445560,
+          "bytes_received_known": 1386875
+        }
+      },
+      "network_pair_checked_waves_including_prelude": 318,
+      "prepared_concurrent_waves": 317,
+      "public_projection": {
+        "sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc",
+        "counts": {
+          "windows": 1000,
+          "alarms": 10,
+          "states": 10
+        },
+        "basis": "10 actual page100 public responses, remove only top-level request_id/trace_id, sort by run_id and canonical JSON; not a private/raw database checksum"
+      },
+      "page10": {
+        "request_count": 10,
+        "windows": {
+          "raw": 100,
+          "consumed": 100,
+          "discarded": 0
+        },
+        "alarms": {
+          "raw": 1,
+          "consumed": 1,
+          "discarded": 0
+        }
+      },
+      "offline_audit": {
+        "valid": true,
+        "problem_count": 0,
+        "hashed_index_entries": 318,
+        "hashed_raw_report_index_bytes": 119318012
+      },
+      "artifacts": {
+        "summary": {
+          "label": "formal/ubuntu-10/summary.json",
+          "sha256": "d1f89b2b2fa1e35727c481399dab83cefe8dd211d6617108e39cb1bf8075f864",
+          "bytes": 9374
+        },
+        "index": {
+          "label": "formal/ubuntu-10/index.ndjson",
+          "sha256": "ca580a2850de5167263f2c6a6de83fe92d3057ba5523fb8b78be8fd0d7e25d31",
+          "bytes": 1144346
+        },
+        "source": {
+          "label": "formal/ubuntu-10/source.json",
+          "sha256": "6a20005ab841bd0e03726cd369bfc9ae6c1ac3d91a9ad318e513ca72cce7037e",
+          "bytes": 7059
+        },
+        "aggregate": {
+          "label": "derived/ubuntu-10.aggregate-v2.json",
+          "sha256": "35568f8e70fbb9a8ee21a71a590dd2d9973272151df2498ea513b54799ba4624",
+          "bytes": 92291
+        },
+        "archive": {
+          "label": "archives/formal-dba4dce9-ubuntu-20261113.tar.gz",
+          "sha256": "12640baa23dd35f1f4dc40d3b4e02ea920680545fcecf0fa53d076173ba8d144",
+          "bytes": 9051402,
+          "contains_both_platform_runs": true
+        }
+      }
+    },
+    {
+      "id": "ubuntu-50",
+      "platform": "ubuntu",
+      "requested_authorized_users": 50,
+      "machine": {
+        "os": "Linux",
+        "release": "7.0.0-34-generic",
+        "architecture": "x86_64",
+        "python": "3.12.16",
+        "sqlite": "3.54.1",
+        "cpu_count": 16
+      },
+      "source": {
+        "git_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+        "git_dirty_before": false,
+        "git_dirty_after": false,
+        "unchanged": true,
+        "content_hash_entries": 64,
+        "source_file_sha256": "6a20005ab841bd0e03726cd369bfc9ae6c1ac3d91a9ad318e513ca72cce7037e",
+        "source_file_sha256_basis": "SHA256 of the complete archived source.json document bytes, including machine/metadata; not a canonical hash of the content_sha256 map"
+      },
+      "command": "python -m tools.query_load.observation_runner --concurrent 50 --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <fresh-external-directory>",
+      "completed_waves": 48,
+      "target_reached_waves": 48,
+      "target_miss_wave_ids": [],
+      "recomputed_target_miss_wave_ids": [],
+      "quality_passed": true,
+      "all_waves_target_reached": true,
+      "duration_met": true,
+      "formal_one_minute_met": true,
+      "gate0_passed": false,
+      "original_exit_code": 0,
+      "failures": [],
+      "shutdown_errors": [],
+      "phase_counts": {
+        "serial10_and_full_paging": {
+          "waves": 1,
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_client": 20,
+          "raw_application": 120,
+          "raw_transport": 80,
+          "stage_server_received": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_response_completed": 20
+        },
+        "concurrent": {
+          "waves": 48,
+          "client_requests": 2400,
+          "http_errors": 0,
+          "raw_client": 2400,
+          "raw_application": 14400,
+          "raw_transport": 9600,
+          "stage_server_received": 2400,
+          "stage_server_executing": 2400,
+          "stage_server_execution_completed": 2400,
+          "stage_response_completed": 2400
+        }
+      },
+      "phase_peak_ranges": {
+        "client_in_flight": {
+          "min": 50,
+          "max": 50,
+          "users_min": 50,
+          "users_max": 50
+        },
+        "server_received_to_response_completed": {
+          "min": 50,
+          "max": 50,
+          "users_min": 50,
+          "users_max": 50
+        },
+        "server_executing": {
+          "min": 36,
+          "max": 50,
+          "users_min": 36,
+          "users_max": 50
+        }
+      },
+      "effective_load_seconds": 60.19658138605155,
+      "wall_observation_seconds": 73.66614016899985,
+      "between_wave_gap_seconds": 13.469558782948297,
+      "latency_seconds": {
+        "count": 2400,
+        "p50": 1.0607392080019054,
+        "p95": 1.2574633716994867,
+        "p99": 1.3202934692816772,
+        "max": 1.4110884399997303,
+        "method": "All concurrent raw request latencies; global linear interpolation at (n-1)*p; prelude excluded"
+      },
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "rss_bytes": 89661440,
+          "open_fds": 61,
+          "open_handles": null,
+          "cpu_percent_one_core": 52.81655828803667,
+          "cpu_percent_host_capacity": 3.3010348930022917,
+          "samples": 5531,
+          "waves": 49
+        },
+        "server": {
+          "rss_bytes": 79413248,
+          "open_fds": 171,
+          "open_handles": null,
+          "cpu_percent_one_core": 177.86541170540465,
+          "cpu_percent_host_capacity": 11.11658823158779,
+          "samples": 847,
+          "waves": 49
+        }
+      },
+      "socket_application_bytes": {
+        "serial10_and_full_paging:client": {
+          "bytes_sent_known": 12416,
+          "bytes_received_known": 224132
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_sent_known": 224132,
+          "bytes_received_known": 12416
+        },
+        "concurrent:client": {
+          "bytes_sent_known": 1050960,
+          "bytes_received_known": 45763200
+        },
+        "concurrent:server": {
+          "bytes_sent_known": 45763200,
+          "bytes_received_known": 1050960
+        }
+      },
+      "network_pair_checked_waves_including_prelude": 49,
+      "prepared_concurrent_waves": 48,
+      "public_projection": {
+        "sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc",
+        "counts": {
+          "windows": 1000,
+          "alarms": 10,
+          "states": 10
+        },
+        "basis": "10 actual page100 public responses, remove only top-level request_id/trace_id, sort by run_id and canonical JSON; not a private/raw database checksum"
+      },
+      "page10": {
+        "request_count": 10,
+        "windows": {
+          "raw": 100,
+          "consumed": 100,
+          "discarded": 0
+        },
+        "alarms": {
+          "raw": 1,
+          "consumed": 1,
+          "discarded": 0
+        }
+      },
+      "offline_audit": {
+        "valid": true,
+        "problem_count": 0,
+        "hashed_index_entries": 49,
+        "hashed_raw_report_index_bytes": 87677418
+      },
+      "artifacts": {
+        "summary": {
+          "label": "formal/ubuntu-50/summary.json",
+          "sha256": "65ba7202e72242d999201d29e5345a5ca43b1a4dc91510635707dad70dc8da25",
+          "bytes": 9369
+        },
+        "index": {
+          "label": "formal/ubuntu-50/index.ndjson",
+          "sha256": "d4d55449b8f4d9eac4c8fd695bad6d8ed72e6086655aa602e87869b403c86b87",
+          "bytes": 506540
+        },
+        "source": {
+          "label": "formal/ubuntu-50/source.json",
+          "sha256": "6a20005ab841bd0e03726cd369bfc9ae6c1ac3d91a9ad318e513ca72cce7037e",
+          "bytes": 7059
+        },
+        "aggregate": {
+          "label": "derived/ubuntu-50.aggregate-v2.json",
+          "sha256": "abfec34eb1b1ce1e150d0459993f8338dc9564effdf98c0b979ecf7d5b8204ab",
+          "bytes": 19901
+        },
+        "archive": {
+          "label": "archives/formal-dba4dce9-ubuntu-20261113.tar.gz",
+          "sha256": "12640baa23dd35f1f4dc40d3b4e02ea920680545fcecf0fa53d076173ba8d144",
+          "bytes": 9051402,
+          "contains_both_platform_runs": true
+        }
+      }
+    },
+    {
+      "id": "rhel-10",
+      "platform": "rhel",
+      "requested_authorized_users": 10,
+      "machine": {
+        "os": "Linux",
+        "release": "5.14.0-611.5.1.el9_7.x86_64",
+        "architecture": "x86_64",
+        "python": "3.12.16",
+        "sqlite": "3.54.1",
+        "cpu_count": 4
+      },
+      "source": {
+        "git_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+        "git_dirty_before": false,
+        "git_dirty_after": false,
+        "unchanged": true,
+        "content_hash_entries": 64,
+        "source_file_sha256": "020058bb05bafab5b9198b3dc3de1a5187f7d9a93b002e7630a1a94291031c54",
+        "source_file_sha256_basis": "SHA256 of the complete archived source.json document bytes, including machine/metadata; not a canonical hash of the content_sha256 map"
+      },
+      "command": "python -m tools.query_load.observation_runner --concurrent 10 --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <fresh-external-directory>",
+      "completed_waves": 867,
+      "target_reached_waves": 867,
+      "target_miss_wave_ids": [],
+      "recomputed_target_miss_wave_ids": [],
+      "quality_passed": true,
+      "all_waves_target_reached": true,
+      "duration_met": true,
+      "formal_one_minute_met": true,
+      "gate0_passed": false,
+      "original_exit_code": 0,
+      "failures": [],
+      "shutdown_errors": [],
+      "phase_counts": {
+        "serial10_and_full_paging": {
+          "waves": 1,
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_client": 20,
+          "raw_application": 120,
+          "raw_transport": 80,
+          "stage_server_received": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_response_completed": 20
+        },
+        "concurrent": {
+          "waves": 867,
+          "client_requests": 8670,
+          "http_errors": 0,
+          "raw_client": 8670,
+          "raw_application": 52020,
+          "raw_transport": 34680,
+          "stage_server_received": 8670,
+          "stage_server_executing": 8670,
+          "stage_server_execution_completed": 8670,
+          "stage_response_completed": 8670
+        }
+      },
+      "phase_peak_ranges": {
+        "client_in_flight": {
+          "min": 10,
+          "max": 10,
+          "users_min": 10,
+          "users_max": 10
+        },
+        "server_received_to_response_completed": {
+          "min": 10,
+          "max": 10,
+          "users_min": 10,
+          "users_max": 10
+        },
+        "server_executing": {
+          "min": 5,
+          "max": 10,
+          "users_min": 5,
+          "users_max": 10
+        }
+      },
+      "effective_load_seconds": 60.00667439298559,
+      "wall_observation_seconds": 124.26024520600185,
+      "between_wave_gap_seconds": 64.25357081301627,
+      "latency_seconds": {
+        "count": 8670,
+        "p50": 0.05698294100147905,
+        "p95": 0.07783787444896005,
+        "p99": 0.08594533956806114,
+        "max": 0.09787174799566856,
+        "method": "All concurrent raw request latencies; global linear interpolation at (n-1)*p; prelude excluded"
+      },
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "rss_bytes": 58646528,
+          "open_fds": 21,
+          "open_handles": null,
+          "cpu_percent_one_core": 94.59785566538336,
+          "cpu_percent_host_capacity": 23.64946391634584,
+          "samples": 7555,
+          "waves": 868
+        },
+        "server": {
+          "rss_bytes": 52289536,
+          "open_fds": 51,
+          "open_handles": null,
+          "cpu_percent_one_core": 141.3227919855481,
+          "cpu_percent_host_capacity": 35.33069799638702,
+          "samples": 6155,
+          "waves": 868
+        }
+      },
+      "socket_application_bytes": {
+        "serial10_and_full_paging:client": {
+          "bytes_sent_known": 12416,
+          "bytes_received_known": 224132
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_sent_known": 224132,
+          "bytes_received_known": 12416
+        },
+        "concurrent:client": {
+          "bytes_sent_known": 3793125,
+          "bytes_received_known": 165319560
+        },
+        "concurrent:server": {
+          "bytes_sent_known": 165319560,
+          "bytes_received_known": 3793125
+        }
+      },
+      "network_pair_checked_waves_including_prelude": 868,
+      "prepared_concurrent_waves": 867,
+      "public_projection": {
+        "sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc",
+        "counts": {
+          "windows": 1000,
+          "alarms": 10,
+          "states": 10
+        },
+        "basis": "10 actual page100 public responses, remove only top-level request_id/trace_id, sort by run_id and canonical JSON; not a private/raw database checksum"
+      },
+      "page10": {
+        "request_count": 10,
+        "windows": {
+          "raw": 100,
+          "consumed": 100,
+          "discarded": 0
+        },
+        "alarms": {
+          "raw": 1,
+          "consumed": 1,
+          "discarded": 0
+        }
+      },
+      "offline_audit": {
+        "valid": true,
+        "problem_count": 0,
+        "hashed_index_entries": 868,
+        "hashed_raw_report_index_bytes": 319764176
+      },
+      "artifacts": {
+        "summary": {
+          "label": "formal/rhel-10/summary.json",
+          "sha256": "e0da4f364781f4781dbd51cde9b070aebf1cff81ea69a84f62b7fdc40ba22697",
+          "bytes": 9372
+        },
+        "index": {
+          "label": "formal/rhel-10/index.ndjson",
+          "sha256": "1fb66ed0a9489167808c106e32b68493078d757cba8a8d32a5d5c8ed3e0b435d",
+          "bytes": 3099399
+        },
+        "source": {
+          "label": "formal/rhel-10/source.json",
+          "sha256": "020058bb05bafab5b9198b3dc3de1a5187f7d9a93b002e7630a1a94291031c54",
+          "bytes": 7069
+        },
+        "aggregate": {
+          "label": "derived/rhel-10.aggregate-v2.json",
+          "sha256": "678517b7d5f3b1b1b2764a137b8bb9fd33ac44cfec691a764f340099c6506a19",
+          "bytes": 239652
+        },
+        "archive": {
+          "label": "archives/formal-dba4dce9-rhel-20261113.tar.gz",
+          "sha256": "14bbe5140bf43bba320cc8f779448568a41391b933431e530ac7e581aa5fb913",
+          "bytes": 22954006,
+          "contains_both_platform_runs": true
+        }
+      }
+    },
+    {
+      "id": "rhel-50",
+      "platform": "rhel",
+      "requested_authorized_users": 50,
+      "machine": {
+        "os": "Linux",
+        "release": "5.14.0-611.5.1.el9_7.x86_64",
+        "architecture": "x86_64",
+        "python": "3.12.16",
+        "sqlite": "3.54.1",
+        "cpu_count": 4
+      },
+      "source": {
+        "git_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+        "git_dirty_before": false,
+        "git_dirty_after": false,
+        "unchanged": true,
+        "content_hash_entries": 64,
+        "source_file_sha256": "020058bb05bafab5b9198b3dc3de1a5187f7d9a93b002e7630a1a94291031c54",
+        "source_file_sha256_basis": "SHA256 of the complete archived source.json document bytes, including machine/metadata; not a canonical hash of the content_sha256 map"
+      },
+      "command": "python -m tools.query_load.observation_runner --concurrent 50 --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <fresh-external-directory>",
+      "completed_waves": 100,
+      "target_reached_waves": 100,
+      "target_miss_wave_ids": [],
+      "recomputed_target_miss_wave_ids": [],
+      "quality_passed": true,
+      "all_waves_target_reached": true,
+      "duration_met": true,
+      "formal_one_minute_met": true,
+      "gate0_passed": false,
+      "original_exit_code": 0,
+      "failures": [],
+      "shutdown_errors": [],
+      "phase_counts": {
+        "serial10_and_full_paging": {
+          "waves": 1,
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_client": 20,
+          "raw_application": 120,
+          "raw_transport": 80,
+          "stage_server_received": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_response_completed": 20
+        },
+        "concurrent": {
+          "waves": 100,
+          "client_requests": 5000,
+          "http_errors": 0,
+          "raw_client": 5000,
+          "raw_application": 30000,
+          "raw_transport": 20000,
+          "stage_server_received": 5000,
+          "stage_server_executing": 5000,
+          "stage_server_execution_completed": 5000,
+          "stage_response_completed": 5000
+        }
+      },
+      "phase_peak_ranges": {
+        "client_in_flight": {
+          "min": 50,
+          "max": 50,
+          "users_min": 50,
+          "users_max": 50
+        },
+        "server_received_to_response_completed": {
+          "min": 50,
+          "max": 50,
+          "users_min": 50,
+          "users_max": 50
+        },
+        "server_executing": {
+          "min": 19,
+          "max": 50,
+          "users_min": 19,
+          "users_max": 50
+        }
+      },
+      "effective_load_seconds": 60.604962742982025,
+      "wall_observation_seconds": 92.14698274999682,
+      "between_wave_gap_seconds": 31.5420200070148,
+      "latency_seconds": {
+        "count": 5000,
+        "p50": 0.5129755264970299,
+        "p95": 0.657886627301923,
+        "p99": 0.6928033540309844,
+        "max": 0.732963018999726,
+        "method": "All concurrent raw request latencies; global linear interpolation at (n-1)*p; prelude excluded"
+      },
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "rss_bytes": 80773120,
+          "open_fds": 61,
+          "open_handles": null,
+          "cpu_percent_one_core": 47.619519416600326,
+          "cpu_percent_host_capacity": 11.904879854150082,
+          "samples": 5594,
+          "waves": 101
+        },
+        "server": {
+          "rss_bytes": 72704000,
+          "open_fds": 164,
+          "open_handles": null,
+          "cpu_percent_one_core": 170.38148191221873,
+          "cpu_percent_host_capacity": 42.59537047805468,
+          "samples": 1632,
+          "waves": 101
+        }
+      },
+      "socket_application_bytes": {
+        "serial10_and_full_paging:client": {
+          "bytes_sent_known": 12416,
+          "bytes_received_known": 224132
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_sent_known": 224132,
+          "bytes_received_known": 12416
+        },
+        "concurrent:client": {
+          "bytes_sent_known": 2189500,
+          "bytes_received_known": 95340000
+        },
+        "concurrent:server": {
+          "bytes_sent_known": 95340000,
+          "bytes_received_known": 2189500
+        }
+      },
+      "network_pair_checked_waves_including_prelude": 101,
+      "prepared_concurrent_waves": 100,
+      "public_projection": {
+        "sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc",
+        "counts": {
+          "windows": 1000,
+          "alarms": 10,
+          "states": 10
+        },
+        "basis": "10 actual page100 public responses, remove only top-level request_id/trace_id, sort by run_id and canonical JSON; not a private/raw database checksum"
+      },
+      "page10": {
+        "request_count": 10,
+        "windows": {
+          "raw": 100,
+          "consumed": 100,
+          "discarded": 0
+        },
+        "alarms": {
+          "raw": 1,
+          "consumed": 1,
+          "discarded": 0
+        }
+      },
+      "offline_audit": {
+        "valid": true,
+        "problem_count": 0,
+        "hashed_index_entries": 101,
+        "hashed_raw_report_index_bytes": 178544867
+      },
+      "artifacts": {
+        "summary": {
+          "label": "formal/rhel-50/summary.json",
+          "sha256": "5bea06c2d895e6885c09d3d25b0e8768977a20fc4bfab7c42dab6f13f1598b1b",
+          "bytes": 9372
+        },
+        "index": {
+          "label": "formal/rhel-50/index.ndjson",
+          "sha256": "318f60d63e1a9a7cc90717eb9c2836985da0fa02fef52ba7e6b9eafcbea5fc0a",
+          "bytes": 1026331
+        },
+        "source": {
+          "label": "formal/rhel-50/source.json",
+          "sha256": "020058bb05bafab5b9198b3dc3de1a5187f7d9a93b002e7630a1a94291031c54",
+          "bytes": 7069
+        },
+        "aggregate": {
+          "label": "derived/rhel-50.aggregate-v2.json",
+          "sha256": "4e9c3b681852735b70e2de1ef9d5ff929b079e5739f347dac03715f665da34c0",
+          "bytes": 33943
+        },
+        "archive": {
+          "label": "archives/formal-dba4dce9-rhel-20261113.tar.gz",
+          "sha256": "14bbe5140bf43bba320cc8f779448568a41391b933431e530ac7e581aa5fb913",
+          "bytes": 22954006,
+          "contains_both_platform_runs": true
+        }
+      }
+    }
+  ],
+  "archives": {
+    "windows": {
+      "label": "archives/windows-dba4dce9-formal-20261113.tar.gz",
+      "sha256": "ec342171d53a5f1168cfd3830631c509418b9e17473dfba431e27c6f7527c25c",
+      "compressed_bytes": 34777409,
+      "uncompressed_bytes": 861572286,
+      "ordinary_files": 2945,
+      "contains": [
+        "windows-10",
+        "windows-50"
+      ],
+      "retained_by": "A，笔记库外留档；包括两个正式档、控制记录及原离线审计失败输出"
+    },
+    "ubuntu": {
+      "label": "archives/formal-dba4dce9-ubuntu-20261113.tar.gz",
+      "sha256": "12640baa23dd35f1f4dc40d3b4e02ea920680545fcecf0fa53d076173ba8d144",
+      "compressed_bytes": 9051402,
+      "uncompressed_bytes": 207153043,
+      "ordinary_files": 753,
+      "contains": [
+        "ubuntu-10",
+        "ubuntu-50"
+      ],
+      "indexed_files_rehashed": 738,
+      "indexed_hash_mismatches": 0,
+      "retained_by": "A，笔记库外留档；包括两个完整正式档、控制记录及源码摘要"
+    },
+    "rhel": {
+      "label": "archives/formal-dba4dce9-rhel-20261113.tar.gz",
+      "sha256": "14bbe5140bf43bba320cc8f779448568a41391b933431e530ac7e581aa5fb913",
+      "compressed_bytes": 22954006,
+      "uncompressed_bytes": 498467280,
+      "ordinary_files": 1957,
+      "contains": [
+        "rhel-10",
+        "rhel-50"
+      ],
+      "indexed_files_rehashed": 1942,
+      "indexed_hash_mismatches": 0,
+      "retained_by": "A，笔记库外留档；包括两个完整正式档、控制记录及源码摘要"
+    }
+  },
+  "offline_aggregation": {
+    "script_sha256": "98aafe48b4233db4b7bc2140e9d94c7ca9571df24d12ee378aff441c82627ee3",
+    "implementation": "Python standard library only; offline evidence reads; no new requests or database queries",
+    "latency_method": "All main concurrent raw samples, global linear interpolation at (n-1)*p; no averaging per-wave percentiles",
+    "verification": "Index/raw/report/source hashes, request identity and stage conservation, per-wave raw peaks/targets, prepared endpoint timing, public projection and socket byte pairs reconciled",
+    "limitation": "Recorded SQL-oracle verdicts are preserved, not rerun against private fixture databases by this offline script"
+  },
+  "resource_and_network_limits": [
+    "RSS, file-descriptor and handle maxima are observed sampling lower bounds, not exact interval peaks.",
+    "CPU maxima are process per-wave interval ratios; one-core and host-capacity denominators remain separate, not instantaneous or whole-host saturation.",
+    "Unavailable metrics remain null. Both endpoints are on the same host; SSH only schedules and collects evidence.",
+    "Socket bytes include HTTP headers/body; exclude TCP/IP/link overhead, retransmissions and physical NIC capacity.",
+    "Cache is uncontrolled; no cold/hot or steady-state claim. No continuous sixty-second constant-N assertion.",
+    "These results do not establish D1/D2, higher concurrency, ten-thousand/one-hundred-thousand-user capacity or a service-capacity ceiling."
+  ],
+  "regressions": [
+    {
+      "platform": "windows",
+      "source_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+      "checkout": "exact implementation SHA, clean",
+      "python": "3.12.15",
+      "sqlite": "3.53.4",
+      "os": "Windows 11 / AMD64",
+      "logical_cpus": 16,
+      "passed": 1247,
+      "skipped": 15,
+      "pytest_seconds": 222.63,
+      "exit_code": 0,
+      "black_files": 95,
+      "pylint_score": 9.87,
+      "pylint_fail_under": 8.5,
+      "doc_reference_problems": 0,
+      "artifacts": {
+        "pytest-full.log": {
+          "label": "regression/windows/pytest-full.log",
+          "sha256": "1a2528d6d6d4ea17c1624cc51e1061a586155fee6661b54221041b0234f01a90",
+          "bytes": 1504
+        },
+        "full-exit.json": {
+          "label": "regression/windows/full-exit.json",
+          "sha256": "3400b257bd4e7ad8310d1cff9fcd639b0d2852b367d250ab68b3eefd2c8c910e",
+          "bytes": 149
+        },
+        "quality-exit.json": {
+          "label": "regression/windows/quality-exit.json",
+          "sha256": "c91eb87cd3f1f1a222233396560b9c9c18d410600a6fc4fb9a64071c8d619156",
+          "bytes": 53
+        },
+        "black.log": {
+          "label": "regression/windows/black.log",
+          "sha256": "7bd6ace3d0d1121c7c06229bb2c05366d9c44d275c85f0e526fb2e49106db162",
+          "bytes": 59
+        },
+        "pylint.log": {
+          "label": "regression/windows/pylint.log",
+          "sha256": "19c93527ccf0914b72767520a9dec5d4805d825c4d4f49c7c10acc10cb983372",
+          "bytes": 10959
+        },
+        "docrefs.log": {
+          "label": "regression/windows/docrefs.log",
+          "sha256": "68f634abc77b7446657c9e29d758e7aeace9fae78380c67fed011a0e00930adb",
+          "bytes": 38
+        }
+      }
+    },
+    {
+      "platform": "ubuntu",
+      "source_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+      "checkout": "fresh clone, exact implementation SHA, clean before and after",
+      "python": "3.12.16",
+      "sqlite": "3.54.1",
+      "os": "Ubuntu 24.04.5 LTS / x86_64",
+      "kernel": "Linux-7.0.0-34-generic-x86_64-with-glibc2.39",
+      "logical_cpus": 16,
+      "passed": 1248,
+      "skipped": 14,
+      "pytest_seconds": 166.39,
+      "exit_code": 0,
+      "black_files": 95,
+      "pylint_score": 9.87,
+      "pylint_fail_under": 8.5,
+      "doc_reference_problems": 0,
+      "locked_packages_checked": 21,
+      "lock_mismatches": 0,
+      "source_hashes_checked": 64,
+      "source_hash_mismatches": 0,
+      "artifacts": {
+        "pytest.stdout.log": {
+          "label": "regression/ubuntu/pytest.stdout.log",
+          "sha256": "9a1b950b8453d05175a15e69722de304ecb275f2e9ec0aeb14e0196e39ee7adf",
+          "bytes": 1485
+        },
+        "pytest.stderr.log": {
+          "label": "regression/ubuntu/pytest.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "regression-summary.json": {
+          "label": "regression/ubuntu/regression-summary.json",
+          "sha256": "6e46fc8bd9fd0190cd898e1021e744f08411286ea66aeaef9c811c0315bdd3b9",
+          "bytes": 3675
+        },
+        "source-before.json": {
+          "label": "regression/ubuntu/source-before.json",
+          "sha256": "88b00d1623b4d5534d99c04b243759ed885ea1001b4831b35dbe1f1427ff0112",
+          "bytes": 7361
+        },
+        "source-after.json": {
+          "label": "regression/ubuntu/source-after.json",
+          "sha256": "88b00d1623b4d5534d99c04b243759ed885ea1001b4831b35dbe1f1427ff0112",
+          "bytes": 7361
+        },
+        "commands.json": {
+          "label": "regression/ubuntu/commands.json",
+          "sha256": "85b00201cb0f3c7da94d7ea2527c73e061a9bd5fa88076b672a5bf5d98093cc2",
+          "bytes": 3563
+        },
+        "checksum-manifest.json": {
+          "label": "regression/ubuntu/checksum-manifest.json",
+          "sha256": "dbe84030f41af1807745bc25ec4a522bc30f1cca715df4b1d68b4fa6c7da3e5c",
+          "bytes": 2876
+        }
+      }
+    },
+    {
+      "platform": "rhel",
+      "source_sha": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+      "checkout": "fresh clone, exact implementation SHA, clean before and after",
+      "python": "3.12.16",
+      "sqlite": "3.54.1",
+      "os": "RHEL 9.7 / x86_64",
+      "kernel": "Linux-5.14.0-611.5.1.el9_7.x86_64-x86_64-with-glibc2.34",
+      "logical_cpus": 4,
+      "passed": 1248,
+      "skipped": 14,
+      "pytest_seconds": 153.42,
+      "exit_code": 0,
+      "black_files": 95,
+      "pylint_score": 9.87,
+      "pylint_fail_under": 8.5,
+      "doc_reference_problems": 0,
+      "locked_packages_checked": 21,
+      "lock_mismatches": 0,
+      "source_hashes_checked": 64,
+      "source_hash_mismatches": 0,
+      "artifacts": {
+        "pytest.stdout.log": {
+          "label": "regression/rhel/pytest.stdout.log",
+          "sha256": "249486e43ae404eda755abf0653c342f82bcbed364637df1ba7eeac19ced9054",
+          "bytes": 1485
+        },
+        "pytest.stderr.log": {
+          "label": "regression/rhel/pytest.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "regression-summary.json": {
+          "label": "regression/rhel/regression-summary.json",
+          "sha256": "db243d97f2b5402c8eaca278f640f955937021da54fbced31db2daa19001c10f",
+          "bytes": 3787
+        },
+        "source-before.json": {
+          "label": "regression/rhel/source-before.json",
+          "sha256": "9666dcd622d86a8812c94f4fed48bbe7a8879c2e447169b7f97096ff033982cf",
+          "bytes": 7371
+        },
+        "source-after.json": {
+          "label": "regression/rhel/source-after.json",
+          "sha256": "9666dcd622d86a8812c94f4fed48bbe7a8879c2e447169b7f97096ff033982cf",
+          "bytes": 7371
+        },
+        "commands.json": {
+          "label": "regression/rhel/commands.json",
+          "sha256": "311d27648a71930a4e5bb5ad81a47b207ae29a3619c68e67ba21d6132c5c006c",
+          "bytes": 3746
+        },
+        "checksum-manifest.json": {
+          "label": "regression/rhel/checksum-manifest.json",
+          "sha256": "451e38966f6637ecd550c3f4cb8873ab2f4e07685c4df3d50b95c85c70846af7",
+          "bytes": 2876
+        }
+      }
+    }
+  ],
+  "ci": {
+    "run_number": 736,
+    "run_id": 43265771901,
+    "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43265771901",
+    "status": "completed",
+    "conclusion": "success",
+    "jobs_successful": 4,
+    "candidate_head": "dba4dce9b326a883f572ce0809ce1d5f8275bd11",
+    "checked_out_commit": "c0594899f213d56ac71cfe7152ae3d759cd3827a",
+    "checked_out_ref": "refs/pull/165/merge",
+    "base_commit": "a10cab2f56cdd109632135ee21645b5c3b9ac064",
+    "checkout_basis": "Actual checkout job logs; PR synthetic merge, distinct from exact-dba local regressions and formal measurements",
+    "python_jobs": [
+      {
+        "python": "3.11",
+        "job_id": 131348791998,
+        "passed": 1248,
+        "skipped": 14,
+        "seconds": 116.25,
+        "pylint_score": 9.87,
+        "black_files": 95
+      },
+      {
+        "python": "3.12",
+        "job_id": 131348792510,
+        "passed": 1248,
+        "skipped": 14,
+        "seconds": 115.5,
+        "pylint_score": 9.87,
+        "black_files": 95
+      }
+    ]
+  },
+  "only_target_miss_diagnostic": {
+    "platform": "ubuntu",
+    "requested_users": 10,
+    "wave_id": "wave-00024",
+    "client_peak": 10,
+    "server_received_to_response_completed_peak": 9,
+    "server_executing_peak": 9,
+    "requests": 10,
+    "http_errors": 0,
+    "original_server_events": 40,
+    "server_clock_relative_to_first_received_ms": {
+      "first_response_completed": 3.695799,
+      "next_received": 4.813024,
+      "next_received_after_first_completion": 1.117225,
+      "last_received": 14.353793,
+      "remaining_nine_received_after_first_completion": true
+    },
+    "client_clock_ms": {
+      "barrier_release_spread": 5.627401,
+      "send_wrapper_start_spread": 5.621229,
+      "first_second_send_wrapper_start_gap": 4.758562,
+      "all_client_starts_precede_first_client_completion": true
+    },
+    "prepared_server_clock": {
+      "reader_installed_before_ack": 10,
+      "recv_into_wrapper_started_before_ack": 10,
+      "nearest_pre_ack_wrapper_margin_ms": 0.020293
+    },
+    "clock_boundary": "Each duration uses only its originating client or server process clock; no cross-process subtraction",
+    "unobserved": [
+      "GIL scheduling cause",
+      "kernel scheduling and syscall-entry timing",
+      "packet arrival timing"
+    ],
+    "interpretation": "Reader preparation was recorded for all ten connections. A Python wrapper start is not kernel syscall entry. The observed non-overlap proves this wave failed the current AND target, not a maximum service capacity of nine. No definite counting, preparation or network product defect was identified from these records.",
+    "artifacts": {
+      "original_raw": {
+        "label": "formal/ubuntu-10/wave-00024/raw.ndjson",
+        "sha256": "a18fc1a77e7f2b8aa9022f2a3ff769a2ed31dd49fb1bb09a34c03152419d04a3",
+        "bytes": 354492
+      },
+      "original_report": {
+        "label": "formal/ubuntu-10/wave-00024/report.json",
+        "sha256": "3c0d7ec4340e00b2f88a3cc083703ae4609afb49a22708cb32ed3726afd7f9f6",
+        "bytes": 13675
+      },
+      "diagnostic": {
+        "label": "diagnostics/ubuntu-10-wave-00024.json",
+        "sha256": "eb091639f8f89441ea93e4214acaa80d3e18bc1ea7bae333a575e1f6ff0c38fd",
+        "bytes": 39265
+      },
+      "diagnostic_report": {
+        "label": "diagnostics/ubuntu-10-wave-00024.md",
+        "sha256": "0bc68247d6cb2c3d5b580a08fcb12c6695621e3ed36e5e8c2f96a2403f4cb320",
+        "bytes": 5126
+      }
+    }
+  },
+  "preserved_failure_sources": [
+    {
+      "label": "T177 historical measurements",
+      "implementation_commit": "2bcd639668c679c2b5f01ad10e6888fe454d3f00",
+      "target_misses": 67,
+      "original_results_rewritten": false,
+      "reference": "evidence_136_20261112_t177_minute.json"
+    },
+    {
+      "label": "CI731",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43261142715",
+      "candidate_head": "c6a2a06051ac72f67344f68b47ad30b6bc7ff450",
+      "job_id": 131332461859,
+      "actual_checkout_commit": null,
+      "checkout_note": "Not separately obtained; do not claim exact candidate-head checkout",
+      "pytest_failed": 1,
+      "pytest_passed": 1138,
+      "pytest_skipped": 14,
+      "pytest_seconds": 107.75,
+      "failure": "SIGKILL fixture consumer returned zero before watcher established a partial-commit kill point",
+      "formal_capacity_retry": false,
+      "followup": "PR157 fixture correction is in parent a10cab2f"
+    },
+    {
+      "label": "Non-frozen development checks",
+      "source_sha": null,
+      "categories": [
+        "old editable import returned HTTP400 for streams",
+        "request-context extra fields violated strict context schema",
+        "concurrent local commit triggered fixed_source failure"
+      ],
+      "retained_by": "A，库外保留原失败；来源不明确不补造SHA",
+      "formal_capacity_retry": false
+    },
+    {
+      "label": "Initial offline aggregate expectation failure",
+      "audit_valid": false,
+      "problem_count": 10,
+      "script_sha256": "afcdf20a1dcab7af53ad7339ce29d9851645b087aedf8d3a504cbe798df3c8bd",
+      "artifact": {
+        "label": "derived/windows-10.aggregate-v1.json",
+        "sha256": "04f2d83b9d83882f872f042c6c5683b0cee9c1d0aa1e90f45e0ef35d83bd4e94",
+        "bytes": 337726
+      },
+      "cause": "The first offline script incorrectly required explicit both on legacy page100 serial requests. Corrected v2 audit preserves strict expected v1/v2 validation; no formal run repeated."
+    }
+  ],
+  "publication": {
+    "raw_retention": "A在笔记库外留档；公开仅白名单摘要、相对artifact标签和hash",
+    "excluded": [
+      "local usernames",
+      "absolute host paths",
+      "SSH addresses",
+      "hostnames",
+      "bearer credentials",
+      "cursor values",
+      "full raw response bodies"
+    ],
+    "internal_review_counts_as_external_approval": false
+  },
+  "source_verification": {
+    "same_git_tree": true,
+    "each_run_content_hash_map_unchanged": true,
+    "cross_linux_content_hash_entries_compared": 64,
+    "cross_linux_content_hash_mismatches": 0,
+    "source_document_hashes_equal_across_platforms_claimed": false,
+    "common_hash_across_all_six_is": "public projection 990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+  }
+}
