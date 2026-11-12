@@ -200,3 +200,68 @@ input::placeholder {color:#B9C8D6}
   .main-shell,.workspace,.device-workspace,.device-roster,.live-monitor {min-width:0;max-width:100%}
   .live-totals>div,.snapshot-grid>div {min-width:0}
 }
+
+:root {--cw-silver:#B9C1C9;--cw-gold:#B89A4A;--cw-copper:#A66A43;--cw-iron:#555D63}
+.device-roster,.device-workspace,.fleet-panel,.live-monitor,.health-summary,.chart-section,
+.view#alarms-view,.view#reports-view,.view#maintenance-view,.metric-card,.advice-compact,
+.maintenance-card,.diagnosis-source,.report-verdict,.device-row,.recent-alarm,
+.live-totals>div,.snapshot-grid>div,.message,.fleet-message {
+  border-radius:0;border-width:2px;border-style:solid;
+  box-shadow:inset 0 0 0 1px #010101,0 2px 0 #010101
+}
+.device-roster,.fleet-panel,.health-summary,.chart-section,.metric-card,.advice-compact,
+.maintenance-card,.diagnosis-source,.report-verdict,.device-row,.recent-alarm,
+.live-totals>div,.snapshot-grid>div {border-color:var(--cw-silver)}
+.device-workspace,.view#reports-view,.view#maintenance-view {border-color:var(--cw-gold)}
+.live-monitor,.view#alarms-view {border-color:var(--cw-copper)}
+.screen-column:first-child>.fleet-panel {border-color:var(--cw-silver)}
+.screen-center>.fleet-panel {border-color:var(--cw-gold)}
+.screen-column:last-child>.fleet-panel {border-color:var(--cw-copper)}
+.diagnosis-left>.fleet-panel {border-color:var(--cw-silver)}
+.diagnosis-right>.fleet-panel {border-color:var(--cw-gold)}
+.operations-kpis>.metric-card:nth-child(3n+2) {border-color:var(--cw-gold)}
+.operations-kpis>.metric-card:nth-child(3n) {border-color:var(--cw-copper)}
+.device-workspace::before,.fleet-panel::before,.device-roster::before {
+  inset:6px;opacity:1;filter:drop-shadow(0 1px 0 #010101);
+  background-image:radial-gradient(circle at 4px 4px,#171B1E 0 1px,#555D63 1px 3px,#899197 3.5px 4px,#2A3034 4.5px 5px,transparent 5.5px),radial-gradient(circle at calc(100% - 4px) 4px,#171B1E 0 1px,#555D63 1px 3px,#899197 3.5px 4px,#2A3034 4.5px 5px,transparent 5.5px),radial-gradient(circle at 4px calc(100% - 4px),#171B1E 0 1px,#555D63 1px 3px,#899197 3.5px 4px,#2A3034 4.5px 5px,transparent 5.5px),radial-gradient(circle at calc(100% - 4px) calc(100% - 4px),#171B1E 0 1px,#555D63 1px 3px,#899197 3.5px 4px,#2A3034 4.5px 5px,transparent 5.5px)
+}
+
+h1,h2,h3,.brand strong,.fleet-brand strong,.device-title-line h2,.fleet-panel-heading h2 {
+  font-family:"SimHei","Microsoft YaHei UI","Noto Sans CJK SC",sans-serif;
+  font-weight:900;font-stretch:condensed;letter-spacing:0;line-height:1.15
+}
+.fleet-note:not(#live-scope):not(#diagnosis-radar-scope),
+.section-note:not(#live-note):not(#maintenance-scope):not(#chart-description),
+.roster-note,.sidebar-footer p,.health-context .muted,.diagnosis-score-caption {display:none}
+small,.muted,.fleet-subtitle,.fleet-data-note,.selected-live-meta,.device-live-count,
+.device-live-commit,.acquisition-row small,.diagnosis-run,.chart-range,.chart-description,
+.live-note,.live-scope,.maintenance-scope,.maintenance-basis,.maintenance-source,
+.maintenance-drivers,.maintenance-confirmation,.evidence-time,.evidence-reason,
+.measurement-detail,.update-time,#fleet-updated,.report-reasons {
+  font-family:"站酷高端黑","SimHei","Microsoft YaHei UI",sans-serif;
+  font-size:10.5pt;line-height:1.65
+}
+.device-roster,.device-workspace,.fleet-panel,.live-monitor,.health-summary,.chart-section,
+.view#alarms-view,.view#reports-view,.view#maintenance-view,.metric-card,.advice-compact,
+.maintenance-card,.diagnosis-source,.report-verdict,.device-row,.recent-alarm,
+.live-totals>div,.snapshot-grid>div,.message,.fleet-message {border-width:4px}
+@media(min-width:901px) {
+  .device-roster {
+    position:sticky;top:16px;align-self:start;height:calc(100vh - 32px);
+    max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior-y:contain
+  }
+  .device-list[data-live=true] {max-height:calc(100vh - 260px)}
+}
+@media(min-width:1001px) {
+  .screen-layout>.screen-column:first-child,.screen-center {
+    position:sticky;top:16px;align-self:start;
+    max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior-y:contain
+  }
+}
+
+.snapshot-grid dd,.live-totals dd {font-size:18px;white-space:nowrap;overflow-wrap:normal}
+.acquisition-row small,.selected-live-meta,.device-live-count,.device-live-commit,
+.diagnosis-run,.fleet-subtitle,.maintenance-basis,.evidence-reason {overflow-wrap:normal;word-break:normal}
+
+#view-description,.operations-heading p,#report-description,
+.section-heading p.muted:not([id]),.fleet-panel-heading p.fleet-subtitle:not([id]) {display:none}

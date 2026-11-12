@@ -1,6 +1,6 @@
 import { createConsoleStore, deviceKey, latestWindow, selectedDeviceStatus,
   maintenanceAdvice, locationSelection, finite } from "./state.js";
-import { fleetLink, fleetSummary } from "./fleet.js";
+import { fleetLink, fleetSummary, mountColumnBalance } from "./fleet.js";
 
 const $ = (id) => document.getElementById(id);
 const text = (id, value) => {
@@ -166,7 +166,10 @@ export function startDiagnosisPage() {
       (!selection.run || row.run_id === selection.run));
     if (device && (!state.selected || deviceKey(device) !== deviceKey(state.selected))) void store.selectDevice(deviceKey(device));
   });
-  window.addEventListener("pagehide", (event) => { if (!event.persisted) store.destroy(); });
+  const stopColumnBalance = mountColumnBalance(".diagnosis-layout", ".diagnosis-left", ".diagnosis-right");
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) { stopColumnBalance(); store.destroy(); }
+  });
   store.subscribe(render); void store.init(); return store;
 }
 if (typeof document !== "undefined") startDiagnosisPage();

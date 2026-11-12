@@ -56,6 +56,44 @@ export function fleetSummary(state) {
   }
   return { counts, liveTotals, rows };
 }
+export function columnBalanceMode(leftHeight, rightHeight) {
+  if (!finite(leftHeight) || !finite(rightHeight) || leftHeight <= 0 || rightHeight <= 0) return "natural";
+  if (rightHeight > leftHeight + 96) return "left-float";
+  if (rightHeight < leftHeight - 1) return "right-stretch";
+  return "natural";
+}
+export function mountColumnBalance(layoutSelector, leftSelector, rightSelector) {
+  const layout = document.querySelector(layoutSelector);
+  const left = layout?.querySelector(leftSelector);
+  const right = layout?.querySelector(rightSelector);
+  if (!layout || !left || !right) return () => {};
+  let frame = null, current = "natural";
+  const update = () => {
+    frame = null;
+    const leftHeight = left.getBoundingClientRect().height;
+    const measuredRight = current === "right-stretch" ? right.scrollHeight : right.getBoundingClientRect().height;
+    let next = columnBalanceMode(leftHeight, measuredRight);
+    if (current === "right-stretch" && Math.abs(right.getBoundingClientRect().height - leftHeight) <= 2) {
+      next = "right-stretch";
+    }
+    layout.classList.toggle("left-float", next === "left-float");
+    layout.classList.toggle("right-stretch", next === "right-stretch");
+    current = next;
+  };
+  const schedule = () => {
+    if (frame === null) frame = requestAnimationFrame(update);
+  };
+  const observer = typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
+  if (observer) {
+    observer.observe(left); observer.observe(right);
+  } else window.addEventListener("resize", schedule);
+  schedule();
+  return () => {
+    observer?.disconnect();
+    if (observer === null) window.removeEventListener("resize", schedule);
+    if (frame !== null) cancelAnimationFrame(frame);
+  };
+}
 function updateLink(id, path, selected, view = null) {
   const element = $(id);
   if (element) element.href = fleetLink(path, selected, view);
@@ -170,7 +208,7 @@ function renderScreen(state, summary, selectDevice, cache) {
     return card;
   });
   if (advice.missingActiveRules.length || advice.partial) {
-    cards.unshift(node("p", "当前建议只覆盖已加载告警；来源缺失或更早记录未加载时不会补造。", "fleet-note"));
+    cards.unshift(node("p", "当前建议只覆盖已加载告警；来源缺失或更早记录未加载时不会补造。", "fleet-data-note"));
   }
   adviceContainer.replaceChildren(...(cards.length ? cards : [node("p", advice.message, "fleet-empty")]));
   const liveList = $("fleet-live-list");
@@ -292,9 +330,11 @@ export function startFleetPage() {
   const clock = $("fleet-clock");
   const updateClock = () => { if (clock) { clock.textContent = timeText(new Date()); clock.dateTime = new Date().toISOString(); } };
   updateClock(); const clockTimer = clock ? setInterval(updateClock, 1000) : null;
+  const stopColumnBalance = mode === "screen" ? mountColumnBalance(".screen-layout", ".screen-column:first-child", ".screen-column:last-child") : () => {};
   window.addEventListener("pagehide", (event) => {
     if (event.persisted) return;
     if (clockTimer !== null) clearInterval(clockTimer);
+    stopColumnBalance();
     window.removeEventListener("popstate", restoreSelection); store.destroy();
   });
   void store.init();

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fleetLink, fleetRows, fleetSummary } from "../../src/g15/console/static/fleet.js";
+import { fleetLink, fleetRows, fleetSummary, columnBalanceMode } from "../../src/g15/console/static/fleet.js";
 import { deviceKey } from "../../src/g15/console/static/state.js";
 
 const device = (suffix) => ({ run_id: `run-${suffix}`, device_id: `dev-${suffix}` });
@@ -49,4 +49,14 @@ test("empty catalog produces zero counts instead of borrowed demo values", () =>
   const result = fleetSummary({ devices: [], previews: {}, liveMode: "legacy", live: null });
   assert.deepEqual(result.counts, { total: 0, red: 0, yellow: 0, healthy: 0, unknown: 0, error: 0 });
   assert.deepEqual(result.rows, []);
+});
+
+
+test("same-row columns choose floating, stretching or natural height from measured content", () => {
+  assert.equal(columnBalanceMode(300, 700), "left-float");
+  assert.equal(columnBalanceMode(300, 396), "natural");
+  assert.equal(columnBalanceMode(400, 200), "right-stretch");
+  assert.equal(columnBalanceMode(300, 300), "natural");
+  assert.equal(columnBalanceMode(0, 300), "natural");
+  assert.equal(columnBalanceMode(300, Number.NaN), "natural");
 });
