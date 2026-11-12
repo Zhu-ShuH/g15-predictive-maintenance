@@ -704,3 +704,23 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 当前实现使用非阻塞 worker 准入，无应用任务队列；`server_queued=null`、`application_queue=absent`、`listen_backlog=unmeasured`。TCP backlog 不能当作排队用户；是否将 queued 记为验收 N/A 仍须非作者复核与 A 明确裁定，不能自动通过完整 Gate 0。
 
 容量观察工具可在event_sink边界附实际socket的 `connection_ref`（local/peer host:port），用于将request_id与独立网络计数对应；不修改外部HTTP响应或认证授权。网络适配是每实例显式包装，不全局替换socket，不记录请求头或payload。服务端每波结束须等真实worker返回、连接关闭与采样结束后，依原发wave_id/PID/单调时钟发送end marker；下一波才允许清空已成功归档的closed计数。活跃、失败、未知部分字节或错误关闭不得reset，跨波数据或raw/control快照不一致均使该波失败。
+
+## 17. 本机只读网页控制台（#158 候选）
+
+本节为用户要求新增控制台后的实现候选，未替代#157/Gate0的独立评审和统计门槛。原查询响应、认证授权、分页、评分和SQLite写入契约不变。
+
+独立入口 `python -m g15.console --catalog <受控目录JSON> --runs-root <已完成运行根> --query-base-url http://127.0.0.1:<查询端口> --token-file <服务端短期token文件> --host 127.0.0.1 --port 18467`。目录是明确登记的run/device数组，页面只能选择其中资源。本机网关读取当前token，通过真实HTTP/Bearer请求现有health接口；不向页面、URL、错误或日志输出凭据，不跟随上游重定向。它不签发HTTP登录凭据，也不构成多用户生产认证。
+
+| GET/HEAD路径 | 语义 |
+|---|---|
+| `/`与显式静态资源 | 设备健康、告警与报告的原生HTML/CSS/JS；根路径可接device/run/view选择参数，不反射成HTML |
+| `/api/catalog` | 明确登记的公开资源元数据与readonly=true；不是扫描或暴露任意运行根 |
+| `/api/health?run_id=...&device_id=...&page_size=...` | 向真实查询服务发起认证GET，保持成功响应；可转发独立windows_cursor/alarms_cursor，无任意URL/路径 |
+| `/api/report?run_id=...&device_id=...` | 先用同资源真实page_size=1查询验证权限，再读固定已生成summary.json，核对run/device归属 |
+| `/api/report/download?...&format=json或markdown` | 同样授权并核归属，仅下载summary.json或summary.md；没有任意文件下载 |
+
+未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
+
+页面最新健康分取最新已存窗口；活动告警取states，历史告警单列。趋势按真实序号/采样率绘制，只展示已读取范围，全程必须沿cursor读至耗尽才标完整。窗口翻页不消费告警伴随重放，告警翻页同理；切设备与刷新丢弃旧异步响应。报告passed=null、verifiable=false、detection_rate=null保留不可判定含义，不能显示0或通过；受控事件检出通过也必须保留误报计数。显示时间使用明确的Asia/Shanghai时区，原始报告下载不改写时间。
+
+本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。远程暴露、账户登录、设备控制和完整容量需另有实现与评审，当前界面不据此宣称。

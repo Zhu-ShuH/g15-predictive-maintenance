@@ -51,6 +51,12 @@ G15_ACCEPTANCE_EVIDENCE_ROOT="$HOME/g15-evidence" bash scripts/acceptance.sh
 
 离线用例会先证明 DNS 与网络 socket 自检被测试专用守卫拒绝，再真实运行小型 `validate → simulate → consume → report`。该守卫只覆盖 Python `socket` 审计事件，**不等于操作系统已经断网**，也不能排除绕过 Python 审计 API 的原生代码；最终提交 SHA 仍须在关闭网卡或隔离网络命名空间后复跑同一入口并保存证据。Windows 没有 POSIX `SIGKILL`，该项会按既有用例明确 skip，正式 `kill -9` 证据必须来自 Linux。本入口不执行 #56 的未公开保留集；退出 0 也不等于“独立保留集检出已通过”。
 
+## 网页控制台（本机只读）
+
+控制台提供设备选择、真实健康趋势、历史告警筛选和同一运行的分析报告。前端通过同源本机网关调用现有认证HTTP查询，Bearer仅由服务端读取，不进入浏览器。窗口趋势可逐页或沿真实cursor顺序加载全程，报告中的未判定和误报结果保留原义。
+
+新增独立入口为 `python -m g15.console`；它不修改原CLI、评分或查询契约。需提供已登记的运行目录、目录JSON、正在运行的查询服务以及服务端token文件。完整启动、身份边界、API与本地演示步骤见[控制台说明](docs/console.md)。默认只绑定127.0.0.1，不是远程多用户登录方案，也不代表Gate0通过。
+
 ## 已有证据与未完成项
 
 | 范围 | 当前事实 | 证据边界 |

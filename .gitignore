@@ -36,3 +36,8 @@ datasets/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local console visual verification artifacts
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/config.local.json
