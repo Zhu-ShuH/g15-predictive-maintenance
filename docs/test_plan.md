@@ -301,7 +301,7 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 ### 11.1 边界与数据口径
 
 - 数据口径（ADR-0007 §5）：D0=10 设备 × 100 窗口（正确性 / 量测可信）；D1=1,000 设备 × 3,906 窗口 = 3,906,000 行 = 1,000 个 run 库；D2=10,000 设备 × 3,906 窗口 = 39,060,000 行 = 10,000 个 run 库。禁止把 D1/D2 合成一个大库。
-- 初版工具范围为 `tools/query_load/**`、容量测试、证据与本计划/报告。2026-11-12 A 继续修复 #157 并补全 Gate 0，扩展实现范围至 `src/g15/service/http.py` 的阶段观测、对应集成测试及 `docs/interface.md` / ADR 契约同步。`scripts/**`、部署、#56/#9 保留集和其他产品模块保持原边界；新增事件仍须真实非作者复核。
+- 初版工具范围为 `tools/query_load/**`、容量测试、证据与本计划/报告。2026-11-12 A 已在 [#136](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/136) 登记窄范围授权：`src/g15/service/http.py` 仅限 interface §16 的执行起止、原发时钟/PID、拒绝及响应交付终态；对应阶段集成回归与 interface/ADR 同步列入送审范围。原属地B1对2bcd639的旧批准和对0632e32的批准分别见[#157评审记录](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/157#pullrequestreview-5869226274)，不将维护者登记当作非作者批准。`scripts/**`、部署、#56/#9保留集、其他产品模块保持原边界；新增修订仍须按精确SHA真实复核。
 - 负载沿公开 HTTP 入口执行真实认证、授权与 SQLite。EXPLAIN 只读探针绑定实际内部 SELECT helper 的源码位置与摘要，不能冒充完整请求追踪，后续 helper 变更须复核探针。
 
 ### 11.2 可信计数口径（ADR-0007 §3）
