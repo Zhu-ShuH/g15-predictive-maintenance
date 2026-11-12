@@ -9,7 +9,7 @@ import time
 from http.client import HTTPException, IncompleteRead
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from .accounting import ClientRecord, RunAccounting
 
@@ -41,6 +41,9 @@ class QueryClient:
         self._user_id = user_id
         self._accounting = accounting
         self._timeout = timeout_seconds
+        # Loopback evidence must describe the direct client/server stream,
+        # regardless of environment, system proxies or an installed opener.
+        self._opener = build_opener(ProxyHandler({}))
 
     def query(
         self,
@@ -78,7 +81,7 @@ class QueryClient:
         try:
             try:
                 try:
-                    with urlopen(request, timeout=self._timeout) as response:
+                    with self._opener.open(request, timeout=self._timeout) as response:
                         status = response.status
                         raw = response.read()
                 except HTTPError as exc:

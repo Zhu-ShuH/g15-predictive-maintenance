@@ -26,7 +26,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from g15.query import application as query_application  # noqa: E402
-from tools.query_load import client as client_module, runner  # noqa: E402
+from tools.query_load import runner  # noqa: E402
 from tools.query_load.accounting import (  # noqa: E402
     ClientRecord,
     RunAccounting,
@@ -280,11 +280,11 @@ def test_client_decode_and_transport_failures_complete_accounting(
         response.status = 200
         return response
 
-    monkeypatch.setattr(client_module, "urlopen", open_response)
     accounting = RunAccounting()
     client = QueryClient(
         "http://127.0.0.1:1", "private-token", D0_ACTOR_REF, accounting
     )
+    monkeypatch.setattr(client._opener, "open", open_response)
     assert client.query("run", "device") == (status, {})
     evidence = accounting.evidence()
     assert len(evidence["client_records"]) == 1
