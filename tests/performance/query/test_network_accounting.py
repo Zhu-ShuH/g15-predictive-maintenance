@@ -8,10 +8,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import socket
 import threading
-from urllib.request import Request, build_opener
+from urllib import request as urllib_request
+from urllib.request import ProxyHandler, Request, build_opener
 
 import pytest
 
+from tools.query_load import client as client_module
+from tools.query_load.accounting import RunAccounting
 from tools.query_load.network import (
     MeteredHTTPConnection,
     MeteredHTTPHandler,
@@ -37,10 +40,89 @@ def _tcp_pair():
         right.close()
 
 
-@pytest.mark.parametrize("entrypoint", ["http_connection", "urllib_opener"])
-def test_real_http_counts_headers_body_and_peer_endpoints_without_payload(entrypoint):
-    request_body = b"private-request-body"
-    response_body = b"private-response-body"
+@pytest.fixture(params=["environment", "system_discovery", "installed_opener"])
+def hostile_proxy(monkeypatch, request):
+    """Use an actual proxy trap without changing user environment or registry."""
+    calls, discovery = [], []
+
+    class ProxyTrap(BaseHTTPRequestHandler):
+        def do_POST(self):
+            calls.append(self.command)
+            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            self.send_response(502)
+            self.send_header("Content-Length", "2")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(b"{}")
+            self.close_connection = True
+
+        do_GET = do_POST
+
+        def log_message(self, *_args):
+            pass
+
+    proxy = HTTPServer(("127.0.0.1", 0), ProxyTrap)
+    thread = threading.Thread(
+        target=lambda: proxy.serve_forever(poll_interval=0.01), daemon=True
+    )
+    thread.start()
+    host, port = proxy.server_address
+    proxy_url = f"http://{host}:{port}"
+    for variable in (
+        "http_proxy",
+        "HTTP_PROXY",
+        "https_proxy",
+        "HTTPS_PROXY",
+        "all_proxy",
+        "ALL_PROXY",
+    ):
+        monkeypatch.setenv(variable, proxy_url)
+    for variable in ("no_proxy", "NO_PROXY"):
+        monkeypatch.setenv(variable, "")
+    monkeypatch.delenv("REQUEST_METHOD", raising=False)
+    original_discovery = urllib_request.getproxies
+
+    def discover():
+        discovery.append(request.param)
+        if request.param == "system_discovery":
+            # Model a registry/system result without reading or changing it.
+            return {"http": proxy_url, "https": proxy_url}
+        return original_discovery()
+
+    monkeypatch.setattr(urllib_request, "getproxies", discover)
+    if request.param == "installed_opener":
+        installed = build_opener(
+            urllib_request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        )
+    else:
+        installed = None
+    monkeypatch.setattr(urllib_request, "_opener", installed)
+    try:
+        yield calls, discovery
+    finally:
+        proxy.shutdown()
+        proxy.server_close()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+
+
+@pytest.mark.parametrize(
+    "entrypoint", ["http_connection", "urllib_opener", "query_client"]
+)
+def test_real_http_counts_headers_body_and_peer_endpoints_without_payload(
+    entrypoint, hostile_proxy, monkeypatch
+):
+    request_body = b"" if entrypoint == "query_client" else b"private-request-body"
+    response_body = (
+        b'{"request_id":"network-id","trace_id":"network-id"}'
+        if entrypoint == "query_client"
+        else b"private-response-body"
+    )
+    target_path = (
+        "/v1/runs/public-run/devices/public-device/health"
+        if entrypoint == "query_client"
+        else "/private-path"
+    )
     token = "private-bearer-token"
     client_meter, server_meter = SocketNetworkMeter("client"), SocketNetworkMeter(
         "server"
@@ -50,14 +132,20 @@ def test_real_http_counts_headers_body_and_peer_endpoints_without_payload(entryp
         protocol_version = "HTTP/1.1"
 
         def do_POST(self):
+            assert self.path == target_path
             assert self.headers["Authorization"] == f"Bearer {token}"
-            assert self.rfile.read(int(self.headers["Content-Length"])) == request_body
+            assert (
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                == request_body
+            )
             self.send_response(200)
             self.send_header("Content-Length", str(len(response_body)))
             self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(response_body)
             self.close_connection = True
+
+        do_GET = do_POST
 
         def log_message(self, *_args):
             pass
@@ -68,6 +156,7 @@ def test_real_http_counts_headers_body_and_peer_endpoints_without_payload(entryp
             return server_meter.wrap(sock), address
 
     server = Server(("127.0.0.1", 0), Handler)
+    server.timeout = 0.5
     thread = threading.Thread(target=server.handle_request)
     thread.start()
     host, port = server.server_address
@@ -89,8 +178,30 @@ def test_real_http_counts_headers_body_and_peer_endpoints_without_payload(entryp
                 response.close()
             finally:
                 connection.close()
+        elif entrypoint == "query_client":
+
+            def metered_opener(*handlers):
+                return build_opener(
+                    *handlers, MeteredHTTPHandler(network_meter=client_meter)
+                )
+
+            monkeypatch.setattr(
+                client_module, "build_opener", metered_opener, raising=False
+            )
+            accounting = RunAccounting()
+            client = client_module.QueryClient(
+                f"http://{host}:{port}", token, "network-user", accounting
+            )
+            assert client.query("public-run", "public-device") == (
+                200,
+                json.loads(response_body),
+            )
+            assert len(accounting.client_records) == 1
+            assert accounting.client_records[0].status == 200
         else:
-            opener = build_opener(MeteredHTTPHandler(network_meter=client_meter))
+            opener = build_opener(
+                ProxyHandler({}), MeteredHTTPHandler(network_meter=client_meter)
+            )
             request = Request(
                 f"http://{host}:{port}/private-path",
                 data=request_body,
@@ -102,6 +213,7 @@ def test_real_http_counts_headers_body_and_peer_endpoints_without_payload(entryp
         thread.join(timeout=5)
         server.server_close()
     assert not thread.is_alive()
+    assert hostile_proxy == ([], [])
     client, endpoint = client_meter.snapshot(), server_meter.snapshot()
     assert client["bytes_sent_known"] == endpoint["bytes_received_known"]
     assert client["bytes_received_known"] == endpoint["bytes_sent_known"]
@@ -134,8 +246,7 @@ def test_real_http_counts_headers_body_and_peer_endpoints_without_payload(entryp
         token,
         "Bearer",
         "private-path",
-        request_body.decode(),
-        response_body.decode(),
+        *(body.decode() for body in (request_body, response_body) if body),
     ):
         assert secret not in serialized
 
