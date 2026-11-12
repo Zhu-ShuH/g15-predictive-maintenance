@@ -1230,7 +1230,7 @@
   ],
   "remaining_gates": [
     "Any target misses remain exit1 (including Windows50 wave-00192 server49); review/freeze synchronization and one-minute statistical criterion before any follow-up experiment",
-    "B1 APPROVED implementation2bcd639 at 2026-11-12T04:19:46Z; C4 counting/contract review and new minute statistics/synchronization plus exact-head stage ruling still pending",
+    "B1 historical APPROVED implementation2bcd639 at 2026-11-12T04:19:46Z is DISMISSED after report push; final candidate still requires real B1/C4 review of counting/contract and minute statistics/synchronization plus stage ruling",
     "application queue absent; queued remains null pending explicit reviewed N/A ruling",
     "exhausted parallel paging stream replays remain recorded; original zero-duplicate scope requires explicit contract decision",
     "socket stream bytes do not measure TCP/IP/link overhead, retransmissions or host network saturation; cache uncontrolled",
