@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import http.client
 import json
 import os
@@ -24,6 +25,11 @@ from tools.query_load.d0_fixture import (
     device_id,
     device_run_id,
 )
+
+# A completed response (especially HEAD) can precede worker socket cleanup.
+# Ordinary route checks allow that lifecycle overlap; overload tests reserve
+# every configured permit explicitly instead of relying on scheduling.
+FIXTURE_WORKERS = 4
 
 
 @pytest.fixture(scope="module", name="public_runs")
@@ -65,7 +71,7 @@ def _service(tmp_path, public_runs):
             return super()._send_json(status, body, **kwargs)
 
     upstream = transport.create_query_server(
-        application, max_workers=1, event_sink=lambda _event: None
+        application, max_workers=FIXTURE_WORKERS, event_sink=lambda _event: None
     )
     upstream.RequestHandlerClass = RecordedHandler
     upstream_thread = threading.Thread(
@@ -115,7 +121,11 @@ def _service(tmp_path, public_runs):
     token_file.write_text(token + "\n", encoding="ascii")
     host, port = upstream.server_address
     server = console.create_console_server(
-        catalog, reports_root, f"http://{host}:{port}", token_file, max_workers=1
+        catalog,
+        reports_root,
+        f"http://{host}:{port}",
+        token_file,
+        max_workers=FIXTURE_WORKERS,
     )
     assets = tmp_path / "test-assets"
     assets.mkdir()
@@ -130,6 +140,7 @@ def _service(tmp_path, public_runs):
     harness = SimpleNamespace(
         server=server,
         upstream=upstream,
+        worker_count=FIXTURE_WORKERS,
         calls=calls,
         sent=sent,
         token=token,
@@ -261,6 +272,23 @@ def test_rotated_invalid_token_preserves_401_and_never_opens_report(
     assert service.token not in caplog.text and "invalid-token" not in payload.decode()
 
 
+@contextmanager
+def _occupy_all_workers(semaphore, count):
+    """Wait for cleanup, then hold the complete configured pool until release."""
+    acquired = 0
+    try:
+        for _index in range(count):
+            assert semaphore.acquire(timeout=2), "previous worker failed to release"
+            acquired += 1
+        if semaphore.acquire(blocking=False):
+            acquired += 1
+            pytest.fail("worker pool exceeds its configured permit count")
+        yield
+    finally:
+        for _index in range(acquired):
+            semaphore.release()
+
+
 def test_upstream_404_and_503_keep_their_semantics(service):
     missing = ("missing-run", service.pair["device_id"])
     service.server.application.allowed.add(missing)
@@ -269,12 +297,10 @@ def test_upstream_404_and_503_keep_their_semantics(service):
         "/api/health?" + urlencode({"run_id": missing[0], "device_id": missing[1]}),
     )
     assert status == 404 and (status, payload) == service.sent[-1]
-    assert service.upstream._worker_slots.acquire(blocking=False)
-    try:
+    with _occupy_all_workers(service.upstream._worker_slots, service.worker_count):
         assert _request(service, _path(service, "/api/health"))[0] == 503
         assert _request(service, _path(service, "/api/report"))[0] == 503
-    finally:
-        service.upstream._worker_slots.release()
+    assert _request(service, _path(service, "/api/health"))[0] == 200
 
 
 @pytest.mark.parametrize(
@@ -384,11 +410,9 @@ def test_report_file_swap_is_rejected_before_reading_replaced_inode(
 
 
 def test_local_worker_bound_returns_503_without_upstream(service):
-    assert service.server.worker_slots.acquire(blocking=False)
-    try:
+    with _occupy_all_workers(service.server.worker_slots, service.worker_count):
         assert _request(service, "/api/catalog")[0] == 503
-    finally:
-        service.server.worker_slots.release()
+    assert _request(service, "/api/catalog")[0] == 200
     assert service.calls == []
 
 
