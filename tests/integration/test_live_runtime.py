@@ -303,6 +303,79 @@ def test_disk_limit_stops_before_capturing_more_data(tmp_path, monkeypatch):
     assert runtime.status_snapshot()["devices"][0]["captured_samples"] == 0
 
 
+@pytest.mark.parametrize("rename_when", ["before_stat", "after_stat"])
+def test_disk_snapshot_tolerates_a_real_atomic_publication(
+    tmp_path, monkeypatch, rename_when
+):
+    runtime = _runtime(tmp_path, max_duration_seconds=0.45)
+    temporary = runtime.session_root / "publication-probe.json.tmp-test"
+    published = runtime.session_root / "publication-probe.json"
+    temporary.write_text('{"version":2}', encoding="utf-8")
+    published.write_text('{"version":1}', encoding="utf-8")
+    original_stat = Path.stat
+    renamed = threading.Event()
+
+    def stat_during_publication(path, *args, **kwargs):
+        if path == temporary:
+            if not renamed.is_set():
+                if rename_when == "before_stat":
+                    # The directory entry was enumerated, then its pathname
+                    # vanished before this snapshot could inspect it.
+                    os.replace(temporary, published)
+                    renamed.set()
+                    return original_stat(path, *args, **kwargs)
+                observed = original_stat(path, *args, **kwargs)
+                # This is the previous is_file()/stat() failure: a valid first
+                # stat races a real publisher before a second stat could run.
+                os.replace(temporary, published)
+                renamed.set()
+                return observed
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", stat_during_publication)
+    runtime.start()
+    try:
+        assert runtime.wait(5)
+        final = runtime.stop()
+        assert renamed.is_set()
+        assert final["status"] == "limit_reached"
+        assert final["error"] is None
+        device = final["devices"][0]
+        assert device["captured_samples"] >= 16
+        assert device["captured_samples"] == device["processed_samples"]
+        assert device["pending_samples"] == device["queue_depth"] == 0
+        assert json.loads(published.read_text(encoding="utf-8")) == {"version": 2}
+    finally:
+        runtime.stop()
+
+
+@pytest.mark.parametrize("failure", [PermissionError, OSError])
+def test_disk_snapshot_does_not_hide_real_io_failures(tmp_path, monkeypatch, failure):
+    runtime = _runtime(tmp_path, max_duration_seconds=1)
+    blocked = runtime.session_root / "unreadable-probe.json"
+    blocked.write_text("{}", encoding="utf-8")
+    original_stat = Path.stat
+
+    def denied_stat(path, *args, **kwargs):
+        if path == blocked:
+            raise failure("diagnostic-private-detail")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", denied_stat)
+    runtime.start()
+    try:
+        assert runtime.wait(5)
+        final = runtime.stop()
+        assert final["status"] == "error"
+        assert final["error"] == "capture_error"
+        assert final["devices"][0]["captured_samples"] == 0
+        errors = (runtime.session_root / "runtime-errors.ndjson").read_text()
+        assert failure.__name__ in errors
+        assert "diagnostic-private-detail" not in errors
+    finally:
+        runtime.stop()
+
+
 def test_descriptor_readers_remain_coherent_during_real_updates(tmp_path):
     runtime = _runtime(tmp_path, max_duration_seconds=0.8).start()
     device = runtime.catalog()[0]

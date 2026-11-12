@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import queue
 import shutil
+import stat
 import threading
 import time
 import traceback
@@ -520,10 +521,19 @@ class LiveRuntime:
             pass  # State still reports the failure when the evidence disk fails.
 
     def _disk_usage_bytes(self):
+        # Publishers atomically rename temporary files during this snapshot.
+        # The raw byte counter and the capture reserve cover persistent raw and
+        # in-flight work; a vanished metadata pathname is not lost sample data.
+        def regular_size(file):
+            try:
+                observed = file.stat()
+            except FileNotFoundError:
+                return 0
+            return observed.st_size if stat.S_ISREG(observed.st_mode) else 0
+
         total = self._raw_bytes
         for file in self.session_root.iterdir():
-            if file.is_file():
-                total += file.stat().st_size
+            total += regular_size(file)
         for d in self._devices:
             directory = self.runs_root / d.run_id
             for file in [
@@ -531,8 +541,7 @@ class LiveRuntime:
                 *list((directory / "artifacts").glob("*")),
                 *list((directory / "reports").glob("*")),
             ]:
-                if file.is_file():
-                    total += file.stat().st_size
+                total += regular_size(file)
         return total
 
     def _capture(self):
@@ -668,7 +677,7 @@ class LiveRuntime:
             )
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        atomic_replace(temporary, path)
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         with self._lock:
             self._raw_bytes += path.stat().st_size
