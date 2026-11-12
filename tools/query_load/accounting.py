@@ -1,7 +1,7 @@
 """Per-request accounting for the D0 HTTP harness.
 
-The transport exposes received/completed, not queued/executing.  Counts below
-measure those observed intervals only.  Server user counts are joined to client
+The transport exposes received/completed and execution start/end. No application
+queue exists; TCP backlog is unmeasured. Server user counts are joined to client
 records by the response's server-generated request ID; missing/ambiguous joins
 are unknown, never silently counted as a distinct authenticated user.
 """
@@ -21,6 +21,9 @@ CLIENT_COMPLETED = "client_completed"
 SERVER_RECEIVED = "server_received"
 SERVER_REJECTED = "rejected"
 SERVER_COMPLETED = "response_completed"
+SERVER_EXECUTING = "server_executing"
+SERVER_EXECUTION_COMPLETED = "server_execution_completed"
+EXECUTION_NOT_STARTED = "execution_not_started"
 
 
 @dataclass
@@ -48,6 +51,11 @@ class ServerRecord:
     trace_id: str = ""
     actor_ref: str = ""
     permission_domain: str = ""
+    monotonic_ns: int | None = None
+    process_id: int | None = None
+    execution_started: bool | None = None
+    request_head_complete: bool | None = None
+    delivery_result: str = ""
 
 
 def _peak(events: list[tuple[float, int, str, str | None]]) -> dict[str, object]:
@@ -60,6 +68,8 @@ def _peak(events: list[tuple[float, int, str, str | None]]) -> dict[str, object]
         "distinct_users_at_peak": 0,
         "known_distinct_users_at_peak": 0,
         "unmapped_requests_at_peak": 0,
+        "request_ids_at_peak": [],
+        "user_ids_at_peak": [],
     }
     # Completing before starting at an equal timestamp avoids invented overlap.
     for instant, delta, request_id, user_id in sorted(events):
@@ -76,6 +86,8 @@ def _peak(events: list[tuple[float, int, str, str | None]]) -> dict[str, object]
                 "distinct_users_at_peak": len(known) if unknown == 0 else None,
                 "known_distinct_users_at_peak": len(known),
                 "unmapped_requests_at_peak": unknown,
+                "request_ids_at_peak": sorted(current),
+                "user_ids_at_peak": sorted(known),
             }
     return result
 
@@ -143,6 +155,18 @@ class RunAccounting:
         stage = event.get("stage", "")
         stage = stage if isinstance(stage, str) else ""
         with self.lock:
+            monotonic_ns = event.get("monotonic_ns")
+            process_id = event.get("process_id")
+            valid_clock = (
+                type(monotonic_ns) is int
+                and monotonic_ns > 0
+                and type(process_id) is int
+                and process_id > 0
+            )
+            if not valid_clock:
+                self._counter_problems.append(
+                    "server event lacks original clock/process"
+                )
             if stage == SERVER_RECEIVED:
                 self._server_in_flight += 1
                 self.peak_server_in_flight = max(
@@ -158,7 +182,8 @@ class RunAccounting:
                     stage=stage,
                     result=str(event.get("result", "")),
                     timestamp_utc=str(event.get("timestamp_utc", "")),
-                    monotonic=time.perf_counter(),
+                    # Replay/import must retain the emitting process's clock.
+                    monotonic=monotonic_ns / 1_000_000_000 if valid_clock else 0.0,
                     trace_id=(
                         event.get("trace_id", "")
                         if isinstance(event.get("trace_id", ""), str)
@@ -166,6 +191,11 @@ class RunAccounting:
                     ),
                     actor_ref=str(event.get("actor_ref", "")),
                     permission_domain=str(event.get("permission_domain", "")),
+                    monotonic_ns=monotonic_ns if type(monotonic_ns) is int else None,
+                    process_id=process_id if type(process_id) is int else None,
+                    execution_started=event.get("execution_started"),
+                    request_head_complete=event.get("request_head_complete"),
+                    delivery_result=str(event.get("delivery_result", "")),
                 )
             )
 
@@ -190,6 +220,10 @@ class RunAccounting:
         if client_started != len(clients):
             problems.append(
                 f"client_started {client_started} != client completed {len(clients)}"
+            )
+        if len({record.process_id for record in servers}) > 1:
+            problems.append(
+                "multiple server process clocks cannot share an interval sweep"
             )
         client_ids = Counter(r.server_request_id for r in clients)
         received = Counter(r.request_id for r in servers if r.stage == SERVER_RECEIVED)
@@ -225,6 +259,8 @@ class RunAccounting:
         for record in clients:
             if record.status == 200 and by_id.get(record.server_request_id) != [
                 (SERVER_RECEIVED, "received"),
+                (SERVER_EXECUTING, "started"),
+                (SERVER_EXECUTION_COMPLETED, "success"),
                 (SERVER_COMPLETED, "success"),
             ]:
                 problems.append(
@@ -232,9 +268,31 @@ class RunAccounting:
                 )
         active: set[str] = set()
         finished: set[str] = set()
+        executing: set[str] = set()
+        execution_finished: set[str] = set()
+        not_executed: set[str] = set()
+        previous: dict[str, tuple[int | None, float]] = {}
         for record in servers:
             if record.trace_id != record.request_id or not record.trace_id:
                 problems.append(f"server trace_id mismatch for {record.request_id!r}")
+            if (
+                type(record.monotonic_ns) is not int
+                or record.monotonic_ns <= 0
+                or type(record.process_id) is not int
+                or record.process_id <= 0
+                or record.monotonic != record.monotonic_ns / 1_000_000_000
+            ):
+                problems.append(
+                    f"server clock/process invalid for {record.request_id!r}"
+                )
+            last = previous.get(record.request_id)
+            if last is not None and (
+                last[0] != record.process_id or record.monotonic < last[1]
+            ):
+                problems.append(
+                    f"server clock order/process mismatch for {record.request_id!r}"
+                )
+            previous[record.request_id] = (record.process_id, record.monotonic)
             if record.stage == SERVER_RECEIVED:
                 if record.request_id in active or record.request_id in finished:
                     problems.append(f"server received reused {record.request_id!r}")
@@ -244,10 +302,43 @@ class RunAccounting:
                     problems.append(
                         f"server completed without received: {record.request_id!r}"
                     )
+                if record.request_id not in execution_finished | not_executed:
+                    problems.append(
+                        f"server completed without execution outcome: {record.request_id!r}"
+                    )
                 active.discard(record.request_id)
                 finished.add(record.request_id)
+            elif record.stage == SERVER_EXECUTING:
+                if (
+                    record.request_id not in active
+                    or record.request_id
+                    in executing | execution_finished | not_executed
+                ):
+                    problems.append(
+                        f"invalid execution start for {record.request_id!r}"
+                    )
+                executing.add(record.request_id)
+            elif record.stage == SERVER_EXECUTION_COMPLETED:
+                if record.request_id not in executing:
+                    problems.append(
+                        f"execution completed without start: {record.request_id!r}"
+                    )
+                executing.discard(record.request_id)
+                execution_finished.add(record.request_id)
+            elif record.stage == EXECUTION_NOT_STARTED:
+                if (
+                    record.request_id not in active
+                    or record.request_id
+                    in executing | execution_finished | not_executed
+                ):
+                    problems.append(
+                        f"invalid execution-not-started for {record.request_id!r}"
+                    )
+                not_executed.add(record.request_id)
             elif record.stage != SERVER_REJECTED:
                 problems.append(f"unexpected server stage {record.stage!r}")
+        if executing:
+            problems.append(f"execution intervals incomplete: {sorted(executing)!r}")
         for record in clients:
             if record.trace_id != record.server_request_id or not record.trace_id:
                 problems.append(
@@ -279,13 +370,13 @@ class RunAccounting:
                         (
                             record.started_monotonic,
                             1,
-                            str(index),
+                            record.server_request_id or f"unmatched-client-{index}",
                             record.user_id or None,
                         ),
                         (
                             record.completed_monotonic,
                             -1,
-                            str(index),
+                            record.server_request_id or f"unmatched-client-{index}",
                             record.user_id or None,
                         ),
                     )
@@ -306,6 +397,24 @@ class RunAccounting:
             for r in servers
             if r.stage in (SERVER_RECEIVED, SERVER_COMPLETED)
         ]
+        process_ids = {r.process_id for r in servers}
+        if len(process_ids) > 1:
+            # An interval sweep across unrelated process clocks is not meaningful.
+            server_events = []
+        execution_events = (
+            [
+                (
+                    r.monotonic,
+                    1 if r.stage == SERVER_EXECUTING else -1,
+                    r.request_id,
+                    users.get(r.request_id),
+                )
+                for r in servers
+                if r.stage in (SERVER_EXECUTING, SERVER_EXECUTION_COMPLETED)
+            ]
+            if len(process_ids) <= 1
+            else []
+        )
         problems = self.conservation_report()
         return {
             "trusted": not problems,
@@ -328,7 +437,10 @@ class RunAccounting:
                 "request_id; workload must establish distinct authenticated subjects"
             ),
             "server_queued": None,
-            "server_executing": None,
-            "stage_gap": "transport does not emit queued/executing",
+            "application_queue": "absent",
+            "listen_backlog": "unmeasured",
+            "server_executing": _peak(execution_events),
+            "server_clock_process_ids": sorted(p for p in process_ids if p is not None),
+            "stage_gap": "queued is not applicable to this implementation; acceptance requires review",
             "conservation_problems": problems,
         }

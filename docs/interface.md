@@ -683,3 +683,22 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
   或先点名补充 #17 范围。本 PR 未越范围改该文件。
 - 本记录描述待复审的变更与兼容约束；PR 未合并前不声称 main 已迁移或接口已全组冻结。
   完整生产百万点、检出率与双 Linux 仍按 acceptance.md 独立验收。
+
+## 16. 查询执行阶段观测增量（#136 / #157，2026-11-12 候选）
+
+本节记录 A 扩展实现范围后的送审契约；需 B1/C4 对最终提交复核，合并前不称正式冻结，不改变查询响应、认证授权或分页契约。查询契约和投影边界见 ADR-0007 §5.1。
+
+| 传输事件 | 精确边界 |
+|---|---|
+| `server_received / received` | 完整 GET 请求头已解析并进入 handler；此时尚未校验 framing、认证与授权 |
+| `server_executing / started` | 开始 framing、认证授权与真实 SQLite 查询 |
+| `server_execution_completed / result` | 查询成功或普通失败均结束执行区间；发生在序列化、响应写入之前 |
+| `execution_not_started / result` | Expect 或非 GET 在执行前拒绝，不能构造执行区间 |
+| `rejected / result` | 请求/交付失败；过载准入前拒绝保持单独记录，不补造 received 或 executing |
+| `response_completed / result` | 响应写入成功或写入失败的终态；success 仅证明传输层写操作成功，客户端是否收到由客户端记录证明 |
+
+正常成功序列为 received → executing → execution_completed → response_completed。GET 失败保留配对执行终态；Expect/非 GET 使用 execution_not_started。过载事件另带 `execution_started=false`、`request_head_complete` 与 `delivery_result`，区分完整读头、未读完和写失败。未进入 handler 的其他连接/解析失败不能推断为已认证用户。
+
+每个传输事件包含服务端生成的同一 `request_id=trace_id`、UTC、原发 `monotonic_ns=time.perf_counter_ns()` 与 `process_id`。导入事件时保留原时钟，按同一个服务端进程计算区间；不跨进程相减或混合两套时钟扫峰值。重复、缺失、错序、未知 ID、原发时钟缺失或进程不一致均使低负载对账失败。按唯一响应 ID 与实际授权 actor 关联用户，同时保留峰值对应请求和用户集合。
+
+当前实现使用非阻塞 worker 准入，无应用任务队列；`server_queued=null`、`application_queue=absent`、`listen_backlog=unmeasured`。TCP backlog 不能当作排队用户；是否将 queued 记为验收 N/A 仍须非作者复核与 A 明确裁定，不能自动通过完整 Gate 0。

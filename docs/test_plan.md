@@ -301,8 +301,8 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 ### 11.1 边界与数据口径
 
 - 数据口径（ADR-0007 §5）：D0=10 设备 × 100 窗口（正确性 / 量测可信）；D1=1,000 设备 × 3,906 窗口 = 3,906,000 行 = 1,000 个 run 库；D2=10,000 设备 × 3,906 窗口 = 39,060,000 行 = 10,000 个 run 库。禁止把 D1/D2 合成一个大库。
-- 文件白名单：`tools/query_load/**`、`tests/performance/query/**`、`tests/integration/test_query_capacity_accounting.py`、`tests/fixtures/query/**`、`docs/test_plan.md`、`docs/test_report.md`、`.github/CODEOWNERS`；负载配置在 `tests/performance/query/workloads/**`。明确排除 `src/g15/**`、`scripts/**`、部署文件、#56/#9 保留集。
-- 不改产品代码：负载沿 `src/g15/query/**` 与 `src/g15/service/**` 的公开 HTTP 入口执行；EXPLAIN 只读探针绑定实际内部 SELECT helper 的源码位置与摘要，不能冒充完整请求追踪，后续 helper 变更须复核探针。上述产品文件均不在本单修改范围。
+- 初版工具范围为 `tools/query_load/**`、容量测试、证据与本计划/报告。2026-11-12 A 继续修复 #157 并补全 Gate 0，扩展实现范围至 `src/g15/service/http.py` 的阶段观测、对应集成测试及 `docs/interface.md` / ADR 契约同步。`scripts/**`、部署、#56/#9 保留集和其他产品模块保持原边界；新增事件仍须真实非作者复核。
+- 负载沿公开 HTTP 入口执行真实认证、授权与 SQLite。EXPLAIN 只读探针绑定实际内部 SELECT helper 的源码位置与摘要，不能冒充完整请求追踪，后续 helper 变更须复核探针。
 
 ### 11.2 可信计数口径（ADR-0007 §3）
 
@@ -313,11 +313,11 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 ### 11.3 已知缺口（文档化，不伪造）
 
-现有传输层 `src/g15/service/http.py` 的 event_sink 只发 3 个阶段 `server_received / rejected / response_completed`，不发 `server_queued / server_executing`。工具据此量测 `received - completed` 区间；排队/执行分层仍为 null，不以线程数或调用次数代替。过载路径只发 rejected 时保留原始事件并报告对账失败，不补造 received/completed。
+当前候选传输层增加配对 `server_executing / server_execution_completed`，逐请求保留原发纳秒单调时钟及 PID，执行区间不含响应发送。Expect/非 GET 明确 execution_not_started；过载只发 rejected 并记录读头/交付状态，不补造 received/completed。原始时钟缺失、事件漏失/重复/错序必须失败。当前无应用队列，queued 保持 null；记为 N/A 仍待非作者复核及 A 裁定。
 
 窗口与告警 cursor 独立，但协议不能表达“这一流已耗尽”；省略该 cursor 会重发首页。工具保留每页原始响应并先做 SQLite oracle，再从副本中丢弃已耗尽流；分别报告原始/消费/丢弃数量。D0 的原始告警重发不等于服务端无重复，消费后覆盖通过不能代替原始无重复结论。ADR-0007 的“无重复错序”验收要求保持不变。
 
-当前客户端/服务端同进程，资源快照不能拆分两端，也不能证明负载区间峰值；双 Linux、完整 Gate 0 与更高档位仍需独立证据及 Review。
+原 driver 保留同进程诊断入口；新 process_runner 使用独立客户端/服务端进程，分别采集原始资源样本、区间 CPU 差值和采样 RSS/FD/handle 最大值。采样最大值不等于区间精确峰值，进程启动以来的 RSS 峰值另列。双 Linux、完整 Gate 0 与更高档位仍需固定 SHA 的独立证据及 Review。
 
 ### 11.4 Gate 0 六步（#136）
 
@@ -340,11 +340,18 @@ harness 在 `tools/query_load/`：`d0_fixture.py`（D0 建库）、`accounting.p
 ### 11.6 A 接管后的验证与证据入口（2026-11-12，#136）
 
 - CLI、集成与 opt-in 共用 `runner.run_measurement` / `validate_run`：原始 oracle、消费后完整分页覆盖、计数守恒、应用日志三方对账分别给结论。`paging.py` 留原始与消费视图，`evidence.py` 保存每轮 `report.json`；已有目录拒绝覆盖，失败轮次也留档。
-- 每份待核原始响应须与客户端记录逐条关联：request_id 多重集、状态、run/device 与实际收到的原始 JSON 内容一致；删响应、重复补数或事后改写都使验证失败。服务端的未知 ID 事件（含拒绝）不能遗漏；200 请求必须对应 received/received → response_completed/success。
+- 每份待核原始响应须与客户端记录逐条关联：request_id 多重集、状态、run/device 与实际收到的原始 JSON 内容一致；删响应、重复补数或事后改写都使验证失败。服务端的未知 ID 事件（含拒绝）不能遗漏；200 请求必须对应 received/received → executing/started → execution_completed/success → response_completed/success。
 - `python -m tools.query_load.driver --concurrent 10 --output <新目录>`；50 波次使用 `--concurrent 50`。串行最多 10、并发只允许 10/50、workers 最多 64；发送前 barrier 仅同步起跑，不人为延迟请求/处理/响应。每个并发客户端有独立已认证且获授权的合成主体，应用 actor_ref 与客户端标签逐请求核对。
 - 提交请求数与实测峰值分列：在途按高精度单调 `perf_counter` 起止区间计算，同时报告峰值时刻不同用户数、全程不同用户数与无法关联数量。目标要求客户端、服务端实际请求与用户峰值都达到该档；不足如实退出 1，不能拿 submitted=50 代替 server=50。基础检查与目标均满足时退出 0，仍不自动宣告完整 Gate 0。
 - 证据包括源码 SHA/dirty/内容摘要、环境、命令模板、全部原始响应和失败、应用/传输日志、每请求原始延迟与 nearest-rank p50/p95/p99、资源点快照。EXPLAIN 调用实际 application SELECT helpers，记录 SQL/参数/源码行/hash；这是独立探针，不是整个 HTTP 路径追踪，D0 告警续页只是 SQL 分支探针。
 - 负例覆盖重复页、缺页、等量替换、乱序、告警重复/缺失/错键，以及仅损坏将被丢弃的原始告警；单项 oracle 正确也不能掩盖跨页重复/缺失。异常 JSON/超时等仍完成客户端记账，ID 重复/错配/完成缺失必须失败。
 - 每页独立检查键类型、唯一性与降序；凡本次请求省略某流 cursor，均按独立 SQLite 首屏键序核验该流，包括已耗尽后被重发、随后会被客户端丢弃的内容。原始空页或页内重复不能由消费视图通过抵消。
 - 存储、查询计划、资源采集、证据计算、验证或工作目录清理的普通异常，按阶段记录安全错误类型并使本轮失败；诊断计算失败仍保留已有客户端/服务端记录与原始页。不会将 KeyboardInterrupt/SystemExit 改写为正常结果；目标目录写入错误仍向调用方报错。
-- 产品阶段量测的后续范围见 #136 待评审方案，涉及 `src/g15/service/http.py`、对应 `tests/integration/test_query_service.py` 及工具/契约同步；需先 Review 事件阶段、过载/异常终态及每请求关联契约。本次不修改产品路径，也不把现有 TCP backlog 当作应用排队数。
+- 产品阶段量测候选已按本轮扩展范围实现，契约见 interface §16；事件边界、失败与 queued 不适用裁定仍待 B1/C4 复核，不把 TCP backlog 当作应用排队数。
+
+### 11.7 分进程低负载与契约反例（2026-11-12）
+
+- `python -m tools.query_load.process_runner --concurrent 10 --output <新目录>`；50 使用另一新目录，默认 serial=10、workers=64。真实 TCP 预连接后只在客户端发送前 barrier 集合，每个主体发送一条 page_size=100 的合法查询，读取 D0 全部100窗口；服务器无 barrier、sleep、人工延迟、限速或自动重试。连接建立与 barrier 等待另留记录，不计为请求开始或请求延迟。
+- 10次串行请求和分页使用普通短连接；并发主波次使用预连接。原始延迟必须按阶段分列并注明计时基准，不能把混合样本冒充单一冷连接或并发主波次分位数。客户端进程资源含控制、校验及分页 oracle 成本，服务端进程独立采样。
+- oracle 必须独立核对实际持久化信封版本、返回窗口聚合版本、固定 query_contract_version、响应允许字段与严格 JSON 类型。对版本错/缺失、敏感审计字段、bool/float替代整数、nullable键缺失等实施真实 HTTP 损坏注入；measurement、CLI、opt-in 的共享验证必须判失败并留存证据。
+- 执行阶段回归覆盖成功、401/404/400/405、查询异常、Expect、过载、socket写失败与真实断连。计数负例覆盖执行事件缺失/重复/错序、未知 ID、原发时钟和 PID 损坏；导入后的服务端区间不得按客户端收到事件的时刻重打时间。

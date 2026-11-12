@@ -50,6 +50,7 @@ def source_facts() -> dict[str, Any]:
     paths: set[Path] = set()
     for directory in ("src", "tools/query_load", "tests/performance/query"):
         paths.update((_REPO_ROOT / directory).rglob("*.py"))
+    paths.update((_REPO_ROOT / "tests/integration").glob("test_query_*.py"))
     for relative in (
         "tests/integration/test_query_capacity_accounting.py",
         "pyproject.toml",
@@ -81,7 +82,7 @@ def source_facts() -> dict[str, Any]:
         ),
         "hash_scope": (
             "Python source in src/tools/query_load/tests/performance/query, "
-            "capacity integration test, build and dependency files"
+            "query integration tests, build and dependency files"
         ),
     }
 

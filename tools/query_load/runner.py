@@ -16,7 +16,7 @@ from g15.query.auth import issue_token
 
 from .accounting import RunAccounting
 from .client import QueryClient
-from .d0_fixture import D0_ACTOR_REF, D0_SUBJECT, build_d0_runs
+from .d0_fixture import D0_ACTOR_REF, D0_PERMISSION_DOMAIN, D0_SUBJECT, build_d0_runs
 from .driver import (
     BEARER_AUDIENCE,
     BEARER_ISSUER,
@@ -89,6 +89,8 @@ def validate_run(
     db_paths: list[Path],
     accounting: RunAccounting,
     events: list[dict[str, object]],
+    *,
+    page_size: int = 10,
 ) -> dict[str, object]:
     """Use raw oracle, consumed coverage and three-way request reconciliation."""
     logs = []
@@ -99,6 +101,9 @@ def validate_run(
             logs.append("application trace_id differs from request_id")
         by_id.setdefault(request_id, []).append(event)
     expected_ids = {r.server_request_id for r in accounting.client_records}
+    transport_by_id: dict[str, list] = {}
+    for row in accounting.server_records:
+        transport_by_id.setdefault(row.request_id, []).append(row)
     if set(by_id) - expected_ids:
         logs.append("application log contains unknown request IDs")
     for record in accounting.client_records:
@@ -123,8 +128,37 @@ def validate_run(
             logs.append(
                 f"{record.server_request_id}: authenticated actor differs from client user"
             )
+        if any(row.get("permission_domain") != D0_PERMISSION_DOMAIN for row in grants):
+            logs.append(
+                f"{record.server_request_id}: authorized permission domain differs from D0 policy"
+            )
+        for row in rows:
+            if ("actor_ref" in row and row["actor_ref"] != record.user_id) or (
+                "permission_domain" in row
+                and row["permission_domain"] != D0_PERMISSION_DOMAIN
+            ):
+                logs.append(
+                    f"{record.server_request_id}: application identity/domain differs from grant"
+                )
+        for row in transport_by_id.get(record.server_request_id, []):
+            needs_identity = row.stage in (
+                "server_execution_completed",
+                "response_completed",
+            )
+            if (needs_identity or row.actor_ref) and row.actor_ref != record.user_id:
+                logs.append(
+                    f"{record.server_request_id}: transport actor differs from grant"
+                )
+            if (
+                needs_identity or row.permission_domain
+            ) and row.permission_domain != D0_PERMISSION_DOMAIN:
+                logs.append(
+                    f"{record.server_request_id}: transport permission domain differs from grant"
+                )
     checks = {
-        "raw_oracle": verify_all(results, db_paths, first_page=True)
+        "raw_oracle": verify_all(
+            results, db_paths, first_page=True, page_size=page_size
+        )
         + verify_all(paging.raw, db_paths)
         + paging.oracle_problems,
         "consumed_coverage": verify_paging_coverage(paging.consumed),
@@ -169,7 +203,7 @@ def _new_report(serial: int, concurrent: int, workers: int) -> dict[str, object]
             "independent review",
             "two Linux evidence",
             "separate client/server resources",
-            "server_queued/server_executing instrumentation",
+            "queued not-applicable decision requires review",
             "raw exhausted-stream replay protocol limitation",
         ],
         "resources_before": None,

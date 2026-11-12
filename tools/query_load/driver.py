@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import platform
 import threading
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -55,9 +56,20 @@ def machine_facts() -> dict[str, str]:
 
 
 def build_application(
-    runs_root: Path, bearer_key: bytes, cursor_key: bytes, *, users: int = 1
+    runs_root: Path,
+    bearer_key: bytes,
+    cursor_key: bytes,
+    *,
+    users: int = 1,
+    event_sink: Callable[[Mapping[str, object]], None] | None = None,
 ) -> tuple[HealthQueryApplication, list[dict[str, object]]]:
     events: list[dict[str, object]] = []
+
+    def collect_event(event: Mapping[str, object]) -> None:
+        events.append(dict(event))
+        if event_sink is not None:
+            event_sink(event)
+
     policy = AuthorizationPolicy.from_yaml(build_policy_yaml(users))
     application = HealthQueryApplication(
         runs_root=runs_root,
@@ -69,7 +81,7 @@ def build_application(
         ),
         authorization_policy=policy,
         cursor_codec=CursorCodec(cursor_key),
-        event_sink=lambda event: events.append(dict(event)),
+        event_sink=collect_event,
     )
     return application, events
 
@@ -139,6 +151,7 @@ def verify_all(
     db_paths: list[Path],
     *,
     first_page: bool = False,
+    page_size: int = 10,
 ) -> list[str]:
     problems: list[str] = []
     for position, (status, body, run_id) in enumerate(results):
@@ -151,7 +164,12 @@ def verify_all(
         db_path = _db_for_run_id(db_paths, run_id)
         problems.extend(
             verify_response(
-                body, db_path, run_id, device, page_size=10, first_page=first_page
+                body,
+                db_path,
+                run_id,
+                device,
+                page_size=page_size,
+                first_page=first_page,
             )
         )
     return problems

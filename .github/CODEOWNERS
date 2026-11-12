@@ -45,6 +45,8 @@
 # #136 后续由 A 接管；保留 B1/C4 非作者审查候选，不代表已批准。
 /tests/integration/test_query_capacity_accounting.py @Zhu-ShuH @kittywent @wxm-1
 /tests/integration/test_query_service.py @kittywent @wxm-1
+/tests/integration/test_query_execution_stages.py @kittywent @wxm-1
+/tests/integration/test_query_stage_accounting.py @Zhu-ShuH @kittywent @wxm-1
 /tests/fault_injection/ @kittywent
 /docs/test_plan.md @kittywent
 /docs/test_report.md @kittywent

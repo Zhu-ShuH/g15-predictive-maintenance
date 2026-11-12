@@ -88,7 +88,8 @@ def test_real_http_quality_and_separate_measured_target(measured_d0) -> None:
     assert actors == {row["user_id"] for row in accounting["client_records"]}
     assert len(actors) == 10
     assert accounting["server_queued"] is None
-    assert accounting["server_executing"] is None
+    assert accounting["server_executing"]["in_flight"] > 0
+    assert accounting["server_executing"]["distinct_users_at_peak"] > 0
     assert accounting["latency_seconds"]["count"] == 30
     assert accounting["latency_seconds"]["p99"] is not None
     peaks = accounting["peaks"]
@@ -209,12 +210,20 @@ def test_accounting_rejects_duplicate_completion_or_unknown_id(damage) -> None:
             {
                 "request_id": request_id,
                 "trace_id": request_id,
+                "monotonic_ns": time.perf_counter_ns(),
+                "process_id": 1,
                 "stage": stage,
-                "result": "received" if stage == SERVER_RECEIVED else "success",
+                "result": (
+                    "received"
+                    if stage == SERVER_RECEIVED
+                    else "started" if stage == "server_executing" else "success"
+                ),
             }
         )
 
     emit("request-1", SERVER_RECEIVED)
+    emit("request-1", "server_executing")
+    emit("request-1", "server_execution_completed")
     emit("request-1", SERVER_COMPLETED)
     accounting.client_complete(
         ClientRecord(
@@ -235,6 +244,8 @@ def test_accounting_rejects_duplicate_completion_or_unknown_id(damage) -> None:
         expected = "response_completed request_id 'request-1' occurs 2 times"
     else:
         emit("unknown", SERVER_RECEIVED)
+        emit("unknown", "server_executing")
+        emit("unknown", "server_execution_completed")
         emit("unknown", SERVER_COMPLETED)
         expected = "client/server received request_id counts do not match"
     assert expected in accounting.conservation_report()
@@ -524,10 +535,18 @@ def test_response_evidence_must_match_every_accounted_request(measured_d0, damag
     )
     assert verdict["quality_passed"] is False
     assert verdict["checks"]["response_accounting"]
+    if damage == "changed_retained_body":
+        # An unknown field violates projection even before byte reconciliation.
+        assert verdict["checks"]["raw_oracle"]
     assert all(
         not problems
         for name, problems in verdict["checks"].items()
-        if name != "response_accounting"
+        if name
+        not in (
+            {"response_accounting", "raw_oracle"}
+            if damage == "changed_retained_body"
+            else {"response_accounting"}
+        )
     )
 
 
@@ -633,9 +652,135 @@ def test_accounting_diagnostic_failure_retains_original_records(tmp_path, monkey
     assert saved["accounting"]["trusted"] is False
     assert saved["accounting"]["incomplete"] is True
     assert len(saved["accounting"]["client_records"]) == 21
-    assert len(saved["accounting"]["server_records"]) == 42
+    assert len(saved["accounting"]["server_records"]) == 84
     assert len(saved["paging"]["raw_responses"]) == 10
     assert all(
         record["response_bytes_base64"]
         for record in saved["accounting"]["client_records"]
     )
+
+
+_WIRE_CONTRACT_DAMAGE = (
+    "missing_state_version",
+    "wrong_state_version",
+    "wrong_state_versions",
+    "wrong_feature_versions",
+    "wrong_query_version",
+    "numeric_manifest_version",
+    "boolean_state_counter",
+    "float_state_counter",
+    "float_window_count",
+    "missing_nullable_state",
+    "leaked_state_audit",
+    "leaked_nested_audit",
+    "unknown_top_level",
+    "wrong_windows_sort",
+    "wrong_alarms_sort",
+    "wrong_windows_page_size",
+    "wrong_alarms_page_size",
+)
+
+
+def _damage_query_contract(body, damage):
+    if damage == "missing_state_version":
+        del body["states"][0]["state_schema_version"]
+    elif damage == "wrong_state_version":
+        body["states"][0]["state_schema_version"] = "wrong"
+    elif damage == "wrong_state_versions":
+        body["versions"]["state_schema_versions"] = ["wrong"]
+    elif damage == "wrong_feature_versions":
+        body["versions"]["features_versions"] = ["wrong"]
+    elif damage == "wrong_query_version":
+        body["query_contract_version"] = "wrong"
+    elif damage == "numeric_manifest_version":
+        body["versions"]["manifest_schema_version"] = 2.0
+    elif damage == "boolean_state_counter":
+        body["states"][0]["state"]["consecutive_breaches"] = False
+    elif damage == "float_state_counter":
+        body["states"][0]["state"]["normal_windows"] = 100.0
+    elif damage == "float_window_count":
+        body["windows"]["items"][0]["sample_count"] = 10.0
+    elif damage == "missing_nullable_state":
+        del body["states"][0]["state"]["recovered_at_seq"]
+    elif damage == "leaked_state_audit":
+        body["states"][0]["reset_event"] = {
+            "reason": "operator-private-reset-reason",
+            "previous_state_json": "private-reset-envelope",
+        }
+    elif damage == "leaked_nested_audit":
+        body["states"][0]["state"]["reset_history"] = [
+            {"previous_state_json": "private-reset-envelope"}
+        ]
+    elif damage in {"wrong_windows_sort", "wrong_alarms_sort"}:
+        stream = "windows" if damage == "wrong_windows_sort" else "alarms"
+        body[stream]["sort"] = "ascending"
+    elif damage in {"wrong_windows_page_size", "wrong_alarms_page_size"}:
+        stream = "windows" if damage == "wrong_windows_page_size" else "alarms"
+        body[stream]["page_size"] = 50
+    else:
+        body["unapproved_field"] = "unexpected"
+
+
+@pytest.mark.parametrize("damage", _WIRE_CONTRACT_DAMAGE)
+@pytest.mark.parametrize("entrypoint", ["measurement", "cli", "opt_in"])
+def test_wire_contract_damage_fails_shared_entrypoints(
+    tmp_path, monkeypatch, damage, entrypoint
+):
+    """Inject an invalid real HTTP response before raw bytes are retained."""
+    from dataclasses import replace
+    import runpy
+
+    original = query_application.HealthQueryApplication.query_authorized
+    damaged = False
+
+    def wrong_response(self, *args, **kwargs):
+        nonlocal damaged
+        response = original(self, *args, **kwargs)
+        if damaged:
+            return response
+        damaged = True
+        body = deepcopy(response.body)
+        _damage_query_contract(body, damage)
+        return replace(response, body=body)
+
+    monkeypatch.setattr(
+        query_application.HealthQueryApplication, "query_authorized", wrong_response
+    )
+    output = tmp_path / "evidence"
+    if entrypoint == "measurement":
+        report = runner.run_measurement(tmp_path / "runs", serial=1)
+        write_evidence(output, report)
+    elif entrypoint == "cli":
+        assert runner.main(["--serial", "1", "--output", str(output)]) == 1
+    else:
+        monkeypatch.setenv("G15_RUN_QUERY_LOAD", "1")
+        monkeypatch.setenv("G15_QUERY_CONCURRENT", "10")
+        opt_in = runpy.run_path(
+            str(_REPO_ROOT / "tests/performance/query/test_query_load.py")
+        )["test_gate0_low_load_query_measurement"]
+        with pytest.raises(AssertionError):
+            opt_in(tmp_path)
+    saved = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert damaged
+    assert saved["quality_passed"] is False
+    assert saved["checks"]["raw_oracle"]
+    assert saved["exit_code"] == 1
+    # These are actual bytes received from the service; reconciliation must pass.
+    assert saved["checks"]["response_accounting"] == []
+    first = saved["serial_responses"][0][1]
+    record = next(
+        row
+        for row in saved["accounting"]["client_records"]
+        if row["server_request_id"] == first["request_id"]
+    )
+    assert json.loads(base64.b64decode(record["response_bytes_base64"])) == first
+
+
+def test_oracle_accepts_integer_health_score_and_explicit_null_state(measured_d0):
+    report, db_paths = measured_d0
+    result = deepcopy(report["serial_responses"][0])
+    first = result[1]["windows"]["items"][0]
+    assert first["health_score"] == 55.0
+    first["health_score"] = 55
+    assert result[1]["states"][0]["state"]["recovered_at_seq"] is None
+    assert verify_all([result], db_paths, first_page=True) == []
