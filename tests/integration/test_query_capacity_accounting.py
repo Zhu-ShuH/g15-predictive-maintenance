@@ -143,9 +143,12 @@ def test_paging_coverage_rejects_count_key_and_order_damage(
         first["alarms"]["items"].clear()
     problems = verify_paging_coverage(pages)
     assert any(expected in problem for problem in problems), problems
-    if damage != "wrong_alarm_key":
-        # Valid individual rows cannot establish complete, unique ordered paging.
+    if damage in {"repeat_page", "missing_page", "missing_alarm"}:
+        # Individually valid pages cannot establish cross-page completeness.
         assert verify_all(pages, db_paths) == []
+    else:
+        # The row oracle also rejects duplicates/order damage within one page.
+        assert verify_all(pages, db_paths)
 
 
 def test_discarded_alarm_is_checked_in_raw_response(measured_d0) -> None:
@@ -203,7 +206,12 @@ def test_accounting_rejects_duplicate_completion_or_unknown_id(damage) -> None:
 
     def emit(request_id, stage):
         accounting.server_event(
-            {"request_id": request_id, "trace_id": request_id, "stage": stage}
+            {
+                "request_id": request_id,
+                "trace_id": request_id,
+                "stage": stage,
+                "result": "received" if stage == SERVER_RECEIVED else "success",
+            }
         )
 
     emit("request-1", SERVER_RECEIVED)
@@ -405,4 +413,229 @@ def test_success_response_requires_exact_application_event_sequence(
         not problems
         for name, problems in verdict["checks"].items()
         if name != "request_log"
+    )
+
+
+@pytest.mark.parametrize(
+    ("damage", "expected"),
+    [
+        ("exhausted_empty_alarm", "alarms first-page keys/order mismatch"),
+        ("exhausted_duplicate_alarm", "alarms first-page keys/order mismatch"),
+        ("active_duplicate_window", "windows duplicate keys within page"),
+        ("active_reordered_window", "windows keys out of descending order"),
+    ],
+)
+def test_wire_paging_checks_exhausted_first_pages_and_active_keys(
+    tmp_path, monkeypatch, damage, expected
+) -> None:
+    """Inject a wrong real HTTP body before the client records its raw bytes."""
+    from dataclasses import replace
+
+    original = query_application.HealthQueryApplication.query_authorized
+    damaged = False
+
+    def wrong_response(self, *args, **kwargs):
+        nonlocal damaged
+        response = original(self, *args, **kwargs)
+        if damaged or not kwargs.get("windows_cursor"):
+            return response
+        damaged = True
+        body = deepcopy(response.body)
+        if damage == "exhausted_empty_alarm":
+            body["alarms"]["items"].clear()
+        elif damage == "exhausted_duplicate_alarm":
+            body["alarms"]["items"].append(deepcopy(body["alarms"]["items"][0]))
+        elif damage == "active_duplicate_window":
+            body["windows"]["items"][0] = deepcopy(body["windows"]["items"][1])
+        else:
+            body["windows"]["items"][:2] = reversed(body["windows"]["items"][:2])
+        return replace(response, body=body)
+
+    monkeypatch.setattr(
+        query_application.HealthQueryApplication, "query_authorized", wrong_response
+    )
+    report = runner.run_measurement(tmp_path / "runs")
+    write_evidence(tmp_path / "evidence", report)
+    assert damaged
+    assert report["quality_passed"] is False
+    assert any(expected in row for row in report["checks"]["raw_oracle"])
+    raw_body = report["paging"]["raw_responses"][1][1]
+    record = next(
+        row
+        for row in report["accounting"]["client_records"]
+        if row["server_request_id"] == raw_body["request_id"]
+    )
+    assert json.loads(base64.b64decode(record["response_bytes_base64"])) == raw_body
+    if damage.startswith("exhausted_"):
+        # A clean consumed view cannot excuse a wrong discarded HTTP page.
+        assert report["checks"]["consumed_coverage"] == []
+        expected_raw = 9 if damage == "exhausted_empty_alarm" else 11
+        assert report["paging"]["counts"]["alarms"] == {
+            "raw": expected_raw,
+            "consumed": 1,
+            "discarded": expected_raw - 1,
+        }
+    else:
+        assert report["checks"]["consumed_coverage"]
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "missing_response",
+        "duplicate_replaces_missing",
+        "extra_response",
+        "missing_raw_page",
+        "wrong_response_id",
+        "changed_retained_body",
+    ],
+)
+def test_response_evidence_must_match_every_accounted_request(measured_d0, damage):
+    report, db_paths = measured_d0
+    accounting = RunAccounting()
+    for row in report["accounting"]["client_records"]:
+        accounting.client_start()
+        accounting.client_complete(ClientRecord(**row))
+    for row in report["accounting"]["server_records"]:
+        accounting.server_event(row)
+    paging = PagingWalk(
+        raw=deepcopy(report["paging"]["raw_responses"]),
+        consumed=deepcopy(report["paging"]["consumed_responses"]),
+        discards=deepcopy(report["paging"]["discards"]),
+    )
+    results = deepcopy(report["serial_responses"] + report["concurrent_responses"])
+    assert runner.validate_run(
+        results, paging, db_paths, accounting, report["application_events"]
+    )["quality_passed"]
+    if damage == "missing_response":
+        results.pop()
+    elif damage == "duplicate_replaces_missing":
+        results[-1] = deepcopy(results[0])
+    elif damage == "extra_response":
+        results.append(deepcopy(results[0]))
+    elif damage == "missing_raw_page":
+        paging.raw.pop(1)
+    elif damage == "wrong_response_id":
+        results[0][1]["request_id"] = "not-an-accounted-response"
+    else:
+        results[0][1]["not_received_from_server"] = True
+    verdict = runner.validate_run(
+        results, paging, db_paths, accounting, report["application_events"]
+    )
+    assert verdict["quality_passed"] is False
+    assert verdict["checks"]["response_accounting"]
+    assert all(
+        not problems
+        for name, problems in verdict["checks"].items()
+        if name != "response_accounting"
+    )
+
+
+@pytest.mark.parametrize("when", ["before_requests", "after_requests"])
+def test_storage_failure_always_persists_partial_measurement(
+    tmp_path, monkeypatch, when
+) -> None:
+    from g15.storage.database import DatabaseError, connect_readonly
+
+    if when == "before_requests":
+
+        def unavailable_store(_root):
+            raise DatabaseError("synthetic storage failure")
+
+        monkeypatch.setattr(runner, "build_d0_runs", unavailable_store)
+    else:
+
+        def unavailable_plan(_paths):
+            return connect_readonly(tmp_path / "missing-store.sqlite")
+
+        monkeypatch.setattr(runner, "query_plans", unavailable_plan)
+    output = tmp_path / "failed-storage-evidence"
+    assert runner.main(["--serial", "1", "--output", str(output)]) == 1
+    saved = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert saved["runner_failure"] == "DatabaseError"
+    assert saved["quality_passed"] is False
+    assert saved["exit_code"] == 1
+    records = saved["accounting"]["client_records"]
+    assert len(records) == (0 if when == "before_requests" else 21)
+    if when == "after_requests":
+        assert all(record["response_bytes_base64"] for record in records)
+
+
+@pytest.mark.parametrize(
+    "damage", ["unknown_rejected", "failed_response_completed", "extra_rejected"]
+)
+def test_accounting_rejects_unmatched_or_failed_server_terminal(measured_d0, damage):
+    from tools.query_load.accounting import ServerRecord
+
+    report, db_paths = measured_d0
+    rows = deepcopy(report["accounting"]["server_records"])
+    completed = next(row for row in rows if row["stage"] == SERVER_COMPLETED)
+    if damage == "unknown_rejected":
+        rows.append(
+            dict(
+                completed,
+                request_id="unknown-rejected-request",
+                trace_id="unknown-rejected-request",
+                stage="rejected",
+                result="overloaded",
+            )
+        )
+        expected = "server events contain unknown request_ids"
+    elif damage == "failed_response_completed":
+        completed["result"] = "connection_error"
+        expected = "server stage/result sequence mismatch"
+    else:
+        rows.append(dict(completed, stage="rejected", result="internal"))
+        expected = "server stage/result sequence mismatch"
+    accounting = RunAccounting(
+        client_records=[
+            ClientRecord(**row) for row in report["accounting"]["client_records"]
+        ],
+        server_records=[ServerRecord(**row) for row in rows],
+        _client_started=len(report["accounting"]["client_records"]),
+    )
+    paging = PagingWalk(
+        raw=report["paging"]["raw_responses"],
+        consumed=report["paging"]["consumed_responses"],
+        discards=report["paging"]["discards"],
+    )
+    verdict = runner.validate_run(
+        report["serial_responses"] + report["concurrent_responses"],
+        paging,
+        db_paths,
+        accounting,
+        report["application_events"],
+    )
+    assert verdict["quality_passed"] is False
+    assert any(expected in row for row in verdict["checks"]["conservation"])
+    assert all(
+        not problems
+        for name, problems in verdict["checks"].items()
+        if name != "conservation"
+    )
+    evidence = accounting.evidence()
+    assert evidence["trusted"] is False
+    assert evidence["server_records"] == rows
+
+
+def test_accounting_diagnostic_failure_retains_original_records(tmp_path, monkeypatch):
+    def broken_diagnostics(_self):
+        raise ArithmeticError("safe synthetic diagnostic failure")
+
+    monkeypatch.setattr(RunAccounting, "evidence", broken_diagnostics)
+    output = tmp_path / "failed-accounting-evidence"
+    assert runner.main(["--serial", "1", "--output", str(output)]) == 1
+    saved = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert saved["runner_failure"] == "ArithmeticError"
+    assert saved["quality_passed"] is False
+    assert saved["target_reached"] is False
+    assert saved["exit_code"] == 1
+    assert saved["accounting"]["trusted"] is False
+    assert saved["accounting"]["incomplete"] is True
+    assert len(saved["accounting"]["client_records"]) == 21
+    assert len(saved["accounting"]["server_records"]) == 42
+    assert len(saved["paging"]["raw_responses"]) == 10
+    assert all(
+        record["response_bytes_base64"]
+        for record in saved["accounting"]["client_records"]
     )

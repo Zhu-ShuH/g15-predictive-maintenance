@@ -92,7 +92,16 @@ def run_paging(
         if status == 200:
             walk.oracle_problems.extend(
                 f"raw[{len(walk.raw) - 1}] {problem}"
-                for problem in verify_response(body, db_path, run_id, device, 10)
+                for problem in verify_response(
+                    body,
+                    db_path,
+                    run_id,
+                    device,
+                    10,
+                    first_page_streams=tuple(
+                        stream for stream, cursor in cursors.items() if not cursor
+                    ),
+                )
             )
         else:
             walk.oracle_problems.append(f"raw[{len(walk.raw) - 1}] status {status}")

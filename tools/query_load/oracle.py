@@ -35,8 +35,13 @@ def verify_response(
     page_size: int,
     *,
     first_page: bool = False,
+    first_page_streams: tuple[str, ...] = (),
 ) -> list[str]:
-    """Check one response body against the committed store; return violations."""
+    """Check rows and page shape against the independent committed store.
+
+    An omitted cursor requests that stream's first page, including replays
+    of an already consumed stream. Callers must supply that request context.
+    """
     problems: list[str] = []
     if body.get("run_id") != run_id or body.get("device_id") != device_id:
         problems.append("response run/device identity mismatch")
@@ -48,6 +53,24 @@ def verify_response(
             problems.append(f"{stream} exceeds requested page_size")
         if any(not isinstance(item, dict) for item in section["items"]):
             return problems + [f"{stream} item malformed"]
+        if any(
+            type(item.get("start_seq")) is not int
+            or (stream == "alarms" and not isinstance(item.get("rule_id"), str))
+            for item in section["items"]
+        ):
+            return problems + [f"{stream} item key malformed"]
+        keys = [
+            (
+                (item["start_seq"],)
+                if stream == "windows"
+                else (item["start_seq"], item["rule_id"])
+            )
+            for item in section["items"]
+        ]
+        if len(keys) != len(set(keys)):
+            problems.append(f"{stream} duplicate keys within page")
+        if keys != sorted(keys, reverse=True):
+            problems.append(f"{stream} keys out of descending order")
     if not isinstance(body.get("states"), list) or any(
         not isinstance(item, dict) for item in body["states"]
     ):
@@ -61,27 +84,27 @@ def verify_response(
         )
         if run_row is None:
             return ["oracle: run row missing"]
-        if first_page:
-            for stream, table, keys, order in (
-                ("windows", "feature_windows", ("start_seq",), "start_seq DESC"),
-                (
-                    "alarms",
-                    "alarms",
-                    ("start_seq", "rule_id"),
-                    "start_seq DESC, rule_id DESC",
-                ),
-            ):
-                expected = connection.execute(
-                    f"SELECT {', '.join(keys)} FROM {table} "
-                    f"WHERE run_id = ? AND device_id = ? ORDER BY {order} LIMIT ?",
-                    (run_id, device_id, page_size),
-                ).fetchall()
-                actual = [
-                    tuple(item.get(key) for key in keys)
-                    for item in body[stream]["items"]
-                ]
-                if actual != expected:
-                    problems.append(f"{stream} first-page keys/order mismatch")
+        for stream, table, keys, order in (
+            ("windows", "feature_windows", ("start_seq",), "start_seq DESC"),
+            (
+                "alarms",
+                "alarms",
+                ("start_seq", "rule_id"),
+                "start_seq DESC, rule_id DESC",
+            ),
+        ):
+            if not first_page and stream not in first_page_streams:
+                continue
+            expected = connection.execute(
+                f"SELECT {', '.join(keys)} FROM {table} "
+                f"WHERE run_id = ? AND device_id = ? ORDER BY {order} LIMIT ?",
+                (run_id, device_id, page_size),
+            ).fetchall()
+            actual = [
+                tuple(item.get(key) for key in keys) for item in body[stream]["items"]
+            ]
+            if actual != expected:
+                problems.append(f"{stream} first-page keys/order mismatch")
         expected_states = connection.execute(
             "SELECT rule_id FROM alarm_states WHERE run_id = ? AND device_id = ? ORDER BY rule_id",
             (run_id, device_id),

@@ -340,8 +340,11 @@ harness 在 `tools/query_load/`：`d0_fixture.py`（D0 建库）、`accounting.p
 ### 11.6 A 接管后的验证与证据入口（2026-11-12，#136）
 
 - CLI、集成与 opt-in 共用 `runner.run_measurement` / `validate_run`：原始 oracle、消费后完整分页覆盖、计数守恒、应用日志三方对账分别给结论。`paging.py` 留原始与消费视图，`evidence.py` 保存每轮 `report.json`；已有目录拒绝覆盖，失败轮次也留档。
+- 每份待核原始响应须与客户端记录逐条关联：request_id 多重集、状态、run/device 与实际收到的原始 JSON 内容一致；删响应、重复补数或事后改写都使验证失败。服务端的未知 ID 事件（含拒绝）不能遗漏；200 请求必须对应 received/received → response_completed/success。
 - `python -m tools.query_load.driver --concurrent 10 --output <新目录>`；50 波次使用 `--concurrent 50`。串行最多 10、并发只允许 10/50、workers 最多 64；发送前 barrier 仅同步起跑，不人为延迟请求/处理/响应。每个并发客户端有独立已认证且获授权的合成主体，应用 actor_ref 与客户端标签逐请求核对。
 - 提交请求数与实测峰值分列：在途按高精度单调 `perf_counter` 起止区间计算，同时报告峰值时刻不同用户数、全程不同用户数与无法关联数量。目标要求客户端、服务端实际请求与用户峰值都达到该档；不足如实退出 1，不能拿 submitted=50 代替 server=50。基础检查与目标均满足时退出 0，仍不自动宣告完整 Gate 0。
 - 证据包括源码 SHA/dirty/内容摘要、环境、命令模板、全部原始响应和失败、应用/传输日志、每请求原始延迟与 nearest-rank p50/p95/p99、资源点快照。EXPLAIN 调用实际 application SELECT helpers，记录 SQL/参数/源码行/hash；这是独立探针，不是整个 HTTP 路径追踪，D0 告警续页只是 SQL 分支探针。
 - 负例覆盖重复页、缺页、等量替换、乱序、告警重复/缺失/错键，以及仅损坏将被丢弃的原始告警；单项 oracle 正确也不能掩盖跨页重复/缺失。异常 JSON/超时等仍完成客户端记账，ID 重复/错配/完成缺失必须失败。
-- 产品阶段量测的后续最小影响面为 `src/g15/service/http.py` 与对应 `tests/unit/test_service_http.py`，需先 Review 事件阶段、过载/异常终态及每请求关联契约；本次工具改动不修改这些路径。
+- 每页独立检查键类型、唯一性与降序；凡本次请求省略某流 cursor，均按独立 SQLite 首屏键序核验该流，包括已耗尽后被重发、随后会被客户端丢弃的内容。原始空页或页内重复不能由消费视图通过抵消。
+- 存储、查询计划、资源采集、证据计算、验证或工作目录清理的普通异常，按阶段记录安全错误类型并使本轮失败；诊断计算失败仍保留已有客户端/服务端记录与原始页。不会将 KeyboardInterrupt/SystemExit 改写为正常结果；目标目录写入错误仍向调用方报错。
+- 产品阶段量测的后续范围见 #136 待评审方案，涉及 `src/g15/service/http.py`、对应 `tests/integration/test_query_service.py` 及工具/契约同步；需先 Review 事件阶段、过载/异常终态及每请求关联契约。本次不修改产品路径，也不把现有 TCP backlog 当作应用排队数。

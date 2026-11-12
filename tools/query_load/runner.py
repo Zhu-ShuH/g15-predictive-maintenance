@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import base64
+from collections import Counter
+from dataclasses import asdict
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import secrets
-import sqlite3
 import tempfile
 
 from g15.query.auth import issue_token
@@ -25,6 +28,59 @@ from .driver import (
 )
 from .evidence import source_facts, resource_snapshot, query_plans, write_evidence
 from .paging import PagingWalk, Response, run_paging, verify_paging_coverage
+
+
+def _response_accounting(
+    responses: list[Response], accounting: RunAccounting
+) -> list[str]:
+    """Bind each audited response to exactly one original client record."""
+    with accounting.lock:
+        records = list(accounting.client_records)
+    problems = []
+    response_ids = Counter(body.get("request_id") for _, body, _ in responses)
+    record_ids = Counter(record.server_request_id for record in records)
+    if response_ids != record_ids:
+        problems.append("response/accounting request_id counts do not match")
+    if any(not request_id or count != 1 for request_id, count in response_ids.items()):
+        problems.append("audited responses require unique nonempty request IDs")
+    by_id = {
+        record.server_request_id: record
+        for record in records
+        if record_ids[record.server_request_id] == 1
+    }
+    for position, (status, body, run_id) in enumerate(responses):
+        record = by_id.get(body.get("request_id"))
+        if record is None:
+            problems.append(f"response[{position}] has no unique client record")
+            continue
+        if status != record.status or run_id != record.run_id:
+            problems.append(
+                f"response[{position}] status/run differs from client record"
+            )
+        if status == 200 and (
+            body.get("run_id") != record.run_id
+            or body.get("device_id") != record.device_id
+        ):
+            problems.append(
+                f"response[{position}] run/device differs from client record"
+            )
+        try:
+            original = json.loads(
+                base64.b64decode(record.response_bytes_base64, validate=True).decode(
+                    "utf-8"
+                )
+            )
+            # JSON text equality also distinguishes booleans from numbers.
+            same_body = json.dumps(
+                original, sort_keys=True, allow_nan=False
+            ) == json.dumps(body, sort_keys=True, allow_nan=False)
+        except (ValueError, UnicodeError, TypeError):
+            same_body = False
+        if not same_body:
+            problems.append(
+                f"response[{position}] body differs from recorded raw bytes"
+            )
+    return problems
 
 
 def validate_run(
@@ -69,27 +125,23 @@ def validate_run(
             )
     checks = {
         "raw_oracle": verify_all(results, db_paths, first_page=True)
+        + verify_all(paging.raw, db_paths)
         + paging.oracle_problems,
         "consumed_coverage": verify_paging_coverage(paging.consumed),
         "traversal": paging.traversal_problems,
         "conservation": accounting.conservation_report(),
+        "response_accounting": _response_accounting(results + paging.raw, accounting),
         "request_log": logs,
     }
     return {"checks": checks, "quality_passed": not any(checks.values())}
 
 
-def run_measurement(
-    runs_root: Path, *, concurrent: int = 10, serial: int = 10, workers: int = 64
-) -> dict[str, object]:
-    """Run only D0 at up to 50 requests; return all evidence including failures."""
-    if concurrent not in (10, 50) or not 1 <= serial <= 10 or not 1 <= workers <= 64:
-        raise ValueError(
-            "Gate 0 allows serial 1..10, concurrent 10/50 and workers 1..64"
-        )
-    report = {
+def _new_report(serial: int, concurrent: int, workers: int) -> dict[str, object]:
+    """Initialize a report before any storage, source or resource collection."""
+    return {
         "format": "g15-query-gate0-v2",
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
-        "source": source_facts(),
+        "source": None,
         "workload": {
             "devices": 10,
             "windows_per_device": 100,
@@ -120,8 +172,44 @@ def run_measurement(
             "server_queued/server_executing instrumentation",
             "raw exhausted-stream replay protocol limitation",
         ],
-        "resources_before": resource_snapshot(),
+        "resources_before": None,
+        "quality_passed": False,
+        "target_reached": False,
+        "exit_code": 1,
     }
+
+
+def _failure(report: dict[str, object], phase: str, exc: Exception) -> None:
+    # Never persist exception text: it may contain private paths or credentials.
+    error = type(exc).__name__
+    key = "validation_failure" if phase == "validation" else "runner_failure"
+    report.setdefault(key, error)
+    report.setdefault("failures", []).append({"phase": phase, "error": error})
+    report["quality_passed"] = False
+    report["exit_code"] = 1
+
+
+def _raw_accounting(accounting: RunAccounting) -> dict[str, object]:
+    """Keep original records if computing accounting diagnostics fails."""
+    with accounting.lock:
+        return {
+            "trusted": False,
+            "client_records": [asdict(record) for record in accounting.client_records],
+            "server_records": [asdict(record) for record in accounting.server_records],
+            "peaks": None,
+            "incomplete": True,
+        }
+
+
+def run_measurement(
+    runs_root: Path, *, concurrent: int = 10, serial: int = 10, workers: int = 64
+) -> dict[str, object]:
+    """Run only D0 at up to 50 requests; return all evidence including failures."""
+    if concurrent not in (10, 50) or not 1 <= serial <= 10 or not 1 <= workers <= 64:
+        raise ValueError(
+            "Gate 0 allows serial 1..10, concurrent 10/50 and workers 1..64"
+        )
+    report = _new_report(serial, concurrent, workers)
     accounting = RunAccounting()
     events = []
     serial_results, concurrent_results = [], []
@@ -129,6 +217,8 @@ def run_measurement(
     server = None
     db_paths = []
     try:
+        report["source"] = source_facts()
+        report["resources_before"] = resource_snapshot()
         db_paths = build_d0_runs(runs_root)
         bearer_key, cursor_key = secrets.token_bytes(32), secrets.token_bytes(32)
         application, events = build_application(
@@ -153,20 +243,44 @@ def run_measurement(
         concurrent_results = run_concurrent(clients, concurrent, db_paths)
         paging = run_paging(clients[0], 0, db_paths)
         report["query_plans"] = query_plans(db_paths)
-    except (OSError, ValueError, RuntimeError, KeyError, sqlite3.Error) as exc:
-        # Do not print exception text: paths or credentials may be embedded.
-        report["runner_failure"] = type(exc).__name__
+    except Exception as exc:
+        _failure(report, "run", exc)
     finally:
         if server is not None:
-            server.shutdown()
-            server.server_close()
-            thread.join(timeout=5)
-        report["resources_after"] = resource_snapshot()
-        report["accounting"] = accounting.evidence()
+            for phase, cleanup in (
+                ("server_shutdown", server.shutdown),
+                ("server_close", server.server_close),
+                ("server_join", lambda: thread.join(timeout=5)),
+            ):
+                try:
+                    cleanup()
+                except Exception as exc:
+                    _failure(report, phase, exc)
+            if thread.is_alive():
+                _failure(report, "server_join", TimeoutError())
         report["application_events"] = events
         report["serial_responses"] = serial_results
         report["concurrent_responses"] = concurrent_results
-        report["paging"] = paging.evidence()
+        report["accounting"] = None
+        report["resources_after"] = None
+        report["paging"] = {
+            "raw_responses": paging.raw,
+            "consumed_responses": paging.consumed,
+            "discards": paging.discards,
+            "raw_oracle_problems": paging.oracle_problems,
+            "traversal_problems": paging.traversal_problems,
+            "incomplete": True,
+        }
+        for name, collect in (
+            ("resources_after", resource_snapshot),
+            ("accounting", lambda: _raw_accounting(accounting)),
+            ("accounting", accounting.evidence),
+            ("paging", paging.evidence),
+        ):
+            try:
+                report[name] = collect()
+            except Exception as exc:
+                _failure(report, name, exc)
         try:
             report.update(
                 validate_run(
@@ -177,15 +291,14 @@ def run_measurement(
                     events,
                 )
             )
-        except (OSError, ValueError, RuntimeError, KeyError, sqlite3.Error) as exc:
-            report["validation_failure"] = type(exc).__name__
-            report["quality_passed"] = False
-    if "runner_failure" in report:
+        except Exception as exc:
+            _failure(report, "validation", exc)
+    if report.get("failures"):
         report["quality_passed"] = False
-    peaks = report["accounting"]["peaks"]
-    report["target_reached"] = all(
-        peaks[side]["in_flight"] >= concurrent
-        and (peaks[side]["distinct_users_at_peak"] or 0) >= concurrent
+    peaks = (report["accounting"] or {}).get("peaks") or {}
+    report["target_reached"] = bool(peaks) and all(
+        (peaks.get(side, {}).get("in_flight") or 0) >= concurrent
+        and (peaks.get(side, {}).get("distinct_users_at_peak") or 0) >= concurrent
         for side in ("client", "server")
     )
     report["exit_code"] = (
@@ -208,13 +321,19 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--output already exists; retain every previous attempt")
     if not 1 <= args.serial <= 10 or not 1 <= args.workers <= 64:
         parser.error("Gate 0 allows serial 1..10 and workers 1..64")
-    with tempfile.TemporaryDirectory(prefix="g15-gate0-") as tmp:
-        report = run_measurement(
-            Path(tmp) / "runs",
-            concurrent=args.concurrent,
-            serial=args.serial,
-            workers=args.workers,
-        )
+    report = _new_report(args.serial, args.concurrent, args.workers)
+    try:
+        with tempfile.TemporaryDirectory(prefix="g15-gate0-") as tmp:
+            report = run_measurement(
+                Path(tmp) / "runs",
+                concurrent=args.concurrent,
+                serial=args.serial,
+                workers=args.workers,
+            )
+    except Exception as exc:
+        # Includes temporary-workspace setup/cleanup failures.  Interrupts and
+        # process exits still propagate instead of being converted to a verdict.
+        _failure(report, "workspace", exc)
     write_evidence(args.output, report)
     print("quality_passed", report["quality_passed"])
     print("target_reached", report["target_reached"])

@@ -212,6 +212,24 @@ class RunAccounting:
                     problems.append(
                         f"{label} request_id {request_id!r} occurs {count} times"
                     )
+        unknown_ids = {record.request_id for record in servers} - set(client_ids)
+        if unknown_ids:
+            problems.append(
+                f"server events contain unknown request_ids: {sorted(unknown_ids)!r}"
+            )
+        by_id: dict[str, list[tuple[str, str]]] = {}
+        for record in servers:
+            by_id.setdefault(record.request_id, []).append(
+                (record.stage, record.result)
+            )
+        for record in clients:
+            if record.status == 200 and by_id.get(record.server_request_id) != [
+                (SERVER_RECEIVED, "received"),
+                (SERVER_COMPLETED, "success"),
+            ]:
+                problems.append(
+                    f"{record.server_request_id}: server stage/result sequence mismatch"
+                )
         active: set[str] = set()
         finished: set[str] = set()
         for record in servers:
