@@ -1,47 +1,52 @@
 ---
 name: G15 Console
-description: Dark, evidence-first device health and report console for the G15 simulation sandbox.
+description: Cyber Wafuu, evidence-first device health, fleet and diagnosis console for the G15 simulation sandbox.
 colors:
-  ink: "#e1eaf7"
-  muted: "#afbed0"
-  ground: "#0e1726"
-  surface: "#142236"
-  line: "#2c405c"
-  nav: "#101e32"
-  nav-muted: "#adbed6"
-  brand: "#8cb0ff"
-  brand-soft: "#263e64"
-  healthy: "#75d2b1"
-  healthy-soft: "#173b32"
-  yellow: "#f0c271"
-  yellow-soft: "#453823"
-  red: "#f199a3"
-  red-soft: "#442930"
-  focus: "#91b6ff"
-  field-focus: "#86aaff"
-  nav-text: "#ccdaeb"
-  nav-bright: "#f2f6ff"
-  nav-hover: "#203a5d"
-  nav-current: "#2b4772"
-  control-border: "#506b90"
-  control-text: "#d3e0f2"
-  control-hover: "#1d3253"
-  control-hover-border: "#6c8ab5"
-  field-ground: "#111e31"
-  device-hover: "#1d304b"
-  device-selected: "#213a5d"
-  device-selected-border: "#5278aa"
-  unknown-ground: "#283a51"
-  unknown-text: "#afc1d9"
-  plot-line: "#91b2f4"
-  plot-grid: "#30445f"
-  plot-label: "#a5b6ca"
-  report-ground: "#203249"
-  report-passed: "#8edcb8"
-  report-passed-ground: "#193a33"
-  report-failed: "#f2a1a6"
-  report-unknown: "#b4c4d9"
-  report-unknown-ground: "#213249"
+  ink: "#FEFFEF"
+  muted: "#B9C8D6"
+  ground: "#FEFFEF"
+  surface: "#28313C"
+  component: "#010101"
+  line: "#5796D3"
+  nav: "#28313C"
+  nav-muted: "#B9C8D6"
+  brand: "#5796D3"
+  brand-soft: "#133E34"
+  healthy: "#A5CD2E"
+  healthy-soft: "#133E34"
+  yellow: "#FF8A00"
+  yellow-soft: "#28313C"
+  red: "#D32529"
+  red-soft: "#28313C"
+  focus: "#FF8A00"
+  field-focus: "#FF8A00"
+  nav-text: "#B9C8D6"
+  nav-bright: "#FEFFEF"
+  nav-hover: "#133E34"
+  nav-current: "#010101"
+  control-border: "#80D8CF"
+  control-text: "#80D8CF"
+  control-hover: "#133E34"
+  control-hover-border: "#FF8A00"
+  button-primary: "#133E34"
+  button-mint: "#80D8CF"
+  button-focus: "#FF8A00"
+  button-danger: "#FF4400"
+  field-ground: "#010101"
+  device-hover: "#133E34"
+  device-selected: "#133E34"
+  device-selected-border: "#A5CD2E"
+  unknown-ground: "#28313C"
+  unknown-text: "#B9C8D6"
+  plot-line: "#5796D3"
+  plot-grid: "#28313C"
+  plot-label: "#B9C8D6"
+  report-ground: "#010101"
+  report-passed: "#A5CD2E"
+  report-passed-ground: "#133E34"
+  report-failed: "#D32529"
+  report-unknown: "#B9C8D6"
+  report-unknown-ground: "#010101"
 typography:
   headline:
     fontFamily: '"Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif'
@@ -297,6 +302,16 @@ components:
 状态与概览在本轮完成后约（2 秒）继续读取，后台概览并发上限（3）；隐藏页面暂停，销毁时取消请求和计时器。请求超过（6 秒）标记超时；持续状态、概览或设备提交超过（10 秒）未更新，使用中性过期标签。停止、异常、暂停和积压分别写明，不让绿色暗示仍在更新。这些是界面读取/新鲜度策略，不是业务健康阈值。
 
 最新页可跟随已提交窗口。历史分页、全程读取、手动窗口检查和报告不被自动更新重置；有新数据时显示沿用蓝色选中底的提示，用户点击“回到最新”后恢复。展开的告警原因与报告内容不因无关的状态轮询重建。持续摘要标为“持续运行摘要 · 未判定”，没有受控真值对照时不造检出率或通过结论。旧服务的 `/api/live` 返回 404 时不显示持续模块或错误。
+
+### Fleet screen and operations views
+
+大屏 `/screen` 以真实状态分布环、异常优先设备矩阵、所选设备趋势和来源明确的维护建议构成三栏布局；窄屏依次堆叠。运营看板 `/operations` 使用指标卡、同一真实趋势和可搜索设备表。两页只用现有查询数据，状态色始终配文字，未知、过期和读取失败单独计数。页面间使用普通链接，不加入截图中未实现的租户、工单、会诊或设备控制入口。
+
+诊断工作台 `/diagnosis` 使用双栏分析布局：真实设备选择、当前健康分、规则版本、最新窗口的五维风险与最近证据链。五维固定为电平、强度、波动、冲击和频谱，使用原生 progress 与真实持久化风险绘制；任一维度未知时不绘制完整雷达。历史告警来源与当前状态分别标注，不补造温度/电流工业诊断、SLA 或在线会诊。
+
+### Cyber Wafuu shared theme
+
+所有页面最后加载 `cyber-wafuu.css`，统一使用象牙色 `#FEFFEF` 网格底、深青 `#28313C` 看板、黑色 `#010101` 毛玻璃组件及铆钉角点。健康/趋势/告警分别使用 `#A5CD2E`、`#5796D3`、`#D32529`；黄色状态使用 `#FF8A00`。按钮采用 JRPG 切角、深绿 `#133E34` 与薄荷 `#80D8CF`，焦点为橙色，危险状态用 `#FF4400`。窄屏导航允许换行，不能用横向隐藏冒充适配。
 
 ## Do's and Don'ts
 

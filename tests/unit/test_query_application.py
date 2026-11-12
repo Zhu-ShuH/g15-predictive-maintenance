@@ -13,7 +13,9 @@ from g15.query.application import (
     AuthenticationError,
     HealthQueryApplication,
     ResourceNotFoundError,
+    _window_item,
 )
+from g15.storage.repository import StorageError
 from g15.query.auth import AuthorizationPolicy, TokenVerifier, issue_token
 from g15.query.cursor import MAX_CURSOR_BYTES, CursorCodec
 from g15.storage.database import connect, initialize_database, transaction
@@ -494,3 +496,53 @@ def test_logs_use_actor_ref_and_never_record_sensitive_inputs(tmp_path: Path) ->
         "private_truth",
     ):
         assert forbidden not in log_text
+
+
+def _window_with_risk_dimensions(
+    version: str, dimensions: dict[str, object] | None
+) -> tuple[int, int, str, float]:
+    payload = json.loads(_features(0))
+    payload["features_version"] = version
+    if dimensions is not None:
+        payload["risk_dimensions"] = dimensions
+    return 0, 10, json.dumps(payload), 90.0
+
+
+def _valid_risk_dimensions() -> dict[str, object]:
+    return {
+        "level_offset": 0.1,
+        "vibration_strength": 0.2,
+        "variability": 0.3,
+        "impact": 0.4,
+        "spectral": None,
+    }
+
+
+def test_window_item_projects_five_dimensions_and_legacy_null() -> None:
+    """Version 2 exposes validated groups; version 1 keeps unknown explicit."""
+    legacy = _window_item(_window_with_risk_dimensions("1", None))
+    assert legacy["risk_dimensions"] is None
+    dimensions = _valid_risk_dimensions()
+    current = _window_item(_window_with_risk_dimensions("2", dimensions))
+    assert current["risk_dimensions"] == dimensions
+
+
+def test_window_item_rejects_missing_or_misversioned_dimensions() -> None:
+    """A version 2 row must carry all five keys; version 1 cannot smuggle them."""
+    with pytest.raises(StorageError):
+        _window_item(_window_with_risk_dimensions("2", None))
+    with pytest.raises(StorageError):
+        _window_item(_window_with_risk_dimensions("2", {"impact": 0.2}))
+    with pytest.raises(StorageError):
+        _window_item(_window_with_risk_dimensions("1", _valid_risk_dimensions()))
+    with pytest.raises(StorageError):
+        _window_item(_window_with_risk_dimensions("3", _valid_risk_dimensions()))
+
+
+@pytest.mark.parametrize("invalid", [True, -0.01, 1.01, float("nan"), "0.5"])
+def test_window_item_rejects_invalid_dimension_values(invalid: object) -> None:
+    """Only finite numbers in [0, 1] or null are public risk dimensions."""
+    dimensions = _valid_risk_dimensions()
+    dimensions["impact"] = invalid
+    with pytest.raises(StorageError):
+        _window_item(_window_with_risk_dimensions("2", dimensions))

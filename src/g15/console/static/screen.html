@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>G15 · 设备健康驾驶舱</title>
+  <link rel="stylesheet" href="/assets/fleet.css">
+  <link rel="stylesheet" href="/assets/cyber-wafuu.css">
+  <script type="module" src="/assets/fleet.js"></script>
+</head>
+<body data-fleet-mode="screen">
+<a class="skip-link" href="#fleet-main">跳到主要内容</a>
+<div class="fleet-shell">
+  <header class="fleet-header">
+    <a class="fleet-brand" href="/" aria-label="返回 G15 控制台"><span class="fleet-brand-mark">G</span><span><strong>G15 · 设备健康驾驶舱</strong><small>PREDICTIVE MAINTENANCE COMMAND CENTER</small></span></a>
+    <div class="fleet-header-tools"><span id="fleet-status" class="fleet-status" data-level="unknown">正在连接</span><time id="fleet-clock" class="fleet-clock">--:--:--</time><nav class="fleet-links" aria-label="页面切换"><a id="nav-console" href="/">控制台</a><a id="nav-operations" href="/operations">运营看板</a><a id="nav-diagnosis" href="/diagnosis">诊断</a><button id="fleet-refresh" class="fleet-button" type="button">刷新</button></nav></div>
+  </header>
+  <main id="fleet-main" class="fleet-main" tabindex="-1">
+    <div id="fleet-message" class="fleet-message" role="status" hidden></div>
+    <div class="screen-layout">
+      <div class="screen-column">
+        <section class="fleet-panel" aria-labelledby="screen-distribution-title">
+          <div class="fleet-panel-heading"><h2 id="screen-distribution-title">健康指数分布</h2><span id="fleet-total-caption">— 台登记设备</span></div>
+          <div class="distribution-content"><div id="fleet-donut" class="fleet-donut" role="img" aria-label="设备健康状态分布"></div><dl id="fleet-distribution" class="distribution-list"></dl></div>
+          <p class="fleet-note">状态来自已提交查询；读取失败、未知和过期不计入健康。</p>
+        </section>
+        <section class="fleet-panel" aria-labelledby="screen-snapshot-title">
+          <div class="fleet-panel-heading"><h2 id="screen-snapshot-title">持续采集概览</h2><span>真实计数</span></div>
+          <dl class="snapshot-grid">
+            <div><dt>已采集样本</dt><dd id="live-captured">—</dd></div>
+            <div><dt>已处理样本</dt><dd id="live-processed">—</dd></div>
+            <div><dt>已写入窗口</dt><dd id="live-windows">—</dd></div>
+            <div><dt>待分析批次</dt><dd id="live-queue">—</dd></div>
+          </dl>
+          <p id="live-scope" class="fleet-note">非持续运行时不显示采集计数。</p>
+        </section>
+      </div>
+      <div class="screen-center">
+        <section class="fleet-panel matrix-panel" aria-labelledby="screen-matrix-title">
+          <div class="fleet-panel-heading"><div><h2 id="screen-matrix-title">设备健康矩阵</h2><p id="fleet-selection" class="fleet-subtitle">正在选择设备</p></div><span id="fleet-matrix-caption">—</span></div>
+          <div id="fleet-matrix" class="health-matrix" aria-label="选择设备查看趋势与维护建议"></div>
+          <div class="matrix-legend" aria-label="状态图例"><span data-level="red">红</span><span data-level="yellow">黄</span><span data-level="healthy">绿</span><span data-level="unknown">未知</span><span data-level="error">读取失败</span></div>
+        </section>
+        <section class="fleet-panel trend-panel" aria-labelledby="fleet-trend-title">
+          <div class="fleet-panel-heading"><div><h2 id="fleet-trend-title">健康指数趋势</h2><p id="fleet-trend-meta" class="fleet-subtitle">等待真实窗口</p></div><a id="trend-console-link" href="/">在控制台检查</a></div>
+          <div id="fleet-trend" class="fleet-trend" aria-busy="true"></div>
+          <p class="fleet-note">只绘制当前已加载窗口；不补齐缺失数据，不把全程报告指标当作最新健康分。</p>
+        </section>
+      </div>
+      <div class="screen-column">
+        <section class="fleet-panel" aria-labelledby="screen-advice-title">
+          <div class="fleet-panel-heading"><div><h2 id="screen-advice-title">维护建议</h2><p class="fleet-subtitle">来源告警可追溯</p></div><a id="advice-console-link" href="/?view=maintenance">全部建议</a></div>
+          <div id="fleet-advice" class="screen-advice"><p class="fleet-empty">正在读取告警依据…</p></div>
+          <p class="fleet-note">仅辅助人工检查，不创建工单、不执行设备动作。</p>
+        </section>
+        <section class="fleet-panel" aria-labelledby="screen-events-title">
+          <div class="fleet-panel-heading"><h2 id="screen-events-title">设备采集状态</h2><span id="live-status-detail">未确认</span></div>
+          <div id="fleet-live-list" class="acquisition-list"></div>
+          <p class="fleet-note">这里展示实际采集与提交状态，不是消息总线或真实设备联网事件。</p>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer class="fleet-footer"><span>G15 预测性维护场景沙盘</span><span>本机只读 · 公开仿真数据 · 未知不视为健康</span></footer>
+</div>
+<noscript><p class="fleet-noscript">页面需要 JavaScript 读取真实查询结果。</p></noscript>
+</body>
+</html>

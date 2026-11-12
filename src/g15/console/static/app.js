@@ -1,5 +1,5 @@
 import { createConsoleStore, deviceKey, latestWindow, chronological, activeStatus,
-  reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout, liveDevice, liveStatus, deviceStatus, selectedDeviceStatus } from "./state.js";
+  reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout, liveDevice, liveStatus, deviceStatus, selectedDeviceStatus, VIEWS, maintenanceAdvice } from "./state.js";
 
 const $ = (id) => document.getElementById(id);
 const text = (id, value) => {
@@ -231,6 +231,49 @@ export function startConsole() {
     button.disabled = !state.alarmCursor || state.alarmLoading || state.healthStatus !== "ready";
     button.textContent = state.alarmLoading ? "正在读取…" : state.alarmCursor ? "加载更早告警" : "已加载全部告警";
   }
+  function renderMaintenance(state) {
+    const advice = maintenanceAdvice(state);
+    const activeCount = advice.items.filter((item) => item.activity === "active").length;
+    text("maintenance-summary", advice.status === "ready"
+      ? `${advice.items.length} 条建议 · ${activeCount} 条对应当前活动告警`
+      : "等待可信的告警数据");
+    const warnings = [];
+    if (advice.missingActiveRules.length) {
+      warnings.push(`以下活动规则尚未加载对应级别的来源告警：${advice.missingActiveRules.join("、")}。`);
+    }
+    if (advice.partial) warnings.push("仍有更早告警未加载；本页只覆盖当前已读取记录。");
+    text("maintenance-warning", warnings.join(""));
+    $("maintenance-warning").hidden = !warnings.length;
+    text("maintenance-scope", `基于已加载的 ${advice.loadedAlarmCount} 条真实告警；每个规则选用对应当前活动级别的告警，否则选用最新历史记录。`);
+    const rate = latestWindow(state.windows)?.sample_rate_hz;
+    const cards = advice.items.map((item) => {
+      const card = node("article", "", "maintenance-card");
+      card.dataset.level = item.level;
+      const heading = node("div", "", "maintenance-card-heading");
+      const labels = node("div", "", "maintenance-labels");
+      labels.append(badge(item.level, levelLabel(item.level)),
+        node("span", item.activity === "active" ? "当前活动告警" : item.activity === "inactive" ? "当前无活动告警" : "活动状态未知", "maintenance-activity"));
+      heading.append(labels, node("strong", item.urgency, "maintenance-urgency"));
+      const source = node("p", `${item.ruleId} · ${positionText({ start_seq: item.startSeq }, rate)}`, "maintenance-source mono");
+      const basis = node("p", item.basis, "maintenance-basis");
+      const drivers = node("p", item.drivers.length ? `扣分特征：${item.drivers.join("、")}` : "扣分特征未从来源原因中识别，使用通用复核建议。", "maintenance-drivers");
+      const actions = node("ul", "", "maintenance-actions");
+      actions.append(...item.actions.map((action) => node("li", action)));
+      const footer = node("div", "", "maintenance-card-footer");
+      footer.append(node("span", "需人工确认 · 未执行任何操作", "maintenance-confirmation"));
+      const sourceButton = node("button", "查看来源告警", "text-button");
+      sourceButton.type = "button";
+      sourceButton.addEventListener("click", () => {
+        $("alarm-level-filter").value = "all"; $("alarm-search").value = item.ruleId;
+        store.setAlarmFilter("all", item.ruleId); store.setView("alarms");
+      });
+      footer.append(sourceButton);
+      card.append(heading, source, basis, drivers, actions, footer);
+      return card;
+    });
+    $("maintenance-list").replaceChildren(...(cards.length ? cards : [node("p",
+      advice.message || "暂无可生成的维护建议。", "empty-state")]));
+  }
   function renderReport(state) {
     const ready = state.reportStatus === "ready", report = state.report;
     const continuous = Boolean(liveDevice(state, state.selected));
@@ -305,10 +348,11 @@ export function startConsole() {
     const descriptions = {
       health: ["设备健康", "查看最新已存窗口、活动告警与可追溯的健康趋势。"],
       alarms: ["告警记录", "按级别和关键词检查当前运行已读取的历史告警。"],
+      maintenance: ["维护建议", "把真实告警转为可核查的检查建议，所有处置均需人工确认。"],
       reports: ["运行报告", "读取真实生成报告，保留未判定、误报与逐事件结果。"],
     };
     text("view-title", descriptions[state.view][0]); text("view-description", descriptions[state.view][1]);
-    for (const view of ["health", "alarms", "reports"]) {
+    for (const view of VIEWS) {
       $(`${view}-view`).hidden = state.view !== view;
       const button = $(`nav-${view}`);
       if (state.view === view) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
@@ -351,6 +395,7 @@ export function startConsole() {
     if (changed("previews", "devices", "selected", "deviceSearch", "catalogStatus", "live", "liveError", "liveMode", "pollPaused", "clock")) renderDevices(state);
     if (changed("windows", "alarms", "inspectedSeq", "healthStatus", "windowLoading", "fullLoading", "view")) renderChart(state);
     if (changed("alarms", "alarmLevel", "alarmSearch", "alarmCursor", "alarmLoading", "healthStatus")) renderAlarms(state);
+    if (changed("alarms", "states", "windows", "alarmCursor", "healthStatus", "selected")) renderMaintenance(state);
     if (changed("report", "reportStatus", "reportError", "selected", "liveMode")) renderReport(state);
     renderedState = state;
   }
@@ -366,7 +411,7 @@ export function startConsole() {
   $("retry-report-button").addEventListener("click", () => { void store.retryReport(); });
   $("health-window-slider").addEventListener("input", (event) => store.inspect(chartPoints[Number(event.target.value)]?.start_seq ?? null));
   $("show-all-alarms").addEventListener("click", () => store.setView("alarms"));
-  for (const view of ["health", "alarms", "reports"]) $(`nav-${view}`).addEventListener("click", () => store.setView(view));
+  for (const view of VIEWS) $(`nav-${view}`).addEventListener("click", () => store.setView(view));
   $("health-chart").addEventListener("pointermove", (event) => {
     const svg = $("health-chart").querySelector("svg");
     if (!svg || !chartPoints.length) return;

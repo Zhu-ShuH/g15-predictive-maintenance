@@ -1,5 +1,5 @@
 /* State and same-origin data operations for the read-only G15 console. */
-export const VIEWS = ["health", "alarms", "reports"];
+export const VIEWS = ["health", "alarms", "maintenance", "reports"];
 export const deviceKey = (device) => JSON.stringify([device.run_id, device.device_id]);
 export const finite = (value) => typeof value === "number" && Number.isFinite(value);
 export const latestWindow = (windows) => windows.reduce(
@@ -44,6 +44,108 @@ export function filterAlarms(rows, level, search) {
   return rows.filter((row) => (level === "all" || row.level === level) &&
     (!needle || [row.rule_id, row.reason, row.level, row.start_seq]
       .some((value) => String(value ?? "").toLocaleLowerCase().includes(needle))));
+}
+
+const FEATURE_CHECKS = Object.freeze({
+  mean: "复核振动均值偏移、传感器零点与当前工况。",
+  std: "复核振动波动、运行稳定性与负载变化，并安排复测。",
+  rms: "复核振动 RMS、传感器安装、设备紧固与负载变化。",
+  ptp: "检查峰峰值对应的冲击区段，复核紧固情况和异常工况。",
+  kurtosis_excess: "结合原始波形复核冲击性成分与异常采样点。",
+  dominant_freq_hz: "复核主频变化、转速与采样配置，不直接归因到具体零部件。",
+  crest_factor: "复核峰值因子与冲击区段，检查传感器安装和设备紧固。",
+  zero_crossing_rate: "复核过零率变化、频谱特征与采样质量。",
+});
+const ACTIVE_LEVELS = new Set(["yellow", "red"]);
+
+const NUMBER_PATTERN = String.raw`[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?`;
+const MEASUREMENT_PATTERN = new RegExp(
+  `^\\s*([a-z][a-z0-9_]*)=(${NUMBER_PATTERN})\\s*\\(risk\\s+(${NUMBER_PATTERN})\\)`, "i"
+);
+export function alarmMeasurements(alarm) {
+  if (typeof alarm.reason !== "string") return [];
+  const match = /(?:^|;\s*)drivers:\s*([^;]+)/.exec(alarm.reason);
+  if (!match) return [];
+  const rows = match[1].split(",").map((part) => MEASUREMENT_PATTERN.exec(part))
+    .filter(Boolean).map((item) => ({ name: item[1].toLowerCase(),
+      value: Number(item[2]), risk: Number(item[3]) }))
+    .filter((item) => Number.isFinite(item.value) && Number.isFinite(item.risk) &&
+      item.risk >= 0 && item.risk <= 1);
+  return [...new Map(rows.map((row) => [row.name, row])).values()];
+}
+function alarmDrivers(alarm) {
+  return [...new Set(alarmMeasurements(alarm).map((row) => row.name)
+    .filter((name) => Object.hasOwn(FEATURE_CHECKS, name)))];
+}
+
+export function maintenanceAdvice(state) {
+  const base = {
+    items: [], missingActiveRules: [], partial: Boolean(state.alarmCursor),
+    loadedAlarmCount: Array.isArray(state.alarms) ? state.alarms.length : 0,
+  };
+  if (state.healthStatus === "idle" || state.healthStatus === "loading") {
+    return { ...base, status: "loading", message: "正在读取真实告警与活动状态。" };
+  }
+  if (state.healthStatus === "error") {
+    return { ...base, status: "error", message: "告警数据读取失败，当前不能生成维护建议。" };
+  }
+
+  const alarmsByRule = new Map();
+  for (const alarm of Array.isArray(state.alarms) ? state.alarms : []) {
+    if (!alarm || typeof alarm.rule_id !== "string" ||
+        !Number.isSafeInteger(alarm.start_seq) || !ACTIVE_LEVELS.has(alarm.level)) continue;
+    const rows = alarmsByRule.get(alarm.rule_id) || [];
+    rows.push(alarm); alarmsByRule.set(alarm.rule_id, rows);
+  }
+  const statesByRule = new Map((Array.isArray(state.states) ? state.states : [])
+    .filter((row) => typeof row?.rule_id === "string")
+    .map((row) => [row.rule_id, row.state?.active_level]));
+  const activeLevels = new Map([...statesByRule].filter(([, level]) => ACTIVE_LEVELS.has(level)));
+  const items = [], missingActiveRules = [];
+  for (const [ruleId, rows] of alarmsByRule) {
+    rows.sort((a, b) => b.start_seq - a.start_seq);
+    const activeLevel = activeLevels.get(ruleId) || null;
+    const source = activeLevel ? rows.find((row) => row.level === activeLevel) : rows[0];
+    if (!source) {
+      missingActiveRules.push(`${ruleId}（${activeLevel}）`);
+      continue;
+    }
+    const drivers = alarmDrivers(source);
+    const actions = drivers.map((name) => FEATURE_CHECKS[name]);
+    if (!actions.length) actions.push("查看来源告警原因，复核对应特征、采样质量、传感器安装与当前工况。");
+    actions.push(activeLevel === "red"
+      ? "优先安排现场安全核查；是否停机及后续处置由人员按现场规程决定。"
+      : activeLevel === "yellow"
+        ? "安排近期点检并复测相关指标，观察异常是否持续或升级。"
+        : "复核该历史告警的处置与复测记录；如再次出现，按现场流程处理。");
+    const stateLevel = statesByRule.get(ruleId);
+    items.push({
+      key: `${ruleId}:${source.start_seq}`, ruleId, startSeq: source.start_seq,
+      level: source.level, activeLevel,
+      activity: activeLevel ? "active" : stateLevel === null || stateLevel === "normal" ? "inactive" : "unknown",
+      urgency: activeLevel === "red" ? "优先现场核查" : activeLevel === "yellow" ? "安排近期点检" : "历史告警复核",
+      drivers, basis: typeof source.reason === "string" ? source.reason : "来源未提供原因",
+      actions,
+    });
+  }
+  for (const [ruleId, level] of activeLevels) {
+    if (!alarmsByRule.has(ruleId)) missingActiveRules.push(`${ruleId}（${level}）`);
+  }
+  const rank = { red: 2, yellow: 1 };
+  items.sort((a, b) => (rank[b.activeLevel] || 0) - (rank[a.activeLevel] || 0) ||
+    rank[b.level] - rank[a.level] || b.startSeq - a.startSeq ||
+    a.ruleId.localeCompare(b.ruleId));
+  const statesKnownInactive = statesByRule.size > 0 && [...statesByRule.values()]
+    .every((level) => level === null || level === "normal");
+  let message = "";
+  if (!items.length && missingActiveRules.length) {
+    message = "活动告警的来源记录尚未加载，请先在告警中心加载相关记录。";
+  } else if (!items.length && statesKnownInactive) {
+    message = "当前无活动告警，也没有已读取的历史告警；无需生成维护建议。";
+  } else if (!items.length) {
+    message = "暂无已读取告警，且活动状态未知；不能据此判定设备健康。";
+  }
+  return { ...base, status: "ready", items, missingActiveRules: missingActiveRules.sort(), message };
 }
 export function locationSelection(search) {
   const query = new URLSearchParams(search);

@@ -33,9 +33,17 @@ IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 TOKEN = re.compile(r"[A-Za-z0-9._~+/-]+=*\Z")
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
+    "/screen": ("screen.html", "text/html; charset=utf-8"),
+    "/operations": ("operations.html", "text/html; charset=utf-8"),
+    "/diagnosis": ("diagnosis.html", "text/html; charset=utf-8"),
     "/assets/app.css": ("app.css", "text/css; charset=utf-8"),
     "/assets/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/assets/state.js": ("state.js", "text/javascript; charset=utf-8"),
+    "/assets/fleet.css": ("fleet.css", "text/css; charset=utf-8"),
+    "/assets/fleet.js": ("fleet.js", "text/javascript; charset=utf-8"),
+    "/assets/diagnosis.css": ("diagnosis.css", "text/css; charset=utf-8"),
+    "/assets/diagnosis.js": ("diagnosis.js", "text/javascript; charset=utf-8"),
+    "/assets/cyber-wafuu.css": ("cyber-wafuu.css", "text/css; charset=utf-8"),
 }
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
@@ -716,7 +724,10 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             if path == "/":
                 if set(parameters) - {"device", "run", "view"} or parameters.get(
                     "view", "health"
-                ) not in ("health", "alarms", "reports"):
+                ) not in ("health", "alarms", "maintenance", "reports"):
+                    raise ConsoleError(400, "invalid_request")
+            elif path in ("/screen", "/operations", "/diagnosis"):
+                if set(parameters) - {"device", "run"}:
                     raise ConsoleError(400, "invalid_request")
             elif parameters:
                 raise ConsoleError(400, "invalid_request")

@@ -222,7 +222,19 @@ def test_live_opt_in_preserves_exact_grants_and_safe_projection(live_run):
     assert body["device_id"] == live_run.device_id
     assert body["run_status"] == "streaming"
     assert body["versions"]["manifest_schema_version"] == "1"
-    assert body["versions"]["features_versions"] == ["1"]
+    assert body["versions"]["features_versions"] == ["2"]
+    for window in body["windows"]["items"]:
+        assert set(window["risk_dimensions"]) == {
+            "level_offset",
+            "vibration_strength",
+            "variability",
+            "impact",
+            "spectral",
+        }
+        assert all(
+            value is not None and 0.0 <= value <= 1.0
+            for value in window["risk_dimensions"].values()
+        )
     serialized = json.dumps(body)
     for private in (
         "session_id",

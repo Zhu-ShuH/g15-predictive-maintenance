@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createConsoleStore, deviceKey, mergeWindows, mergeAlarms, latestWindow,
-  chronological, activeStatus, reportVerdict, detectionText, filterAlarms, apiUrl, plotLayout, liveStatus, deviceStatus, LIVE_STALE_MS, selectedDeviceStatus } from "../../src/g15/console/static/state.js";
+  chronological, activeStatus, reportVerdict, detectionText, filterAlarms, apiUrl, plotLayout, liveStatus, deviceStatus, LIVE_STALE_MS, selectedDeviceStatus, maintenanceAdvice } from "../../src/g15/console/static/state.js";
 
 const A = { run_id: "run-a", device_id: "dev-a", scenario: "healthy" };
 const B = { run_id: "run-b", device_id: "dev-b", scenario: "degradation" };
@@ -27,6 +27,56 @@ function api(devices, handler) {
     return handler(parsed, options, device);
   };
 }
+
+test("maintenance advice keeps loading, error and unknown states distinct", () => {
+  assert.equal(maintenanceAdvice({ healthStatus: "loading", alarms: [], states: [] }).status, "loading");
+  assert.equal(maintenanceAdvice({ healthStatus: "error", alarms: [], states: [] }).status, "error");
+  const unknown = maintenanceAdvice({ healthStatus: "ready", alarms: [], states: [] });
+  assert.equal(unknown.items.length, 0);
+  assert.match(unknown.message, /活动状态未知/);
+  const healthy = maintenanceAdvice({ healthStatus: "ready", alarms: [],
+    states: [{ rule_id: "rule", state: { active_level: null } }] });
+  assert.match(healthy.message, /当前无活动告警/);
+  const malformed = maintenanceAdvice({ healthStatus: "ready", alarms: [alarm(10)],
+    states: [{ rule_id: "rule", state: { active_level: "unexpected" } }] });
+  assert.equal(malformed.items[0].activity, "unknown");
+  const malformedEmpty = maintenanceAdvice({ healthStatus: "ready", alarms: [],
+    states: [{ rule_id: "rule", state: { active_level: "unexpected" } }] });
+  assert.match(malformedEmpty.message, /活动状态未知/);
+});
+
+test("maintenance advice uses the active alarm source and explainable feature checks", () => {
+  const red = { ...alarm(30, "red"),
+    reason: "health 20; drivers: rms=2 (risk 1.00), crest_factor=4 (risk 0.50) <= red threshold 40" };
+  const result = maintenanceAdvice({ healthStatus: "ready", alarms: [alarm(20), red],
+    states: [{ rule_id: "rule", state: { active_level: "red" } }] });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].startSeq, 30);
+  assert.equal(result.items[0].level, "red");
+  assert.equal(result.items[0].activity, "active");
+  assert.deepEqual(result.items[0].drivers, ["rms", "crest_factor"]);
+  assert.match(result.items[0].actions.join("\n"), /RMS/);
+  assert.match(result.items[0].actions.join("\n"), /由人员按现场规程决定/);
+  assert.equal(result.items[0].basis, red.reason);
+});
+
+test("maintenance advice separates historical records and incomplete pagination", () => {
+  const result = maintenanceAdvice({ healthStatus: "ready", alarms: [alarm(20)], alarmCursor: "older",
+    states: [{ rule_id: "rule", state: { active_level: null } }] });
+  assert.equal(result.partial, true);
+  assert.equal(result.items[0].activity, "inactive");
+  assert.equal(result.items[0].urgency, "历史告警复核");
+  assert.match(result.items[0].actions[0], /来源告警原因/);
+});
+
+test("maintenance advice never invents a missing active-alarm source", () => {
+  const result = maintenanceAdvice({ healthStatus: "ready", alarms: [alarm(20)],
+    states: [{ rule_id: "rule", state: { active_level: "red" } },
+      { rule_id: "other", state: { active_level: "yellow" } }] });
+  assert.deepEqual(result.items, []);
+  assert.deepEqual(result.missingActiveRules, ["other（yellow）", "rule（red）"]);
+  assert.match(result.message, /来源记录尚未加载/);
+});
 
 test("null report fields preserve unknown / not-applicable, never become zero or 100%", () => {
   assert.equal(reportVerdict(report(A)).result, "unverifiable");

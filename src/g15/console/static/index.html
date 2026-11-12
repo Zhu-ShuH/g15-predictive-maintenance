@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>G15 · 设备健康控制台</title>
   <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/cyber-wafuu.css">
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body>
@@ -19,7 +20,11 @@
     <nav class="main-nav" aria-label="控制台功能">
       <button id="nav-health" class="nav-item" data-view="health" aria-current="page"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg><span>设备健康</span></button>
       <button id="nav-alarms" class="nav-item" data-view="alarms"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4l7 15v2H3v-2zM12 8v5m0 3v.1"/></svg><span>告警中心</span></button>
+      <button id="nav-maintenance" class="nav-item" data-view="maintenance"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4-4 4 4-4 4M3 21l9-9m-4 4 4 4m-7-2-2 2 4 4 2-2"/></svg><span>维护建议</span></button>
       <button id="nav-reports" class="nav-item" data-view="reports"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7m-7 4h7"/></svg><span>运行报告</span></button>
+      <a class="nav-item" href="/diagnosis"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg><span>诊断工作台</span></a>
+      <a class="nav-item" href="/screen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v13H3zM8 21h8m-4-4v4"/></svg><span>大屏驾驶舱</span></a>
+      <a class="nav-item" href="/operations"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg><span>运营看板</span></a>
     </nav>
     <div class="sidebar-footer"><span class="read-only"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10h12v11H6zM8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></svg>本机只读</span><p>公开仿真场景<br>查看分析，不控制设备</p></div>
   </aside>
@@ -54,6 +59,13 @@
             <div class="section-heading"><div><h3>告警记录</h3><p id="alarm-count" class="muted">尚未加载</p></div></div>
             <div class="filter-bar"><label class="select-field"><span>告警级别</span><select id="alarm-level-filter"><option value="all">全部级别</option><option value="red">红色告警</option><option value="yellow">黄色告警</option></select></label><label class="search-field alarm-search"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span class="sr-only">搜索规则或告警原因</span><input id="alarm-search" type="search" placeholder="搜索规则或告警原因" autocomplete="off"></label></div>
             <div class="table-scroll alarm-scroll" role="region" aria-label="告警记录详情"><table class="data-table alarm-table" role="table"><caption class="sr-only">所选设备的告警记录</caption><thead><tr><th scope="col">级别</th><th scope="col">仿真位置</th><th scope="col">规则</th><th scope="col">记录时间（北京时间）</th><th scope="col">原因</th></tr></thead><tbody id="alarm-table-body"></tbody></table></div><p id="alarm-empty" class="empty-state" hidden>没有告警记录</p><div class="section-footer"><p class="section-note">记录时间为告警写入时间，发生窗口以采样点位置表示。</p><button id="load-more-alarms" class="button button-secondary" disabled>加载更多告警</button></div>
+          </section>
+          <section id="maintenance-view" class="view" aria-label="维护建议" hidden>
+            <div class="section-heading"><div><h3>维护建议</h3><p id="maintenance-summary" class="muted">根据真实告警生成只读检查建议。</p></div><span class="status-badge" data-level="unknown">需人工确认</span></div>
+            <div id="maintenance-warning" class="message" role="status" hidden></div>
+            <div id="maintenance-list" class="maintenance-list"><p class="empty-state">选择设备后读取告警依据。</p></div>
+            <p id="maintenance-scope" class="section-note">每条建议均关联来源规则与告警窗口。</p>
+            <p class="section-note">建议仅用于辅助现场检查，不是故障诊断结论；不会创建工单、停机或控制设备。</p>
           </section>
           <section id="reports-view" class="view" aria-label="运行分析报告" hidden>
             <div class="section-heading"><div><h3 id="report-title">运行分析报告</h3><p id="report-description" class="muted">由报告模块从同一运行的数据与分析结果生成。</p></div><div class="download-actions"><a id="report-download-json" class="button button-quiet" aria-disabled="true">下载 JSON</a><a id="report-download-markdown" class="button button-secondary" aria-disabled="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>下载报告</a></div></div>

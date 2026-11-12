@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import sqlite3
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
@@ -13,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from g15.analysis.health import RISK_DIMENSION_NAMES
 from g15.pipeline.schema import DataContractError, ManifestStatus, manifest_from_dict
 from g15.query.auth import (
     AuthorizationPolicy,
@@ -833,6 +835,31 @@ def _alarm_rows(  # pylint: disable=too-many-arguments
     ).fetchall()
 
 
+def _risk_dimensions(
+    envelope: Mapping[str, Any], version: str
+) -> dict[str, float | None] | None:
+    if version == "1":
+        if "risk_dimensions" in envelope:
+            raise StorageError("features_version 1 cannot carry risk dimensions")
+        return None
+    raw = envelope.get("risk_dimensions")
+    if not isinstance(raw, Mapping) or set(raw) != set(RISK_DIMENSION_NAMES):
+        raise StorageError("features_json has invalid risk dimension keys")
+    result: dict[str, float | None] = {}
+    for name in RISK_DIMENSION_NAMES:
+        value = raw[name]
+        if value is None:
+            result[name] = None
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise StorageError("risk dimensions must be numbers or null")
+        number = float(value)
+        if not math.isfinite(number) or not 0.0 <= number <= 1.0:
+            raise StorageError("risk dimensions must be finite and within [0, 1]")
+        result[name] = number
+    return result
+
+
 def _window_item(row: tuple[Any, ...]) -> Mapping[str, object]:
     envelope = decode_features_json(str(row[2]))
     required = (
@@ -871,6 +898,7 @@ def _window_item(row: tuple[Any, ...]) -> Mapping[str, object]:
         "sample_rate_hz": sample_rate,
         "scoring_version": scoring_version,
         "rule_id": rule_id,
+        "risk_dimensions": _risk_dimensions(envelope, version),
     }
 
 

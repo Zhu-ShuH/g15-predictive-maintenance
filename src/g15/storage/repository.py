@@ -37,8 +37,9 @@ mapping so that three different kinds of information never get confused:
 
 ``features_json`` uses the same idea: a ``features_version``, the eight
 feature values under their own names, the window's sample count and rate, the
-window position, the rule identity, and a human-readable explanation of the
-score.
+window position, the rule identity, a human-readable explanation, and (version
+2) five explanatory risk groups. Version 1 remains readable without inventing
+those groups from a different rule set.
 """
 
 # One contract lives here on purpose: processing/audit tables, two JSON
@@ -79,9 +80,10 @@ __all__ = [
 ]
 
 
-#: Version of the ``features_json`` envelope. Bump it when the set of keys or
-#: their meaning changes; an unknown version is refused on read.
-FEATURES_SCHEMA_VERSION = "1"
+#: Version of the ``features_json`` envelope. Version 2 adds the five optional
+#: risk dimensions; version 1 remains readable and reports them as unavailable.
+FEATURES_SCHEMA_VERSION = "2"
+_FEATURES_SCHEMA_READ_VERSIONS = frozenset({"1", "2"})
 
 #: Version of the ``state_json`` envelope, as proposed in Issue #57.
 STATE_SCHEMA_VERSION = "1"
@@ -409,8 +411,9 @@ def encode_features_json(
         "scoring_version": health.scoring_version,
         "rule_id": health.rule_id,
         "health_explain": health.explain(),
+        "risk_dimensions": health.risk_dimensions,
     }
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, allow_nan=False)
 
 
 def decode_features_json(text: str) -> dict[str, Any]:
@@ -424,14 +427,15 @@ def decode_features_json(text: str) -> dict[str, Any]:
 
     Raises:
         StorageError: if the envelope is malformed or carries an unknown
-            version.
+            version. Versions 1 and 2 are accepted; version 1 predates the
+            optional five-dimension explanation.
     """
     payload = _load_json(text, "features_json")
     version = payload.get("features_version")
-    if version != FEATURES_SCHEMA_VERSION:
+    if version not in _FEATURES_SCHEMA_READ_VERSIONS:
         raise StorageError(
             f"unsupported features_version {version!r}; this consumer "
-            f"understands {FEATURES_SCHEMA_VERSION!r}"
+            f"understands {sorted(_FEATURES_SCHEMA_READ_VERSIONS)!r}"
         )
     return payload
 

@@ -129,7 +129,20 @@ def _service(tmp_path, public_runs):
     )
     assets = tmp_path / "test-assets"
     assets.mkdir()
-    for name in ("index.html", "app.js", "app.css", "state.js"):
+    for name in (
+        "index.html",
+        "screen.html",
+        "operations.html",
+        "diagnosis.html",
+        "app.js",
+        "app.css",
+        "state.js",
+        "fleet.js",
+        "fleet.css",
+        "diagnosis.js",
+        "diagnosis.css",
+        "cyber-wafuu.css",
+    ):
         (assets / name).write_text("console-fixture", encoding="utf-8")
     (assets / "secret.txt").write_text("private-static-file", encoding="utf-8")
     server.application.asset_root = assets
@@ -192,7 +205,20 @@ def test_catalog_assets_head_and_secret_redaction(service, caplog):
     assert "script-src 'self'" in headers["Content-Security-Policy"]
     assert headers["Cache-Control"] == "no-store"
     assert "Access-Control-Allow-Origin" not in headers
-    for route in ("/", "/assets/app.css", "/assets/app.js", "/assets/state.js"):
+    for route in (
+        "/",
+        "/screen",
+        "/operations",
+        "/diagnosis",
+        "/assets/app.css",
+        "/assets/app.js",
+        "/assets/state.js",
+        "/assets/fleet.css",
+        "/assets/fleet.js",
+        "/assets/diagnosis.css",
+        "/assets/diagnosis.js",
+        "/assets/cyber-wafuu.css",
+    ):
         assert _request(service, route)[0] == 200
         code, head_headers, body = _request(service, route, method="HEAD")
         assert code == 200 and body == b""
@@ -587,11 +613,17 @@ def test_explicit_ui_deep_link_can_reload_without_reflecting_its_values(service)
         ),
     )
     assert status == 200 and payload == b"console-fixture"
-    for query in ("view=alarms", "view=reports"):
+    for query in ("view=alarms", "view=maintenance", "view=reports"):
         assert _request(service, "/?" + query)[0] == 200
     assert _request(service, "/?unknown=x")[0] == 400
     assert _request(service, "/?view=invalid")[0] == 400
     assert _request(service, "/assets/app.js?view=health")[0] == 400
+    fleet_query = urlencode(
+        {"device": service.pair["device_id"], "run": service.pair["run_id"]}
+    )
+    for route in ("/screen", "/operations", "/diagnosis"):
+        assert _request(service, route + "?" + fleet_query)[0] == 200
+        assert _request(service, route + "?unknown=x")[0] == 400
     assert service.calls == []
 
 

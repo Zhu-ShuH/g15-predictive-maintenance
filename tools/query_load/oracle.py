@@ -34,6 +34,14 @@ _WINDOW_FIELDS = {
     "sample_rate_hz": "int",
     "scoring_version": "text",
     "rule_id": "text",
+    "risk_dimensions": "nullable_object",
+}
+_RISK_DIMENSION_FIELDS = {
+    "level_offset": "nullable_number",
+    "vibration_strength": "nullable_number",
+    "variability": "nullable_number",
+    "impact": "nullable_number",
+    "spectral": "nullable_number",
 }
 _ALARM_FIELDS = {
     "start_seq": "int",
@@ -149,6 +157,17 @@ def _schema_problems(body: dict[str, object]) -> list[str]:
         if isinstance(section.get("items"), list):
             for index, item in enumerate(section["items"]):
                 _fields(item, item_spec, f"{stream}[{index}]", problems)
+                if (
+                    stream == "windows"
+                    and isinstance(item, dict)
+                    and isinstance(item.get("risk_dimensions"), dict)
+                ):
+                    _fields(
+                        item["risk_dimensions"],
+                        _RISK_DIMENSION_FIELDS,
+                        f"windows[{index}].risk_dimensions",
+                        problems,
+                    )
     if isinstance(body.get("states"), list):
         for index, item in enumerate(body["states"]):
             if _fields(
@@ -325,6 +344,19 @@ def verify_response(
                 ):
                     if item.get(key) != features.get(key):
                         problems.append(f"window[{position}] {key} mismatch")
+                expected_dimensions = (
+                    features.get("risk_dimensions")
+                    if features["features_version"] == "2"
+                    else None
+                )
+                if features["features_version"] == "2" and not isinstance(
+                    expected_dimensions, dict
+                ):
+                    problems.append(
+                        f"window[{position}] stored risk dimensions missing"
+                    )
+                if item.get("risk_dimensions") != expected_dimensions:
+                    problems.append(f"window[{position}] risk_dimensions mismatch")
 
         # Alarms: look each returned item up by its own (start_seq, rule_id).
         alarms = body.get("alarms", {}).get("items", [])

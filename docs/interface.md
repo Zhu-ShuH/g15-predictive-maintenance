@@ -548,8 +548,8 @@ CREATE TABLE audit_events (
 上述五张业务表、字段、主键和外键不因 JSON 信封新增或改变；
 `audit_events` 是独立只增表，不属于分片消费结果：
 
-- `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
-- 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION` 是另一个常量（当前主线值为 `1.2`，随算法接受域演进）。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
+- `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain/risk_dimensions` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。版本 2 的 `risk_dimensions` 固定为 `level_offset/vibration_strength/variability/impact/spectral`，是评分时现有未加权风险的分组，不参与健康总分。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
+- 当前新写 `features_version="2"`，读取兼容版本 1；版本 1 在查询投影中 `risk_dimensions=null`，不得用当前规则重算历史。版本 2 的五个值须为有限 `[0,1]` 或 `null`，缺组内特征时对应维度为 `null`。storage 的 `FEATURES_SCHEMA_VERSION` 与 analysis 的 `FEATURES_VERSION`（当前为 `1.2`）含义不同，不能混用。算法/规则内容的完整追溯标识仍是 #57 的开放决定。
 - `alarms.created_at` 是消费落库 UTC RFC3339 `Z` 时间，不是数据采样时刻或真值事件时间；run/device 来源于公开 Manifest。
 - `runs.status` 镜像 Manifest 状态，不代表消费已完成；完成进度由已提交 `processed_chunks` 与 Manifest 对照。相同 run 的已记录元数据/评分版本与已有窗口宽度冲突时拒收。
 - 同片同 SHA 重放跳过分析、保留已提交状态；同 ID 异 SHA 拒收。片事务成功后才推进内存状态，失败/重启从提交态恢复，不继承未提交的计算结果。
@@ -707,13 +707,16 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 
 ## 17. 本机只读网页控制台（#158 候选）
 
-本节为用户要求新增控制台后的实现候选，未替代#157/Gate0的独立评审和统计门槛。原查询响应、认证授权、分页、评分和SQLite写入契约不变。
+本节为用户要求新增控制台后的实现候选，未替代#157/Gate0的独立评审和统计门槛。原认证授权、分页和健康评分公式不变；五维诊断新增特征信封版本 2 及只读 `risk_dimensions` 投影，按 §9.1 兼容版本 1，须随最终候选接受公共接口评审。
 
 独立入口 `python -m g15.console --catalog <受控目录JSON> --runs-root <已完成运行根> --query-base-url http://127.0.0.1:<查询端口> --token-file <服务端短期token文件> --host 127.0.0.1 --port 18467`。目录是明确登记的run/device数组，页面只能选择其中资源。本机网关读取当前token，通过真实HTTP/Bearer请求现有health接口；不向页面、URL、错误或日志输出凭据，不跟随上游重定向。它不签发HTTP登录凭据，也不构成多用户生产认证。
 
 | GET/HEAD路径 | 语义 |
 |---|---|
-| `/`与显式静态资源 | 设备健康、告警与报告的原生HTML/CSS/JS；根路径可接device/run/view选择参数，不反射成HTML |
+| `/`与显式静态资源 | 设备健康、告警、维护建议与报告的原生HTML/CSS/JS；根路径可接device/run/view选择参数，不反射成HTML |
+| `/screen` | 深色大屏驾驶舱：真实健康分布、设备矩阵、趋势、维护建议和采集状态；仅接device/run选择参数 |
+| `/operations` | 浅色运营看板：真实状态指标卡、所选设备趋势与可搜索设备表；仅接device/run选择参数 |
+| `/diagnosis` | 单设备诊断工作台：已存健康分、真实告警驱动特征与证据链；仅接device/run选择参数 |
 | `/api/catalog` | 明确登记的公开资源元数据与readonly=true；不是扫描或暴露任意运行根 |
 | `/api/health?run_id=...&device_id=...&page_size=...` | 向真实查询服务发起认证GET，保持成功响应；可转发独立windows_cursor/alarms_cursor，无任意URL/路径 |
 | `/api/report?run_id=...&device_id=...` | 先用同资源真实page_size=1查询验证权限，再读固定已生成summary.json，核对run/device归属 |
@@ -722,6 +725,12 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
 
 页面最新健康分取最新已存窗口；活动告警取states，历史告警单列。趋势按真实序号/采样率绘制，只展示已读取范围，全程必须沿cursor读至耗尽才标完整。窗口翻页不消费告警伴随重放，告警翻页同理；切设备与刷新丢弃旧异步响应。报告passed=null、verifiable=false、detection_rate=null保留不可判定含义，不能显示0或通过；受控事件检出通过也必须保留误报计数。显示时间使用明确的Asia/Shanghai时区，原始报告下载不改写时间。
+
+维护建议视图只从当前已读取的告警与活动状态生成规则化检查建议，保留来源规则、窗口、级别和原始原因，可跳回来源告警。已知扣分特征映射到通用检查项，不据此诊断具体零部件故障；分页未尽、来源缺失、未知和错误状态均须明示。建议需人工确认，不保存确认状态、不创建工单、不执行设备动作，也不改变既有查询响应。
+
+大屏与运营看板复用目录、预览、活动状态、窗口和可选live状态，不新增业务API。分布、矩阵、指标卡与设备表按现有deviceStatus分类，红/黄/健康/未知/失败分别计数；不得从分数另推告警级别。矩阵选择真实设备后更新趋势和建议，运营表只按公开标识搜索。链接只携带device/run及原控制台允许的view，不携带凭据；无持续会话时采集指标为null/—，未知不补零冒充实测。
+
+诊断工作台复用已存窗口、活动状态和已加载告警。窗口新增只读 `risk_dimensions`：五个固定键 `level_offset/vibration_strength/variability/impact/spectral`，分别对应 mean、rms、std、冲击三项和频谱两项；多特征组取最大未加权风险，组内缺特征则该维度为null。此分解不参与或重算健康总分，不改变告警阈值。版本2写入并投影五维，版本1返回null且不拿当前规则重算历史。五维均有效时才绘制雷达，否则逐项显示风险/未知。证据链最多展示最近五条已加载记录并保留分页边界，可跳回报告和维护建议，不触发在线诊断、SLA、会诊或设备动作。
 
 本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。远程暴露、账户登录、设备控制和完整容量需另有实现与评审，当前界面不据此宣称。
 
