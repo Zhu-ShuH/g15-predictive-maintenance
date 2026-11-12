@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Mapping
+from datetime import datetime, timezone
 import http.client
 import io
 import ipaddress
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -118,6 +121,22 @@ def _reparse(path: Path) -> bool:
     )
 
 
+def _validate_report_identity(
+    result: bytes, pair: tuple[str, str], extension: str
+) -> None:
+    if extension == "json":
+        report = _json_object(result)
+        if report.get("run_id") != pair[0] or report.get("device_id") != pair[1]:
+            raise ValueError("report resource mismatch")
+    else:
+        lines = result.decode("utf-8").splitlines()
+        if (
+            f"| run_id | `{pair[0]}` |" not in lines
+            or f"| device_id | `{pair[1]}` |" not in lines
+        ):
+            raise ValueError("report resource mismatch")
+
+
 class ConsoleApplication:
     """Keep browser-selected resources within an explicit public catalog."""
 
@@ -126,10 +145,24 @@ class ConsoleApplication:
         catalog: Path,
         runs_root: Path,
         query_base_url: str,
-        token_file: Path,
+        token_file: Path | None,
         *,
         timeout: float = 3.0,
+        live_status_provider: Callable[[], Mapping[str, Any]] | None = None,
+        credential_provider: Callable[[], str] | None = None,
+        live_report_provider: Callable[[tuple[str, str], str], bytes] | None = None,
     ) -> None:
+        if live_status_provider is not None and not callable(live_status_provider):
+            raise ValueError("live status provider must be callable")
+        self.live_status_provider = live_status_provider
+        if credential_provider is not None and not callable(credential_provider):
+            raise ValueError("credential provider must be callable")
+        if token_file is None and credential_provider is None:
+            raise ValueError("server-side credentials are required")
+        self.credential_provider = credential_provider
+        if live_report_provider is not None and not callable(live_report_provider):
+            raise ValueError("live report provider must be callable")
+        self.live_report_provider = live_report_provider
         self.upstream = _upstream_address(query_base_url)
         self.runs_root = runs_root.resolve(strict=True)
         if not self.runs_root.is_dir():
@@ -175,6 +208,95 @@ class ConsoleApplication:
         self.token_file, self.timeout = token_file, timeout
         self.asset_root = resources.files("g15.console").joinpath("static")
 
+    def live_status(self) -> dict[str, Any]:
+        """Project only bounded public capture counters from an embedded runtime."""
+        if self.live_status_provider is None:
+            raise ConsoleError(404, "not_found")
+        try:
+            source = self.live_status_provider()
+            if source["schema_version"] != "1" or source["status"] not in {
+                "starting",
+                "running",
+                "stopping",
+                "stopped",
+                "error",
+                "limit_reached",
+            }:
+                raise ValueError("invalid live state")
+
+            def counter(value):
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError("invalid live counter")
+                return value
+
+            def stamp(value, *, optional=False):
+                if value is None and optional:
+                    return None
+                if not isinstance(value, str) or len(value) > 40:
+                    raise ValueError("invalid live timestamp")
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                if (
+                    parsed.tzinfo is None
+                    or parsed.utcoffset() != timezone.utc.utcoffset(parsed)
+                ):
+                    raise ValueError("invalid live timestamp")
+                return value
+
+            interval = source["interval_seconds"]
+            if (
+                isinstance(interval, bool)
+                or not isinstance(interval, (int, float))
+                or not math.isfinite(interval)
+                or not 0 < interval <= 60
+            ):
+                raise ValueError("invalid live interval")
+            rows = source["devices"]
+            if not isinstance(rows, list) or len(rows) != len(self.allowed):
+                raise ValueError("invalid live devices")
+            devices, seen = [], set()
+            for row in rows:
+                pair = (row["run_id"], row["device_id"])
+                if pair not in self.allowed or pair in seen:
+                    raise ValueError("invalid live resource")
+                seen.add(pair)
+                public = {"run_id": pair[0], "device_id": pair[1]}
+                for name in (
+                    "captured_samples",
+                    "processed_samples",
+                    "windows_written",
+                    "alarms_written",
+                    "queue_depth",
+                ):
+                    public[name] = counter(row[name])
+                for name in ("last_capture_at_utc", "last_commit_at_utc"):
+                    public[name] = stamp(row.get(name), optional=True)
+                public["error"] = (
+                    None
+                    if row.get("error") is None
+                    else "采集或分析失败，请查看本机运行日志。"
+                )
+                devices.append(public)
+            return {
+                "schema_version": "1",
+                "status": source["status"],
+                "session_id": _identifier(source["session_id"]),
+                "started_at_utc": stamp(source["started_at_utc"]),
+                "updated_at_utc": stamp(source["updated_at_utc"]),
+                "sample_rate_hz": counter(source["sample_rate_hz"]),
+                "window_points": counter(source["window_points"]),
+                "interval_seconds": interval,
+                "devices": devices,
+                "error": (
+                    None
+                    if source.get("error") is None
+                    else "采集或分析失败，请查看本机运行日志。"
+                ),
+            }
+        except ConsoleError:
+            raise
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            raise ConsoleError(503, "live_unavailable") from exc
+
     def resource(self, parameters: dict[str, str]) -> tuple[str, str]:
         """Resolve an exact run/device pair without accepting a path or URL."""
         pair = parameters.get("run_id", ""), parameters.get("device_id", "")
@@ -188,7 +310,11 @@ class ConsoleApplication:
         """Read the rotating server-side token and make one nonredirecting GET."""
         try:
             token = (
-                _read_bounded(self.token_file, MAX_TOKEN_BYTES).decode("ascii").strip()
+                self.credential_provider()
+                if self.credential_provider is not None
+                else _read_bounded(self.token_file, MAX_TOKEN_BYTES)
+                .decode("ascii")
+                .strip()
             )
             if not TOKEN.fullmatch(token):
                 raise ValueError("invalid credential")
@@ -283,6 +409,15 @@ class ConsoleApplication:
         body = _json_object(payload)
         if body.get("run_id") != pair[0] or body.get("device_id") != pair[1]:
             raise ConsoleError(502, "invalid_upstream_response")
+        if self.live_report_provider is not None:
+            try:
+                result = self.live_report_provider(pair, extension)
+                if not isinstance(result, bytes) or len(result) > MAX_RESPONSE_BYTES:
+                    raise ValueError("invalid live report payload")
+                _validate_report_identity(result, pair, extension)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                raise ConsoleError(502, "invalid_report") from exc
+            return 200, result
         candidate = self.runs_root / pair[0] / "reports" / f"summary.{extension}"
         try:
             for component in (candidate.parent.parent, candidate.parent, candidate):
@@ -603,6 +738,10 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             except OSError as exc:
                 raise ConsoleError(404, "not_found") from exc
             return 200, payload, content_type, extra
+        if path == "/api/live":
+            if parameters:
+                raise ConsoleError(400, "invalid_request")
+            return 200, _json_bytes(application.live_status()), content_type, extra
         if path == "/api/catalog":
             if parameters:
                 raise ConsoleError(400, "invalid_request")
@@ -679,20 +818,26 @@ def create_console_server(
     catalog: Path | str,
     runs_root: Path | str,
     query_base_url: str,
-    token_file: Path | str,
+    token_file: Path | str | None,
     *,
     host: str = "127.0.0.1",
     port: int = 0,
     max_workers: int = 16,
     request_timeout: float = 3.0,
+    live_status_provider: Callable[[], Mapping[str, Any]] | None = None,
+    credential_provider: Callable[[], str] | None = None,
+    live_report_provider: Callable[[tuple[str, str], str], bytes] | None = None,
 ) -> ConsoleHTTPServer:
     """Create, but do not start, a read-only console on numeric loopback only."""
     application = ConsoleApplication(
         Path(catalog),
         Path(runs_root),
         query_base_url,
-        Path(token_file),
+        Path(token_file) if token_file is not None else None,
         timeout=request_timeout,
+        live_status_provider=live_status_provider,
+        credential_provider=credential_provider,
+        live_report_provider=live_report_provider,
     )
     return ConsoleHTTPServer(
         application,

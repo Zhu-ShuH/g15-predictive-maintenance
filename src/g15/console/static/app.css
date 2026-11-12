@@ -1561,3 +1561,30 @@ main {
   .alarm-reason {max-width:none}
   .alarm-reason summary {color:var(--brand);font-size:11px}
 }
+
+/* Continuous simulation uses the existing flat surfaces and labeled states. */
+.live-monitor {margin:0 0 22px;padding:20px 24px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.live-heading {display:flex;align-items:center;justify-content:space-between;gap:20px}
+.live-heading h2 {font-size:16px}
+.live-heading p {margin-top:5px;font-size:11px}
+.live-totals {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:18px 0 0;padding-top:16px;border-top:1px solid var(--line)}
+.live-totals dt {color:var(--muted);font-size:11px;line-height:1.6}
+.live-totals dd {margin:6px 0 0;font-size:20px;font-weight:550;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.live-monitor .section-note {margin-top:12px}
+.selected-live-meta {margin:0;padding:12px 25px;color:var(--muted);font-size:11px;line-height:1.8;border-bottom:1px solid var(--line);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.live-update {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 25px;background:var(--brand-soft);border-bottom:1px solid var(--line)}
+.live-update p {color:var(--ink);font-size:12px;line-height:1.65}
+.device-row .device-live-count {display:block;margin-top:10px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1.7}
+.device-row .device-live-commit {font-size:10px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.device-list[data-live=true] {max-height:640px;overflow-y:auto;overscroll-behavior-y:contain}
+@media(max-width:900px) {.live-heading{align-items:flex-start}.live-heading .status-badge{white-space:normal}.live-monitor{padding:18px 20px}}
+@media(max-width:650px) {
+  .live-monitor{padding:17px;margin-bottom:17px;border-radius:10px}
+  .live-heading{display:grid;gap:12px}.live-heading .status-badge{justify-self:start}
+  .live-totals{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:15px;padding-top:15px}
+  .live-totals dd{font-size:19px}.live-totals dt{font-size:10px}
+  .selected-live-meta{padding:12px 17px;font-size:10px}
+  .live-update{align-items:flex-start;gap:10px;padding:12px 17px}
+  .live-update p{font-size:11px}.live-update .button{flex-shrink:0;font-size:11px}
+  .device-list[data-live=true]{max-height:none;overflow-y:hidden}
+}

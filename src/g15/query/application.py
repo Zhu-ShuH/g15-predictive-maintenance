@@ -130,7 +130,11 @@ class HealthQueryApplication:
         authorization_policy: AuthorizationPolicy,
         cursor_codec: CursorCodec,
         event_sink: EventSink | None = None,
+        allow_live_runs: bool = False,
     ) -> None:
+        if not isinstance(allow_live_runs, bool):
+            raise ValueError("allow_live_runs must be a bool")
+        self._allow_live_runs = allow_live_runs
         root = Path(runs_root)
         try:
             resolved_root = root.resolve(strict=True)
@@ -281,7 +285,9 @@ class HealthQueryApplication:
             )
             window_state = self._decode_cursor(windows_cursor, window_scope)
             alarm_state = self._decode_cursor(alarms_cursor, alarm_scope)
-            run_dir, database_path = self._resolve_resource(run_id, device_id)
+            run_dir, database_path, live_identity = self._resolve_resource(
+                run_id, device_id
+            )
         except ResourceNotFoundError:
             self._emit(
                 request_id=request_id,
@@ -332,6 +338,7 @@ class HealthQueryApplication:
                 alarm_scope=alarm_scope,
                 window_state=window_state,
                 alarm_state=alarm_state,
+                live_identity=live_identity,
             )
         except ResourceNotFoundError:
             self._emit(
@@ -415,8 +422,10 @@ class HealthQueryApplication:
         except CursorError as exc:
             raise InvalidQueryError("invalid cursor") from exc
 
-    def _resolve_resource(self, run_id: str, device_id: str) -> tuple[Path, Path]:
-        """Resolve only an already authorized identifier under the controlled root."""
+    def _resolve_resource(
+        self, run_id: str, device_id: str
+    ) -> tuple[Path, Path, Mapping[str, str] | None]:
+        """Resolve an authorized offline run or an explicitly opted-in live run."""
         try:
             run_dir = (self._runs_root / run_id).resolve(strict=True)
         except (OSError, RuntimeError) as exc:
@@ -424,22 +433,46 @@ class HealthQueryApplication:
         if not run_dir.is_dir() or not run_dir.is_relative_to(self._runs_root):
             raise ResourceNotFoundError("resource not found")
 
+        live_identity = None
+        live_path = run_dir / "live-session.json"
+        manifest_path = run_dir / "manifest.json"
         try:
-            manifest_path = (run_dir / "manifest.json").resolve(strict=True)
-            if not manifest_path.is_file() or not manifest_path.is_relative_to(run_dir):
-                raise ResourceNotFoundError("resource not found")
-            raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest = manifest_from_dict(raw_manifest)
+            if live_path.exists() or live_path.is_symlink():
+                if (
+                    not self._allow_live_runs
+                    or manifest_path.exists()
+                    or manifest_path.is_symlink()
+                ):
+                    raise ResourceNotFoundError("resource not found")
+                # The separate descriptor never relaxes the complete-manifest
+                # protocol. It is only accepted by an explicit live service.
+                from g15.live.schema import load_live_session
+
+                live = load_live_session(run_dir, run_id, device_id)
+                live_identity = {
+                    "schema_version": live["schema_version"],
+                    "status": "streaming",
+                    "scenario_id": live["scenario_id"],
+                    "started_at": live["started_at_utc"],
+                }
+            else:
+                manifest_path = manifest_path.resolve(strict=True)
+                if not manifest_path.is_file() or not manifest_path.is_relative_to(
+                    run_dir
+                ):
+                    raise ResourceNotFoundError("resource not found")
+                raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest = manifest_from_dict(raw_manifest)
+                if (
+                    manifest.status != ManifestStatus.COMPLETE
+                    or manifest.run_id != run_id
+                    or manifest.device_id != device_id
+                ):
+                    raise ResourceNotFoundError("resource not found")
         except ResourceNotFoundError:
             raise
-        except (OSError, ValueError, TypeError, DataContractError) as exc:
+        except (OSError, ValueError, TypeError, KeyError, DataContractError) as exc:
             raise ResourceNotFoundError("resource not found") from exc
-        if (
-            manifest.status != ManifestStatus.COMPLETE
-            or manifest.run_id != run_id
-            or manifest.device_id != device_id
-        ):
-            raise ResourceNotFoundError("resource not found")
 
         try:
             database_path = (run_dir / "artifacts" / "results.sqlite").resolve(
@@ -449,7 +482,7 @@ class HealthQueryApplication:
             raise ResourceNotFoundError("resource not found") from exc
         if not database_path.is_file() or not database_path.is_relative_to(run_dir):
             raise ResourceNotFoundError("resource not found")
-        return run_dir, database_path
+        return run_dir, database_path, live_identity
 
     def _read_snapshot(  # pylint: disable=too-many-arguments
         self,
@@ -462,19 +495,31 @@ class HealthQueryApplication:
         alarm_scope: CursorScope,
         window_state: CursorState | None,
         alarm_state: CursorState | None,
+        live_identity: Mapping[str, str] | None = None,
     ) -> _RunSnapshot:
         connection.execute("BEGIN")
         try:
             run_row = connection.execute(
                 """
-                SELECT schema_version, scoring_version, status
+                SELECT schema_version, scoring_version, status, scenario_id, started_at
                 FROM runs WHERE run_id = ?
                 """,
                 (run_id,),
             ).fetchone()
             if run_row is None:
                 raise ResourceNotFoundError("resource not found")
-            if str(run_row[2]) != ManifestStatus.COMPLETE.value:
+            if live_identity is None:
+                if str(run_row[2]) != ManifestStatus.COMPLETE.value:
+                    raise ResourceNotFoundError("resource not found")
+            elif any(
+                str(run_row[index]) != live_identity[field]
+                for index, field in (
+                    (0, "schema_version"),
+                    (2, "status"),
+                    (3, "scenario_id"),
+                    (4, "started_at"),
+                )
+            ):
                 raise ResourceNotFoundError("resource not found")
             windows, feature_versions = self._read_windows(
                 connection,

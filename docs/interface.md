@@ -724,3 +724,14 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 页面最新健康分取最新已存窗口；活动告警取states，历史告警单列。趋势按真实序号/采样率绘制，只展示已读取范围，全程必须沿cursor读至耗尽才标完整。窗口翻页不消费告警伴随重放，告警翻页同理；切设备与刷新丢弃旧异步响应。报告passed=null、verifiable=false、detection_rate=null保留不可判定含义，不能显示0或通过；受控事件检出通过也必须保留误报计数。显示时间使用明确的Asia/Shanghai时区，原始报告下载不改写时间。
 
 本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。远程暴露、账户登录、设备控制和完整容量需另有实现与评审，当前界面不据此宣称。
+
+
+## 18. 持续仿真会话增量（#160，候选）
+
+独立入口 `python -m g15.live` 提供墙钟仿真采集与有界分析调度，默认10台、256Hz、256点窗口和1秒批次。`live-session.json` 是独立schema_version=1描述，source_kind=wall_clock_simulator；不扩展或放松Manifest2.0的complete规则，两种描述并存拒绝。SQLite的streaming是运行种类，真实采集中/停止/错误/达到保护状态以持续状态为准。
+
+`HealthQueryApplication(allow_live_runs=True)`是显式opt-in，默认False隐藏持续资源。原认证授权、精确run/device、只读事务与各分页流高水位保持；live描述与数据库schema/status/scenario/start身份逐项一致。主服务不增加远程登录、多租户或写控制HTTP接口。
+
+控制台可选GET/HEAD `/api/live`，无运行时为404；公开schema_version、session_id、status、started_at_utc/updated_at_utc、sample_rate_hz/window_points/interval_seconds与每设备采集/处理样本、窗口/告警、待分析批次、最近采集/提交和固定安全错误。路径/凭据及任意运行时字段不投影。浏览器无Bearer，内嵌服务在内存按请求签发短期凭据。
+
+持续报告只描述实际提交的运行统计，verifiable=false，passed/detection_rate及无真值支持的指标为null；不计独立检出率。原离线报告路径与身份校验继续保留。详细生命周期、停止、资源保护与首次实测口径见[持续采集说明](live.md)。该候选需真实非作者Review，不改变#136 Gate0。

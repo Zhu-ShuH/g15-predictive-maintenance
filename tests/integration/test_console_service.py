@@ -608,3 +608,101 @@ def test_non_integer_or_out_of_bounds_worker_limits_never_create_a_semaphore(
 def test_explicit_upstream_port_zero_is_not_silently_changed_to_http_default():
     with pytest.raises(ValueError):
         console._upstream_address("http://127.0.0.1:0")
+
+
+def _live_public_status(service):
+    return {
+        "schema_version": "1",
+        "status": "running",
+        "session_id": "live-console-test",
+        "started_at_utc": "2026-11-12T06:00:00Z",
+        "updated_at_utc": "2026-11-12T06:00:01Z",
+        "sample_rate_hz": 256,
+        "window_points": 256,
+        "interval_seconds": 1.0,
+        "devices": [
+            {
+                **service.pair,
+                "captured_samples": 512,
+                "processed_samples": 256,
+                "windows_written": 1,
+                "alarms_written": 0,
+                "queue_depth": 1,
+                "last_capture_at_utc": "2026-11-12T06:00:01Z",
+                "last_commit_at_utc": "2026-11-12T06:00:00Z",
+                "error": None,
+            }
+        ],
+        "error": None,
+    }
+
+
+def test_live_status_is_optional_and_projects_only_registered_public_fields(service):
+    assert _request(service, "/api/live")[0] == 404
+    raw = _live_public_status(service)
+    raw["token"] = service.token
+    raw["path"] = str(service.tmp_path)
+    raw["devices"][0]["private_truth"] = "private-fixture-truth"
+    service.server.application.live_status_provider = lambda: raw
+    status, headers, payload = _request(service, "/api/live")
+    assert status == 200
+    assert json.loads(payload) == _live_public_status(service)
+    assert headers["Cache-Control"] == "no-store"
+    for secret in (service.token, str(service.tmp_path), "private-fixture-truth"):
+        assert secret not in payload.decode()
+    assert _request(service, "/api/live?path=secret")[0] == 400
+    assert _request(service, "/api/live", method="HEAD")[2] == b""
+    assert _request(service, "/api/live", method="POST")[0] == 405
+    assert (
+        _request(service, "/api/live", headers={"Origin": "https://other.invalid"})[0]
+        == 403
+    )
+    assert service.calls == []
+
+
+@pytest.mark.parametrize("counter", [True, 1.5, -1, "512"])
+def test_live_status_invalid_counters_fail_closed(service, counter):
+    raw = _live_public_status(service)
+    raw["devices"][0]["captured_samples"] = counter
+    service.server.application.live_status_provider = lambda: raw
+    status, _headers, payload = _request(service, "/api/live")
+    assert status == 503 and json.loads(payload) == {"error": "live_unavailable"}
+
+
+def test_live_status_never_reflects_runtime_errors_or_wrong_resources(service):
+    raw = _live_public_status(service)
+    raw["error"] = service.token + str(service.tmp_path)
+    raw["devices"][0]["error"] = raw["error"]
+    service.server.application.live_status_provider = lambda: raw
+    status, _headers, payload = _request(service, "/api/live")
+    assert status == 200 and service.token not in payload.decode()
+    assert str(service.tmp_path) not in payload.decode()
+    assert json.loads(payload)["error"] is not None
+    raw["devices"][0]["device_id"] = "unregistered-device"
+    assert _request(service, "/api/live")[0] == 503
+
+    def broken_provider():
+        raise OSError(service.token + str(service.tmp_path))
+
+    service.server.application.live_status_provider = broken_provider
+    status, _headers, payload = _request(service, "/api/live")
+    assert status == 503 and json.loads(payload) == {"error": "live_unavailable"}
+
+
+@pytest.mark.parametrize("interval", [True, float("nan"), float("inf"), 0, "secret"])
+def test_live_status_interval_is_a_finite_bounded_number(service, interval):
+    raw = _live_public_status(service)
+    raw["interval_seconds"] = interval
+    service.server.application.live_status_provider = lambda: raw
+    assert _request(service, "/api/live")[0] == 503
+
+
+def test_embedded_credential_provider_uses_no_browser_or_token_file(service):
+    service.server.application.token_file = None
+    service.server.application.credential_provider = lambda: service.token
+    status, _headers, payload = _request(service, _path(service, "/api/health"))
+    assert status == 200 and service.token not in payload.decode()
+    assert service.calls[-1]["authorization"] == "Bearer " + service.token
+    service.server.application.credential_provider = lambda: "expired-token"
+    status, _headers, payload = _request(service, _path(service, "/api/health"))
+    assert status == 401 and "expired-token" not in payload.decode()
