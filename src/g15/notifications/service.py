@@ -16,6 +16,10 @@ from .models import AlertSnapshot, MAX_CONTENT_BYTES, NotificationPolicy, requir
 from .transport import ProviderError, ProviderReceipt, PushPlusTransport, validate_token
 
 
+class NotificationControlError(ValueError):
+    """A fixed conflict code for a safe notification control operation."""
+
+
 class NotificationStorageError(Exception):
     """Safe storage failure code, with no local path or SQL error details."""
 
@@ -55,13 +59,22 @@ class NotificationService:
         *,
         transport=None,
         clock: Callable[[], float] | None = None,
+        message_builder: Callable = compose_message,
+        coalesce_deferred: bool = True,
+        provider_name: str = "pushplus_wechat",
     ):
+        if not callable(message_builder) or type(coalesce_deferred) is not bool:
+            raise ValueError("invalid notification message builder")
+        self._message_builder = message_builder
+        self._coalesce_deferred = coalesce_deferred
+        self._provider_name = provider_name
         self._path = Path(db_path)
         self._lock = threading.RLock()
         self._dispatch_lock = threading.Lock()
         self._clock = clock or time.time
         self._transport = transport if transport is not None else PushPlusTransport()
         self._token: str | None = None
+        self._environment_token_suppressed = False
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._thread: threading.Thread | None = None
@@ -74,6 +87,11 @@ class NotificationService:
                 connection.executescript("""
                     CREATE TABLE IF NOT EXISTS notification_settings (
                         singleton INTEGER PRIMARY KEY CHECK(singleton=1), policy_json TEXT NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS notification_preferences (
+                        singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+                        environment_token_suppressed INTEGER NOT NULL
+                            CHECK(environment_token_suppressed IN (0,1))
                     );
                     CREATE TABLE IF NOT EXISTS notification_sources (
                         run_id TEXT NOT NULL, device_id TEXT NOT NULL,
@@ -129,6 +147,10 @@ class NotificationService:
                         else NotificationPolicy()
                     )
                 )
+                preference = connection.execute(
+                    "SELECT environment_token_suppressed FROM notification_preferences WHERE singleton=1"
+                ).fetchone()
+                self._environment_token_suppressed = bool(preference and preference[0])
                 if not isinstance(self._policy, NotificationPolicy):
                     raise ValueError("invalid notification policy")
                 connection.execute(
@@ -149,6 +171,12 @@ class NotificationService:
         with self._lock:
             return self._policy
 
+    @property
+    def environment_token_suppressed(self) -> bool:
+        """Whether deletion forbids reloading a deployment-provided token on restart."""
+        with self._lock:
+            return self._environment_token_suppressed
+
     def configure(self, policy: NotificationPolicy, token: str | None = None) -> dict:
         """Persist policy; None keeps token and empty string clears it in memory."""
         if not isinstance(policy, NotificationPolicy):
@@ -158,17 +186,115 @@ class NotificationService:
         with self._lock:
             try:
                 with closing(self._connect()) as connection:
+                    connection.execute("BEGIN IMMEDIATE")
                     connection.execute(
                         "UPDATE notification_settings SET policy_json=? WHERE singleton=1",
                         (json.dumps(policy.public()),),
                     )
+                    if token:
+                        connection.execute(
+                            "INSERT INTO notification_preferences VALUES(1,0) ON CONFLICT(singleton) DO UPDATE SET environment_token_suppressed=0"
+                        )
+                    connection.commit()
             except sqlite3.Error:
                 raise NotificationStorageError("notification_storage_error") from None
             self._policy = policy
             if token is not None:
                 self._token = token or None
+            if token:
+                self._environment_token_suppressed = False
         self._wake.set()
         return self.status()
+
+    def _check_control_idle(self, connection) -> None:
+        """Reject ambiguous work rather than cancelling a possible delivery."""
+        if (
+            getattr(self._transport, "request_inflight", False)
+            or connection.execute(
+                """SELECT 1 FROM notification_outbox WHERE state IN ('sending','retry_wait')
+            OR (state='queued' AND attempts>0) LIMIT 1"""
+            ).fetchone()
+        ):
+            raise NotificationControlError("notification_busy")
+
+    @staticmethod
+    def _cancel_unattempted(connection, now, *, automatic_only=False) -> int:
+        condition = " AND kind='automatic'" if automatic_only else ""
+        cursor = connection.execute(
+            """UPDATE notification_outbox SET state='failed',
+            error_code='notification_cancelled',uncertain=0,lease_until=NULL,
+            deferred=0,updated_at=? WHERE state='queued' AND attempts=0""" + condition,
+            (now,),
+        )
+        return cursor.rowcount
+
+    def _delete_channel_settings(self, connection) -> None:
+        """Clear optional channel-specific persisted settings in the same transaction."""
+        del connection
+
+    def _forget_channel_credentials(self) -> None:
+        """Forget process-only credentials after a successful settings transaction."""
+        self._token = None
+
+    def delete_settings(self) -> dict:
+        """Disable/reset this channel and cancel only never-attempted queued work."""
+        if not self._dispatch_lock.acquire(blocking=False):
+            raise NotificationControlError("notification_busy")
+        try:
+            with self._lock:
+                policy = NotificationPolicy()
+                now = require_time(self._clock())
+                try:
+                    with closing(self._connect()) as connection:
+                        connection.execute("BEGIN IMMEDIATE")
+                        self._check_control_idle(connection)
+                        cancelled = self._cancel_unattempted(connection, now)
+                        connection.execute(
+                            "UPDATE notification_settings SET policy_json=? WHERE singleton=1",
+                            (json.dumps(policy.public()),),
+                        )
+                        self._delete_channel_settings(connection)
+                        connection.execute(
+                            "INSERT INTO notification_preferences VALUES(1,1) ON CONFLICT(singleton) DO UPDATE SET environment_token_suppressed=1"
+                        )
+                        connection.commit()
+                except sqlite3.Error:
+                    raise NotificationStorageError(
+                        "notification_storage_error"
+                    ) from None
+                self._policy = policy
+                self._environment_token_suppressed = True
+                self._forget_channel_credentials()
+                self._background_error = None
+        finally:
+            self._dispatch_lock.release()
+        self._wake.set()
+        return {"deleted": True, "cancelled_count": cancelled}
+
+    def cancel_pending_automatic(self) -> dict:
+        """Cancel paused, never-attempted automatic jobs while preserving all evidence."""
+        if not self._dispatch_lock.acquire(blocking=False):
+            raise NotificationControlError("notification_busy")
+        try:
+            with self._lock:
+                if self._policy.enabled:
+                    raise NotificationControlError("notification_enabled")
+                now = require_time(self._clock())
+                try:
+                    with closing(self._connect()) as connection:
+                        connection.execute("BEGIN IMMEDIATE")
+                        self._check_control_idle(connection)
+                        cancelled = self._cancel_unattempted(
+                            connection, now, automatic_only=True
+                        )
+                        connection.commit()
+                except sqlite3.Error:
+                    raise NotificationStorageError(
+                        "notification_storage_error"
+                    ) from None
+        finally:
+            self._dispatch_lock.release()
+        return {"cancelled_count": cancelled}
 
     def observe(self, snapshot: AlertSnapshot) -> dict:
         """Freeze new red events now; defer/coalesce delivery until the cooldown slot."""
@@ -184,7 +310,7 @@ class NotificationService:
             if snapshot.red_count < self._policy.red_threshold:
                 return {"decision": "below_threshold"}
             try:
-                message = compose_message(snapshot, self._policy.red_threshold)
+                message = self._message_builder(snapshot, self._policy.red_threshold)
             except ValueError:
                 return {
                     "decision": "content_too_large",
@@ -252,7 +378,7 @@ class NotificationService:
             AND state='queued' AND attempts=0 ORDER BY created_at LIMIT 1""",
             (snapshot.run_id, snapshot.device_id),
         ).fetchone()
-        if pending is not None:
+        if pending is not None and self._coalesce_deferred:
             # The source cursor and replacement content commit together. A dispatcher
             # claims under BEGIN IMMEDIATE, so sending/uncertain/retry jobs are immutable.
             connection.execute(
@@ -309,7 +435,7 @@ class NotificationService:
             if not snapshot.complete:
                 return {"decision": "incomplete_snapshot"}
             try:
-                message = compose_message(
+                message = self._message_builder(
                     snapshot, self._policy.red_threshold, test=True
                 )
             except ValueError:
@@ -362,7 +488,7 @@ class NotificationService:
                 now,
                 now,
                 scheduled_at,
-                int(not test and scheduled_at > now),
+                int(self._coalesce_deferred and not test and scheduled_at > now),
             ),
         )
         return (
@@ -491,7 +617,7 @@ class NotificationService:
             return {
                 "policy": self._policy.public(),
                 "configured": bool(self._token),
-                "provider": "pushplus_wechat",
+                "provider": self._provider_name,
                 "delivery_semantics": "provider_acceptance_only",
                 "counts": counts,
                 "latest": latest,
@@ -530,9 +656,6 @@ class NotificationService:
             if self._thread.is_alive():
                 self._background_error = "notification_shutdown_incomplete"
                 raise RuntimeError("notification_shutdown_incomplete")
-        if (
-            isinstance(self._transport, PushPlusTransport)
-            and self._transport.request_inflight
-        ):
+        if getattr(self._transport, "request_inflight", False):
             self._background_error = "notification_request_unfinished"
             raise RuntimeError("notification_request_unfinished")

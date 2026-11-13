@@ -32,6 +32,17 @@ _SAFE_ERRORS = frozenset(
         "provider_internal_error",
         "provider_receipt_invalid",
         "provider_request_in_progress",
+        "smtp_auth_failed",
+        "smtp_sender_rejected",
+        "smtp_recipient_rejected",
+        "smtp_tls_error",
+        "smtp_timeout",
+        "smtp_network_error",
+        "smtp_protocol_error",
+        "smtp_sender_credentials_missing",
+        "smtp_payload_invalid",
+        "smtp_payload_too_large",
+        "smtp_data_rejected",
     }
 )
 

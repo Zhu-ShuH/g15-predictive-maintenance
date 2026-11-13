@@ -18,7 +18,10 @@ import sys
 import threading
 
 from g15.console.server import create_console_server
-from g15.console.notifications import NotificationController
+from g15.console.notifications import (
+    EmailNotificationController,
+    NotificationController,
+)
 from g15.live.notification_snapshot import read_notification_snapshot
 from g15.live import LiveConfig, LiveRuntime
 from g15.live.runtime import _WriterLock
@@ -84,7 +87,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _finish_live_services(runtime, notifications) -> bool:
+def _finish_live_services(runtime, notifications, email_notifications=None) -> bool:
     """Drain commits and durably observe the final snapshot before shutdown."""
     failed = False
     if runtime is not None:
@@ -96,14 +99,16 @@ def _finish_live_services(runtime, notifications) -> bool:
         except Exception:  # pylint: disable=broad-exception-caught
             logging.exception("live session failed to stop cleanly")
             failed = True
-    if notifications is not None:
+    for control in (notifications, email_notifications):
+        if control is None:
+            continue
         try:
-            notifications.scan_once()
+            control.scan_once()
         except Exception:  # pylint: disable=broad-exception-caught
             logging.error("final notification snapshot failed")
             failed = True
         try:
-            notifications.close()
+            control.close()
         except Exception:  # pylint: disable=broad-exception-caught
             logging.error("notification service failed to stop cleanly")
             failed = True
@@ -120,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     servers, threads = [], []
     runtime = None
     notifications = None
+    email_notifications = None
     notification_lock = None
     prior_handlers = {}
     result_code = 0
@@ -214,6 +220,16 @@ def main(argv: list[str] | None = None) -> int:
             args.output_root / "notifications.sqlite",
         )
         console.application.notifications = notifications
+        email_notifications = EmailNotificationController(
+            console.application,
+            lambda pair: read_notification_snapshot(
+                runtime.runs_root,
+                *pair,
+                live_status=runtime.status_snapshot()["status"],
+            ),
+            args.output_root / "email-notifications.sqlite",
+        )
+        console.application.email_notifications = email_notifications
         servers.append(console)
         for server in servers:
             thread = threading.Thread(
@@ -225,6 +241,7 @@ def main(argv: list[str] | None = None) -> int:
             threads.append(thread)
         runtime.start()
         notifications.start()
+        email_notifications.start()
         stop_file = args.stop_file or runtime.session_root / "stop.request"
         ready = {
             "schema_version": "1",
@@ -275,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         logging.exception("local live service failed: %s", type(exc).__name__)
         result_code = 1
     finally:
-        if _finish_live_services(runtime, notifications):
+        if _finish_live_services(runtime, notifications, email_notifications):
             result_code = 1
         for index, server in enumerate(servers):
             if index < len(threads):

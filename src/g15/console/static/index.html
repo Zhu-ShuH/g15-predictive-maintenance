@@ -80,9 +80,10 @@
         </div>
       </div>
       <section id="notifications-view" class="notification-workspace" aria-label="手机通知设置" hidden>
-        <header class="notification-heading"><div><h2>红色告警 · 微信提醒</h2><p>达到阈值后，发送设备的维护建议与本次运行报告。</p></div><span id="notification-status" class="status-badge" data-level="unknown" role="status">正在读取设置</span></header>
+        <header class="notification-heading"><div><h2 id="notification-title">红色告警 · 邮件提醒</h2><p>达到阈值后，发送设备的维护建议与本次运行报告。</p></div><span id="notification-status" class="status-badge" data-level="unknown" role="status">正在读取设置</span></header>
         <div id="notification-error" class="message" data-level="error" role="alert" hidden></div>
         <div id="notification-feedback" class="notification-feedback" role="status" hidden></div>
+        <div class="notification-delivery-choice"><label for="notification-channel-choice">接收渠道<select id="notification-channel-choice"><option value="smtp163" selected>163 邮箱</option><option value="pushplus">PushPlus · 微信</option></select></label><p class="notification-note">每个渠道分别保存规则与通知记录，切换不会发送消息。</p></div>
         <div class="notification-columns">
           <form id="notification-form" class="notification-settings">
             <h3>提醒规则</h3>
@@ -91,14 +92,31 @@
               <label for="notification-threshold">触发阈值<span class="notification-input-unit"><input id="notification-threshold" name="threshold" type="number" inputmode="numeric" min="1" max="1000000" step="1" value="1" required><span>条红色事件</span></span></label>
               <label for="notification-cooldown">最短提醒间隔<span class="notification-input-unit"><input id="notification-cooldown" name="cooldown_seconds" type="number" inputmode="numeric" min="0" max="86400" step="1" value="600" required><span>秒</span></span></label>
             </div>
-            <p class="notification-note">每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；间隔内新红色事件合并提醒。</p>
+            <p id="notification-rule-help" class="notification-note">每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；按最短间隔逐封排队发送。</p>
             <div class="notification-channel">
-              <div class="notification-section-heading"><h3>接收渠道</h3><span>PushPlus · 微信</span></div>
-              <p id="notification-channel-status" class="notification-note">尚未配置 Token</p>
+              <div class="notification-section-heading"><h3>渠道设置</h3><span id="notification-channel-name">163 邮箱</span></div>
+              <p id="notification-channel-status" class="notification-note">尚未配置邮件授权码</p>
+              <div id="notification-pushplus-fields" hidden>
               <label class="notification-token-label" for="notification-token">PushPlus Token<input id="notification-token" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="8192" placeholder="输入 Token，留空保留当前配置" aria-describedby="notification-token-help"></label>
               <p id="notification-token-help" class="notification-note">Token 保存于本次服务进程，提交后清空且不回显。服务重启后，需通过环境变量配置或重新填写。</p>
+              </div>
+              <div id="notification-email-fields">
+                <label class="notification-token-label" for="notification-email-sender">发件邮箱<input id="notification-email-sender" type="email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254" placeholder="你的 163 邮箱" required></label>
+                <label class="notification-token-label" for="notification-email-recipient">收件邮箱<input id="notification-email-recipient" type="email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254" placeholder="手机上接收提醒的邮箱" required></label>
+                <label class="notification-token-label" for="notification-email-auth">163 客户端授权码<input id="notification-email-auth" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="8192" placeholder="输入授权码，留空保留当前配置" aria-describedby="notification-email-help"></label>
+                <p id="notification-email-help" class="notification-note">在 163 邮箱设置中开启 SMTP，并使用客户端授权码。授权码提交后清空且不回显，服务重启后需重新填写；更改发件邮箱时也需填写对应授权码。</p>
+                <p class="notification-note">邮件包含维护建议，以及 summary.md、summary.json 两份完整报告。更改收件邮箱仅影响之后生成的通知。</p>
+              </div>
             </div>
             <div class="notification-actions"><button id="notification-save" class="button button-secondary" type="submit" disabled>保存通知设置</button><button id="notification-refresh" class="button button-quiet" type="button">刷新通知状态</button></div>
+            <div class="notification-maintenance-actions">
+              <div class="notification-actions"><button id="notification-cancel-pending" class="button button-quiet" type="button" aria-controls="notification-confirmation" aria-expanded="false" disabled>取消待发邮件</button><button id="notification-delete-settings" class="button button-quiet notification-danger" type="button" aria-controls="notification-confirmation" aria-expanded="false" disabled>删除通知设置</button></div>
+              <p id="notification-maintenance-note" class="notification-note">取消待发邮件前，请先关闭并保存自动提醒。删除设置仅影响当前渠道。</p>
+              <div id="notification-confirmation" class="notification-confirmation" role="group" aria-labelledby="notification-confirm-title" aria-describedby="notification-confirm-description" hidden>
+                <h4 id="notification-confirm-title"></h4><p id="notification-confirm-description" class="notification-note"></p>
+                <div class="notification-actions"><button id="notification-confirm-dismiss" class="button button-quiet" type="button">返回，不作更改</button><button id="notification-confirm-action" class="button button-quiet notification-danger" type="button">确认删除设置</button></div>
+              </div>
+            </div>
             <p id="notification-checked" class="notification-note">最近检查：尚无记录</p>
           </form>
           <section class="notification-composer" aria-labelledby="notification-composer-title">
@@ -106,12 +124,12 @@
             <label class="notification-device-label" for="notification-device">预览设备<select id="notification-device" disabled><option>正在读取设备</option></select></label>
             <div class="notification-actions"><button id="notification-preview-button" class="button button-secondary" type="button" disabled>预览建议与报告</button></div>
             <p id="notification-preview-empty" class="notification-empty">选择设备并生成预览，核对维护建议与报告内容。预览不会发送消息。</p>
-            <div id="notification-preview" class="notification-preview" hidden><h4 id="notification-preview-title"></h4><p id="notification-preview-meta" class="notification-note"></p><pre id="notification-preview-body"></pre></div>
-            <div class="notification-test-actions"><button id="notification-test" class="button button-quiet" type="button" disabled>发送测试到微信</button><p id="notification-test-scope" class="notification-note">先保存 Token，才能发送真实测试消息。</p></div>
+            <div id="notification-preview" class="notification-preview" hidden><h4 id="notification-preview-title"></h4><p id="notification-preview-meta" class="notification-note"></p><p id="notification-attachments" class="notification-note" hidden></p><pre id="notification-preview-body"></pre></div>
+            <div class="notification-test-actions"><button id="notification-test" class="button button-quiet" type="button" disabled>发送测试邮件</button><p id="notification-test-scope" class="notification-note">先保存邮箱与授权码，才能发送测试邮件。</p></div>
           </section>
         </div>
         <section class="notification-records" aria-labelledby="notification-history-title">
-          <div class="notification-section-heading"><h3 id="notification-history-title">通知记录</h3><span>渠道已接收 ≠ 手机已送达</span></div>
+          <div class="notification-section-heading"><h3 id="notification-history-title">通知记录</h3><span id="notification-delivery-note">SMTP 已接收 ≠ 邮箱已收到</span></div>
           <div class="table-scroll" role="region" aria-label="通知发送记录" tabindex="0"><table class="data-table notification-table"><caption class="sr-only">红色告警提醒与手动测试的发送状态</caption><thead><tr><th scope="col">设备 / 运行</th><th scope="col">红色事件</th><th scope="col">发送状态</th><th scope="col">尝试次数</th><th scope="col">创建时间（北京时间）</th></tr></thead><tbody id="notification-history"></tbody></table></div>
           <p id="notification-history-empty" class="notification-empty">暂无通知记录。保存规则后，达到阈值的新告警会进入发送队列。</p>
         </section>

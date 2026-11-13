@@ -10,6 +10,8 @@ import threading
 from pathlib import Path
 from typing import Callable, Any
 
+from g15.notifications.service import NotificationControlError
+
 from g15.notifications import (
     AlertSnapshot,
     NotificationPolicy,
@@ -40,6 +42,7 @@ class NotificationController:
         state_path: Path,
         *,
         service: NotificationService | None = None,
+        load_environment_token: bool = True,
     ):
         if not callable(snapshot_provider):
             raise ValueError("notification source must be callable")
@@ -47,7 +50,12 @@ class NotificationController:
         self.service = (
             service if service is not None else NotificationService(state_path)
         )
-        token = os.environ.get("G15_PUSHPLUS_TOKEN")
+        token = (
+            os.environ.get("G15_PUSHPLUS_TOKEN")
+            if load_environment_token
+            and not getattr(self.service, "environment_token_suppressed", False)
+            else None
+        )
         if token:
             current = self.service.status()["policy"]
             self.service.configure(NotificationPolicy(**current), token=token)
@@ -167,6 +175,18 @@ class NotificationController:
             "notification": {"id": result["id"], "decision": "queued"},
         }
 
+    def delete_settings(self, payload: dict) -> dict:
+        """Clear this channel only, preserving attempted delivery history."""
+        if not isinstance(payload, dict) or payload:
+            raise NotificationRequestError(400, "invalid_request")
+        try:
+            result = self.service.delete_settings()
+        except NotificationControlError as exc:
+            raise NotificationRequestError(409, str(exc)) from None
+        with self._lock:
+            self._last_error, self._last_checked_at = None, None
+        return {**self.status(), **result}
+
     def status(self) -> dict:
         """Expose only a fixed, bounded projection of settings and delivery history."""
         source = self.service.status()
@@ -175,7 +195,12 @@ class NotificationController:
             checked, error = self._last_checked_at, self._last_error
         error = error or source.get("last_error")
         latest = source.get("latest", [])
-        if not error and latest and latest[0].get("state") in ("failed", "retry_wait"):
+        if (
+            not error
+            and latest
+            and latest[0].get("state") in ("failed", "retry_wait")
+            and latest[0].get("error_code") != "notification_cancelled"
+        ):
             error = latest[0].get("error_code")
         idle = False
         if source["configured"] and policy["enabled"]:
@@ -317,3 +342,100 @@ class NotificationController:
         while not self._stop.is_set():
             self.scan_once()
             self._stop.wait(2)
+
+
+class EmailNotificationController(NotificationController):
+    """Independent 163 mail settings, previews and explicit tests over one snapshot."""
+
+    def __init__(self, application, snapshot_provider, state_path, *, service=None):
+        from g15.notifications.smtp import EmailNotificationService
+
+        super().__init__(
+            application,
+            snapshot_provider,
+            state_path,
+            service=(
+                service if service is not None else EmailNotificationService(state_path)
+            ),
+            load_environment_token=False,
+        )
+
+    def preview(self, pair: tuple[str, str]) -> dict:
+        """Preview complete advice/report text and exact UTF-8 attachment sizes."""
+        snapshot = self._snapshot(pair)
+        policy = self.service.status()["policy"]
+        message = compose_message(snapshot, policy["red_threshold"])
+        report_json = json.dumps(
+            dict(snapshot.report_json),
+            ensure_ascii=False,
+            sort_keys=True,
+            allow_nan=False,
+        )
+        return {
+            **message,
+            "red_count": snapshot.red_count,
+            "advice": list(snapshot.advice),
+            "report_generated_at": snapshot.report_json.get("generated_at_utc"),
+            "triggered": snapshot.red_count >= policy["red_threshold"],
+            "run_id": snapshot.run_id,
+            "device_id": snapshot.device_id,
+            "attachments": [
+                {
+                    "filename": "summary.md",
+                    "content_type": "text/markdown; charset=utf-8",
+                    "bytes": len(snapshot.report_markdown.encode("utf-8")),
+                },
+                {
+                    "filename": "summary.json",
+                    "content_type": "application/json; charset=utf-8",
+                    "bytes": len(report_json.encode("utf-8")),
+                },
+            ],
+        }
+
+    def configure(self, payload: dict) -> dict:
+        """Save route and policy atomically; a local authorization code stays in memory."""
+        required = {"enabled", "threshold", "cooldown_seconds", "sender", "recipient"}
+        if (
+            not isinstance(payload, dict)
+            or set(payload) - (required | {"auth_code", "channel"})
+            or not required <= set(payload)
+            or payload.get("channel", "smtp163") != "smtp163"
+            or ("auth_code" in payload and not isinstance(payload["auth_code"], str))
+        ):
+            raise NotificationRequestError(400, "invalid_request")
+        try:
+            policy = NotificationPolicy(
+                enabled=payload["enabled"],
+                red_threshold=payload["threshold"],
+                cooldown_seconds=payload["cooldown_seconds"],
+            )
+            self.service.configure_email(
+                policy,
+                sender=payload["sender"],
+                recipient=payload["recipient"],
+                auth_code=payload.get("auth_code"),
+            )
+        except ValueError as exc:
+            code = (
+                "not_configured" if str(exc) == "not_configured" else "invalid_request"
+            )
+            raise NotificationRequestError(400, code) from None
+        return self.status()
+
+    def cancel_pending(self, payload: dict) -> dict:
+        """Cancel paused automatic mail without clearing its current settings."""
+        if not isinstance(payload, dict) or payload:
+            raise NotificationRequestError(400, "invalid_request")
+        try:
+            result = self.service.cancel_pending_automatic()
+        except NotificationControlError as exc:
+            raise NotificationRequestError(409, str(exc)) from None
+        return {**self.status(), **result}
+
+    def status(self) -> dict:
+        """Report SMTP acceptance only and no authorization code or credential handle."""
+        result = super().status()
+        result["settings"].update(self.service.email_settings())
+        result["delivery_scope"] = "smtp_accepted_not_handset_delivery"
+        return result

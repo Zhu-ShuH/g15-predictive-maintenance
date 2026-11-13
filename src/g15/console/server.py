@@ -220,6 +220,7 @@ class ConsoleApplication:
         self.token_file, self.timeout = token_file, timeout
         self.asset_root = resources.files("g15.console").joinpath("static")
         self.notifications = None
+        self.email_notifications = None
 
     def live_status(self) -> dict[str, Any]:
         """Project only bounded public capture counters from an embedded runtime."""
@@ -625,7 +626,15 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802  # pylint: disable=invalid-name
         """Allow only same-origin explicit notification settings or test actions."""
-        if self.path not in ("/api/notifications/settings", "/api/notifications/test"):
+        if self.path not in (
+            "/api/notifications/settings",
+            "/api/notifications/test",
+            "/api/email-notifications/settings",
+            "/api/email-notifications/test",
+            "/api/notifications/settings/delete",
+            "/api/email-notifications/settings/delete",
+            "/api/email-notifications/pending/cancel",
+        ):
             self._not_allowed()
             return
         try:
@@ -667,10 +676,18 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             )
             if not isinstance(payload, dict):
                 raise ConsoleError(400, "invalid_request")
-            control = self.server.application.notifications
+            control = (
+                getattr(self.server.application, "email_notifications", None)
+                if self.path.startswith("/api/email-notifications/")
+                else self.server.application.notifications
+            )
             if control is None:
                 raise ConsoleError(503, "notifications_unavailable")
-            if self.path.endswith("/settings"):
+            if self.path.endswith("/settings/delete"):
+                result, status = control.delete_settings(payload), 200
+            elif self.path.endswith("/pending/cancel"):
+                result, status = control.cancel_pending(payload), 200
+            elif self.path.endswith("/settings"):
                 result, status = control.configure(payload), 200
             else:
                 if set(payload) != {"run_id", "device_id"}:
@@ -822,8 +839,17 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             except OSError as exc:
                 raise ConsoleError(404, "not_found") from exc
             return 200, payload, content_type, extra
-        if path in ("/api/notifications", "/api/notifications/preview"):
-            control = application.notifications
+        if path in (
+            "/api/notifications",
+            "/api/notifications/preview",
+            "/api/email-notifications",
+            "/api/email-notifications/preview",
+        ):
+            control = (
+                getattr(application, "email_notifications", None)
+                if path.startswith("/api/email-notifications")
+                else application.notifications
+            )
             if control is None:
                 raise ConsoleError(503, "notifications_unavailable")
             try:
