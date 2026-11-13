@@ -241,6 +241,9 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     const email = channel === "smtp163", pending = notificationTestPending(state);
     if (state.settings && !dirty[channel]) fill(state.settings);
     $("notification-title").textContent = email ? "红色告警 · 邮件提醒" : "红色告警 · 微信提醒";
+    $("notification-rule-help").textContent = email
+      ? "每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；按最短间隔逐封排队发送。"
+      : "每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；间隔内新红色事件合并提醒。";
     $("notification-channel-choice").value = channel;
     $("notification-channel-choice").disabled = state.saving || state.testing;
     $("notification-channel-name").textContent = email ? "163 邮箱" : "PushPlus · 微信";

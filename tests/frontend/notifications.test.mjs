@@ -267,6 +267,8 @@ test("channel switching keeps independent settings, drafts and password fields w
   mounted.sync({ view: "notifications", selected: A, devices: [A] }); await mounted.refresh();
   const $ = doc.getElementById;
   assert.equal($("notification-channel-choice").value, "smtp163");
+  assert.equal($("notification-rule-help").textContent.includes("逐封排队发送"), true);
+  assert.equal($("notification-rule-help").textContent.includes("合并"), false);
   assert.equal(pushCalls, 0);
   $("notification-threshold").value = "12";
   $("notification-email-recipient").value = "draft-recipient@example.com";
@@ -276,10 +278,13 @@ test("channel switching keeps independent settings, drafts and password fields w
   assert.equal($("notification-email-recipient").value, "draft-recipient@example.com");
   $("notification-channel-choice").value = "pushplus"; await $("notification-channel-choice").emit("change"); await mounted.refresh();
   assert.equal($("notification-threshold").value, 9);
+  assert.equal($("notification-rule-help").textContent.includes("间隔内新红色事件合并提醒"), true);
   assert.equal($("notification-email-fields").hidden, true);
   assert.equal($("notification-email-auth").disabled, true);
   $("notification-channel-choice").value = "smtp163"; await $("notification-channel-choice").emit("change"); await mounted.refresh();
   assert.equal($("notification-threshold").value, "12");
+  assert.equal($("notification-rule-help").textContent.includes("逐封排队发送"), true);
+  assert.equal($("notification-rule-help").textContent.includes("合并"), false);
   assert.equal($("notification-email-recipient").value, "draft-recipient@example.com");
   assert.equal($("notification-email-auth").value, "unsaved-private-code");
   assert.equal($("notification-test").disabled, true);

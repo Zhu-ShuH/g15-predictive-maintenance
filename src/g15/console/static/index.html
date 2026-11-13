@@ -92,7 +92,7 @@
               <label for="notification-threshold">触发阈值<span class="notification-input-unit"><input id="notification-threshold" name="threshold" type="number" inputmode="numeric" min="1" max="1000000" step="1" value="1" required><span>条红色事件</span></span></label>
               <label for="notification-cooldown">最短提醒间隔<span class="notification-input-unit"><input id="notification-cooldown" name="cooldown_seconds" type="number" inputmode="numeric" min="0" max="86400" step="1" value="600" required><span>秒</span></span></label>
             </div>
-            <p class="notification-note">每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；间隔内新红色事件合并提醒。</p>
+            <p id="notification-rule-help" class="notification-note">每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；按最短间隔逐封排队发送。</p>
             <div class="notification-channel">
               <div class="notification-section-heading"><h3>渠道设置</h3><span id="notification-channel-name">163 邮箱</span></div>
               <p id="notification-channel-status" class="notification-note">尚未配置邮件授权码</p>
