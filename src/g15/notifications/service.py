@@ -55,7 +55,15 @@ class NotificationService:
         *,
         transport=None,
         clock: Callable[[], float] | None = None,
+        message_builder: Callable = compose_message,
+        coalesce_deferred: bool = True,
+        provider_name: str = "pushplus_wechat",
     ):
+        if not callable(message_builder) or type(coalesce_deferred) is not bool:
+            raise ValueError("invalid notification message builder")
+        self._message_builder = message_builder
+        self._coalesce_deferred = coalesce_deferred
+        self._provider_name = provider_name
         self._path = Path(db_path)
         self._lock = threading.RLock()
         self._dispatch_lock = threading.Lock()
@@ -184,7 +192,7 @@ class NotificationService:
             if snapshot.red_count < self._policy.red_threshold:
                 return {"decision": "below_threshold"}
             try:
-                message = compose_message(snapshot, self._policy.red_threshold)
+                message = self._message_builder(snapshot, self._policy.red_threshold)
             except ValueError:
                 return {
                     "decision": "content_too_large",
@@ -252,7 +260,7 @@ class NotificationService:
             AND state='queued' AND attempts=0 ORDER BY created_at LIMIT 1""",
             (snapshot.run_id, snapshot.device_id),
         ).fetchone()
-        if pending is not None:
+        if pending is not None and self._coalesce_deferred:
             # The source cursor and replacement content commit together. A dispatcher
             # claims under BEGIN IMMEDIATE, so sending/uncertain/retry jobs are immutable.
             connection.execute(
@@ -309,7 +317,7 @@ class NotificationService:
             if not snapshot.complete:
                 return {"decision": "incomplete_snapshot"}
             try:
-                message = compose_message(
+                message = self._message_builder(
                     snapshot, self._policy.red_threshold, test=True
                 )
             except ValueError:
@@ -362,7 +370,7 @@ class NotificationService:
                 now,
                 now,
                 scheduled_at,
-                int(not test and scheduled_at > now),
+                int(self._coalesce_deferred and not test and scheduled_at > now),
             ),
         )
         return (
@@ -491,7 +499,7 @@ class NotificationService:
             return {
                 "policy": self._policy.public(),
                 "configured": bool(self._token),
-                "provider": "pushplus_wechat",
+                "provider": self._provider_name,
                 "delivery_semantics": "provider_acceptance_only",
                 "counts": counts,
                 "latest": latest,
@@ -530,9 +538,6 @@ class NotificationService:
             if self._thread.is_alive():
                 self._background_error = "notification_shutdown_incomplete"
                 raise RuntimeError("notification_shutdown_incomplete")
-        if (
-            isinstance(self._transport, PushPlusTransport)
-            and self._transport.request_inflight
-        ):
+        if getattr(self._transport, "request_inflight", False):
             self._background_error = "notification_request_unfinished"
             raise RuntimeError("notification_request_unfinished")

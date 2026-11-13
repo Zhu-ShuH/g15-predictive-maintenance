@@ -762,3 +762,19 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 - 重启恢复与响应丢失可能造成至少一次重复尝试，不承诺严格仅一次手机送达。通知记录保留当时阈值、尝试数及不确定标记；自动通知关闭时暂停自动任务，但显式测试仍可发送。
 
 使用和限制见[手机通知说明](notifications.md)。该增量需真实非作者Review，不能以内部测试或手机消息替代独立故障/容量验收。
+
+
+## 20. 163 邮箱通知增量（用户直接要求，候选待评审）
+
+邮箱渠道与§19的PushPlus配置、来源游标和队列独立，原微信默认行为不变。它使用固定`smtp.163.com:465`和证书/主机名验证的TLS，通过本人163邮箱客户端授权码提交完整邮件。邮件服务器接收不代表收件箱或手机送达；`delivery_scope=smtp_accepted_not_handset_delivery`，实际收件需本人确认。该功能不开放远程网页登录、不执行设备动作、不改变评分、告警阈值、真值规则或Gate0门槛。
+
+- GET/HEAD `/api/email-notifications`仅返回非秘密设置、configured、监测状态与有界通知历史；授权码、内部凭据句柄和邮件正文不回显。默认关闭、阈值1条、间隔600秒，未提供邮箱时sender/recipient为空字符串。
+- GET/HEAD `/api/email-notifications/preview?run_id=...&device_id=...`先通过原真实HTTP查询授权和精确资源归属检查，再使用同一完整只读快照生成title、markdown、advice、red_count、报告时间及attachments元数据；附件每项为filename/content_type/bytes。预览不入队、不发送，不读private_truth。正文含全部建议和完整报告；附件为summary.md及summary.json，分别保留原Markdown UTF-8字节和同快照JSON的完整规范序列化字节。
+- POST `/api/email-notifications/settings`必填enabled/threshold/cooldown_seconds/sender/recipient，可选auth_code/channel；channel仅允许smtp163，sender必须为单个ASCII @163.com邮箱，recipient为单个ASCII邮箱，拒绝显示名、多地址、换行及自定义邮件头。策略数值范围与§19相同。auth_code仅在内存保存：缺省只保留同一sender的现有授权码，空字符串清除，换sender不继承旧授权码；更换已有sender而省略授权码时拒绝保存，明确空串且关闭自动提醒时可保存未配置的新地址。响应不回显。
+- POST `/api/email-notifications/test`仅接受精确run_id/device_id，渠道已配置、来源获授权且完整任务持久入队后才返回202；未配置、源失败、超限和队列满均明确报错，不误报已发送。测试不消耗自动去重或冷却，自动开关关闭时仍可显式测试。
+- 两条POST继承本机Host/Origin/Fetch-Site与严格请求边界：唯一同源Origin、`X-G15-Console-Action: notifications`、application/json、唯一非零且至多4096字节的Content-Length；拒绝Transfer-Encoding、Expect、重复JSON键、未知字段和重复参数。其他写入不开放。
+- 每个run/device累计真实红色边沿事件达到阈值且出现新事件时触发。独立email-notifications.sqlite原子保存来源游标与冻结任务；同一输出目录发送进程互斥。邮箱任务不合并，冷却仅延迟；已入队sender、recipient、正文、附件与Message-ID在重试和重启后保持不变。换recipient不重路由旧任务，当前没有原sender凭据时明确失败，不能用新账号发送旧邮件；同sender授权码可轮换。
+- 授权码不写SQLite、日志、报告、URL、静态资源、localStorage或返回体。进程重启保留非秘密配置与任务，但须本人重新配置授权码才能继续发信。后台监测和发送独立于浏览器及采集分析线程；不宣称跨设备事务。
+- 传输主机/端口固定、TLS校验不可关闭，正文/MIME/响应/队列/重试/worker均有界。绝对期限覆盖DNS、TLS、认证和DATA阶段；迟返DNS不能继续发送，至多一个在途请求worker，未闭合不能声称停机完成。DATA后断线或确认丢失须标记uncertain；默认至多3次有界退避重试，不承诺严格仅一次或手机送达。报告超限整封失败，不截断或只发本机链接。
+
+配置、实测确认与故障边界见[163邮箱通知](smtp_notifications.md)。假SMTP和内部复核不能代替真实邮箱/手机收件及独立故障或容量验收。

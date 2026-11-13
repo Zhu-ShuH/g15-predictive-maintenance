@@ -18,7 +18,7 @@
 .notification-fields>label,.notification-token-label,.notification-device-label {display:flex;flex-direction:column;gap:9px;font-size:13px;line-height:1.5}
 .notification-input-unit {display:flex;align-items:center;gap:9px;min-width:0}
 .notification-input-unit>span {color:var(--muted);font-size:12px;white-space:nowrap}
-.notification-workspace input[type=number],.notification-workspace input[type=password],.notification-workspace select {
+.notification-workspace input[type=number],.notification-workspace input[type=password],.notification-workspace input[type=email],.notification-workspace select {
   min-width:0;width:100%;height:40px;border:1px solid var(--cw-silver);border-radius:0;padding:8px 10px;
   background:#010101;color:var(--ink);caret-color:var(--cw-mint);font:inherit
 }
@@ -71,4 +71,15 @@
   }
   .main-shell:has(#notifications-view:not([hidden])) .update-time {flex:1 1 180px;white-space:normal}
   .main-shell:has(#notifications-view:not([hidden])) .refresh-group .button {flex-shrink:0}
+}
+
+.notification-delivery-choice {display:flex;align-items:flex-end;gap:20px;margin-top:22px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.notification-delivery-choice>label {display:flex;flex-direction:column;gap:9px;font-size:13px;line-height:1.5;flex:0 1 220px;min-width:150px}
+.notification-delivery-choice>.notification-note {flex:1;max-width:58ch}
+#notification-email-fields>.notification-note,#notification-pushplus-fields>.notification-note {margin-top:12px}
+#notification-attachments {color:var(--cw-mint)}
+@media(max-width:650px) {
+  .notification-delivery-choice {align-items:stretch;flex-direction:column;gap:12px}
+  .notification-delivery-choice>label {flex-basis:auto}
+  .notification-delivery-choice select,.notification-workspace input[type=email],.notification-workspace input[type=password] {min-height:44px}
 }
