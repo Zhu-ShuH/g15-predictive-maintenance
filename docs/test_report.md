@@ -420,24 +420,39 @@ Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
 
 ## 11 #155 种子方法审查补正与收尾边界（2026-11-13）
 
-本节为文档核查增量，基于 #155 的 `9a6c15eecefd69795e08bfe044d5dafb19c318ff`；不把旧报告或其他分支的实测当作该提交的新测试结果。C4 最新复核指出历史日志中的 `20261023`、`20261024` 亦已暴露。已按 [测试计划 §9.4](test_plan.md) 补齐排除集 `{7, 42, 20261016, 20261023, 20261024, 20261025}`，并逐项登记文件、日志行与暴露事实。历史批次 exit 5 与失败记录继续保留；日志中的单条 passed 不能冒充独立验收通过。
+本节为文档核查增量，基于 #155 的 `9a6c15eecefd69795e08bfe044d5dafb19c318ff`；不把旧报告或其他分支的实测当作该提交的新测试结果。该轮 C4 复核指出历史日志中的 `20261023`、`20261024` 亦已暴露。当时按 [测试计划 §9.4](test_plan.md) 补齐限定来源排除集，并逐项登记文件、日志行与暴露事实；该轮范围不含 tests，已由下述 §11.3 的全仓静态核查取代，当前值表只维护在测试计划。历史批次 exit 5 与失败记录继续保留；日志中的单条 passed 不能冒充独立验收通过。
 
-### 11.1 本次实际核查
+### 11.1 ea5b25c 提交时的实际核查（历史范围）
 
 | 核查 | 范围与结果 |
 |---|---|
-| 全量来源文本静态扫描 | 对 `git ls-files configs docs/review_evidence` 的已跟踪文本（包括 .log）提取 seed 数值，并人工核对配置字段与完整日志；去重恰为上述六值。没有调用随机数、生成器或业务运行。 |
+| 全量来源文本静态扫描 | 对 `git ls-files configs docs/review_evidence` 的已跟踪文本（包括 .log）提取 seed 数值，并人工核对配置字段与完整日志；当时在该限定来源内去重为六值；这不是全仓结论，见 §11.3。没有调用随机数、生成器或业务运行。 |
 | 文档引用 | `python tools/check_doc_references.py --root .`：0 issue(s)，exit 0；检查本地文件引用，不验证远端网页或 Markdown 标题锚点。 |
 | 基线保护 | `git diff --exit-code -- docs/adr/0006-independent-validation-baseline.json`：exit 0；按 Git 属性规范化的工作副本 blob 与 HEAD 同为 `a1e4d5346ca879f932cb31305a161d1f573e5622`。首次直接比较 Windows 工作副本与 Git 原始字节因 CRLF/LF 差异断言失败；未改文件，以 Git 规范化 blob 和 diff 复核，不冒称原始字节相同。 |
-| 变更检查 | `git diff --check`：exit 0。本轮只改测试计划和本报告；源码、配置、基线及历史证据未改。 |
+| 变更检查 | `git diff --check`：exit 0。该次提交只改测试计划和本报告（整个 PR 还包含原 requirements.md 的 N02 改动）；源码、配置、基线及历史证据未改。 |
 | 未执行 | 本轮未运行全量 pytest、Black/Pylint、性能/压力或双 Linux 测试；属于纯文档修正，不能把历史成绩或后续 CI 等同本地复测。 |
 
 基线仍为 `proposed_unfrozen`；`new_holdout_seed=null`、`integrated_validation_commit=null`、`new_holdout_generated=false`、`rules_frozen=false`。本轮没有选 seed、冻结、生成或运行保留集。方法修正仍须真实非作者复核；A 参与编辑不计独立批准，#56→#9 的执行顺序不变。
 
 ### 11.2 与容量收尾报告的边界
 
-本分支 §10.1–§10.4 是早期低负载历史记录，不代表最新 Gate0；完整后续证据见 [版本固定的容量报告 §10.11–§10.13](https://github.com/Zhu-ShuH/g15-predictive-maintenance/blob/36f67fcc553c532233c9ab0b8f429cd09f629dee/docs/test_report.md)。链接报告与本轮 #155 文档检查分属不同源码来源，不覆盖、不拼接成一次测试。
+本分支 §10.1–§10.4 是早期低负载历史记录，不代表最新 Gate0；完整后续证据见 [版本固定的容量报告 §10.11–§10.13](https://github.com/Zhu-ShuH/g15-predictive-maintenance/blob/36f67fcc553c532233c9ab0b8f429cd09f629dee/docs/test_report.md)。该快照来自 #165：#165 已合入 #157 的 `fix/136-raw-evidence-coverage` 分支，不是合入 main，也不是 #155 当前基线已有章节。固定 SHA 链接用于来源定位，不能代替最终集成后的相对引用核对；远端链接不在本地 docrefs 检查范围。链接报告与本轮 #155 文档检查分属不同源码来源，不覆盖、不拼接成一次测试。
 
 - 正式三平台容量观察源码为 `3ddf12d00c913e02217b5ebced90fc70b9ac723d`：2903 波、45510 个主请求，HTTP 错误 0；RHEL 的 10 档 2 波、50 档 1 波未达到既定重叠目标。**完整 Gate0 仍未通过**，不能把 HTTP 无错误或 2900/2903 达峰比例写成原 AND 判据通过。
 - 后续客户端 READ-only polling 修正和有界 Windows 验证不追认上述 3 个未达波，也不等同新的完整三平台一分钟验证。旧失败、失败来源和限制保留。
 - **十万用户同时查询仍未验证**；本轮不升档、不放宽门槛、不继续追加压测。容量实现与其他 PR 等待独立评审，本文不宣告合并、验收通过或项目全部完成。
+
+
+### 11.3 C4 范围复核后的补正（2026-11-13，基于 ea5b25c）
+
+C4 指出 §9.4「全部已跟踪文本」与 §11.1 实际只扫两个目录不一致，本轮选择保守的全仓范围，不收窄来源规避公开测试值。静态核查又发现只按 seed 键值/赋值检索仍会漏函数位置参数，因此本轮结论不是照抄九值初筛。当前排除清单及逐项来源以 [测试计划 §9.4](test_plan.md) 为唯一维护点，本文不重复列表。
+
+| 实际检查 | 结果与边界 |
+|---|---|
+| 全仓文本 | `git ls-files -z` 在精确父提交 ea5b25c 列出 310 文件；310 均可 UTF-8 解码，无跳过；不设扩展名白名单。正则 `seed\W{0,3}[:=]\s*(\d{1,12})` 只作初筛，得到九值，不称语义穷举。 |
+| 位置参数与边界复核 | 静态 `ast.parse` 已跟踪 Python 文件，查找参数名 seed 的函数声明及对应调用；核对 noise.py 的 `stream_entropy`/`block_generator`/`standard_normal`/`gaussian_noise` 首参数，并查 `default_rng`、配置赋值及测试参数化。位置参数补四个域内公开值；合计十三值与计划表一致。负值/超范围表达式单独归类，不执行 AST、测试或 RNG。源码静态可见使用不等于本轮运行成功。 |
+| 文档门禁 | `python tools/check_doc_references.py --root .`：0 issue，exit 0；`git diff --check`：exit 0。 |
+| 基线保护 | 基线 blob 仍为 §11.1 记录值，`git diff --exit-code -- docs/adr/0006-independent-validation-baseline.json` exit 0；未修改 seed、集成 SHA、冻结或生成标志。 |
+| 范围 | 本次提交只改 test_plan.md/test_report.md；整个 PR 仍含此前 requirements.md。未改 #157 或任何实现、测试、历史证据；本地未跑 pytest、Black/Pylint、性能或双 Linux 测试。CI 按最终 HEAD 单列，不代替方法批准。 |
+
+扫描只能证明该提交中已识别的静态来源，不能证明不存在动态生成或仓外接触。冻结前仍须在准确集成版本重算、解决未知来源、取得全部本人接触声明与真实非作者 Review。本轮不抽选、不冻结、不生成或运行新保留集。
