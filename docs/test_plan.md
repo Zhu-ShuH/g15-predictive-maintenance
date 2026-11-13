@@ -408,3 +408,20 @@ A的D0候选判定阶段为server_received→response_completed；executing独�
 最终实现先固定新SHA、实际selector backend、命令、环境与源码映射，完成Windows/Ubuntu/RHEL exact-source全量回归和静态检查。之后沿用`python -m tools.query_load.observation_runner --concurrent <10或50> --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <新库外目录>`，三平台10→50序贯各一次；观测期间无并行测试/负载/大文件分析，全部失败/未达波/退出码保留，不在同一来源择优重跑。本节本身不执行或报告这些步骤。
 
 每波真实在途及对应授权用户目标继续AND，累计至少60有效秒；server候选为received→response_completed，executing单列。queued null/application_queue absent、backlog未测及条件N/A、cache uncontrolled和仅socket HTTP应用字节的边界不变，不声称稳态/物理链路余量或资源整体充分。旧clean dba六档及Ubuntu10 wave-00024 exit1、T17767个未达和开发/CI失败全留；完整Gate0仍需B1/C4真实Review与A对新SHA另判。
+
+### 11.11 观测反压修订的可证伪验证
+
+范围见interface §17.5。基线0d97的外置仪表化RHEL10/50各10有效秒仅用于定位observer锁/IPC链，runtime hooks和其source/script哈希分列；不作为正式成绩，不追认3dd历史三miss，不把墙钟减线程CPU指定为GIL原因。
+
+| 反例 | 必须观察的行为 |
+|---|---|
+| 慢/阻塞证据consumer | 实际HTTP仍可完整read/decode/terminal；server事件发布在所有handler结束后；不能持handler condition等Pipe.send |
+| completion journal | emit只冻结Npairs；all-terminal后才创建writer；原legacy默认和异常留存不退化 |
+| kill-before-seal | 真子进程强退后recover完整commit前缀及真实partial边界；无seal/fsync独立证明则incomplete/qualityfalse |
+| seal后/部分发布退出 | 原spool已封存且可独立校SHA；缺控制回复不丢已知原始记录，不宣称完整成功 |
+| overflow/late/写入失败 | 原帧、拒帧、future合法帧有序可恢复；部分写保留、不覆盖/reset；坏输入拒绝且incomplete |
+| v3双媒介原始证据 | client raw与server spool逐帧hash/序号/Counter一致，非重复复制；network字节/请求ID/原clock/oracle不变 |
+| 预算 | 将全部spool/emergency/失败文件实际逻辑字节并入16MiB wave与1GiB总预算；小波/总量耗尽保留非正式/失败标志 |
+| 后置观测资源 | publication的PID/时钟/CPU和端点快照原发可核；不跨进程减钟、不隐去成本 |
+
+冻结修订SHA后全新检出，Windows/Ubuntu/RHEL完整pytest、Black、Pylint和docrefs；之后按Windows10→50→Ubuntu10→50→RHEL10→50串行各一次，用原CLI --seconds60/--workers64/--max-waves10000/--byte-budget1073741824。观察期间不并行测试/压测/大文件归档；每档全部raw/辅助原始/报告/index及未达保存，旧source不重测择优。

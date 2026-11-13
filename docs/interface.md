@@ -753,3 +753,17 @@ A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次H
 最重要的可证伪反例：A的响应已read-ready，B仍短写/EAGAIN，A必须先完成read、JSON解码及complete，再发生B的发送完成。“先发完全部再读”或“等writer落盘再complete”必须被负例击穿；完整body不能等EOF。fragment、cutoff、HTTP错误、timeout、reset、中断、journal失败及跨两波守恒见test_plan §11.10。
 
 本候选独立于clean`dba4dce9`的线程发起实现/工作负载，须固定新SHA后另作同SHA三平台回归和逐档观察。原dba六档、Ubuntu10 wave-00024真实server9/exit1及T17767个未达波全部保留。AND、10/50、累计有效60秒、received→response_completed候选和executing单列不变；queued仍null/absent且仅有条件N/A，backlog未测、cache uncontrolled和非物理网络边界不变。本节不产生新成绩或批准，精确新head仍须B1/C4真实Review及A门禁裁定。
+
+### 17.5 观测反压隔离与进程崩溃可恢复证据（#136后续工具修订）
+
+本节仅修tools观测路径，不改HTTP服务、认证/授权/SQL、API响应、10/50、实际请求阶段、5秒截止或所有波次AND。旧3dd三条RHEL未达和其后的短诊断保持原结论。
+
+- 客户端终态仍在完整read/decode后立即记录；主波次的N有界completion journal只冻结已完成pairs，所有HTTP终态后才启动落盘，成本计入墙钟/空档和客户端采样，不延后read或complete。
+- server observer在HTTP期间将原发PID/ns及事件序列写入本wave独占、有界的file-backed mmap。正常append不调用Pipe.send、file write/flush/fsync，不创建后台publisher；condition仅保护handler状态与原事件列表。JSON冻结、锁、内存复制及可能的page fault仍有成本，不宣称零开销或硬实时。
+- 每帧包含长度、序号、SHA和最后写入的commit marker。单个进程被SIGKILL而OS/page cache继续运行时，可独立恢复已提交前缀；最后未完成帧保留并标incomplete，不补事件。这不是断电、内核崩溃或介质撕裂保证。单凭seal字节不能独立证明fsync成功。
+- 实际HTTP handler全部返回/连接闭合后，停止并join资源采样，加入最终network和end事件，seal/flush/fsync后才经原IPC发布。共同波界不等待额外请求或压响应；事件仍用采集时钟，不以发布时刻回填received/completed。IPC超时/破管/中断前已提交证据由确定文件名恢复，不依赖尚未到达的finished回复。
+- v3证据把客户端原始记录保存在raw.ndjson，服务端transport/application/resource/network/marker原始记录保存在commit-framed spool；正常不重复写两份服务器原始记录。父进程独立核文件SHA/大小、帧与交付/控制snapshot/请求ID/字节及资源守恒。丢帧、篡改、跨wave、缺seal/fsync回执、partial或异常均quality=false。失败路径另保合法拒帧与之后已知帧；不可JSON/敏感输入只保安全拒因并明确incomplete，不泄凭据或假完整。
+- spool、emergency及其他失败证据的实际字节均进入原16MiB wave和1GiB总预算，不能只算raw或隐藏稀疏文件逻辑大小。封存后迟到事件为sticky失败，不进入下一波、不被reset清除。正常回收无后台publisher线程；文件与mmap生命周期及异常关闭另验。
+- 证据封存/发布在请求有效跨度之外，其真实PID/单调时钟、CPU/RSS/FD/handle等端点快照单列为observer publication，不能从产品请求延迟偷扣成本或冒充零开销。核心资源采样止于HTTP与采样闭合，后置观测成本另计；两者均保留原始数值与采样限制。
+
+新source须先完成真实回归及同SHA三平台10/50正式观察，各档一次且每档至少60有效秒；失败全保留，不改门槛、不择优重跑。文件格式变化不等于Gate0通过，阶段/queued条件N/A、资源/cache边界和最终精确head仍待真实非作者Review。

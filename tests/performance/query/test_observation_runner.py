@@ -5,6 +5,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import multiprocessing
+import threading
+from copy import deepcopy
 
 import pytest
 
@@ -53,9 +56,25 @@ def test_multiple_actual_waves_reuse_server_and_keep_deduplicated_evidence(tmp_p
         assert b"response_bytes_base64" not in report_bytes
         report = json.loads(report_bytes)
         assert report["quality_passed"], report
+        assert report["format"] == "g15-d0-observation-wave-v3"
+        assert not [
+            json.loads(line)
+            for line in raw.splitlines()
+            if json.loads(line)["kind"]
+            in ("transport", "application", "network", "marker", "resource")
+        ]
+        for artifact in row["raw"]["auxiliary"]:
+            payload = (output / artifact["path"]).read_bytes()
+            assert artifact["bytes"] == len(payload)
+            assert artifact["sha256"] == hashlib.sha256(payload).hexdigest()
+        assert row["raw"]["total_bytes"] == len(raw) + sum(
+            item["bytes"] for item in row["raw"]["auxiliary"]
+        )
+        assert report["observer_evidence"]["publication_cost"]["wall_seconds"] >= 0
+        assert report["observer_evidence"]["publication_cost"]["cpu_seconds"] >= 0
         assert not any(report["checks"].values())
         pids.add(report["server_ready_process_id"])
-        records = [json.loads(line) for line in raw.splitlines()]
+        records = list(observation_runner.iter_wave_records(output, row["raw"]))
         clients = [item["value"] for item in records if item["kind"] == "client"]
         server = [item["value"] for item in records if item["kind"] == "transport"]
         markers = [
@@ -74,6 +93,15 @@ def test_multiple_actual_waves_reuse_server_and_keep_deduplicated_evidence(tmp_p
             assert len(clients) == 10
             target_flags.append(report["target_reached"])
     assert pids == {summary["server_process_id"]}
+    assert summary["format"] == "g15-d0-observation-v3"
+    assert (
+        summary["stored_evidence_bytes"]
+        == sum(row["raw"]["total_bytes"] + row["report"]["bytes"] for row in rows)
+        + (output / "index.ndjson").stat().st_size
+        + summary["post_shutdown_artifacts"]["bytes"]
+    )
+    assert summary["post_shutdown_artifacts"]["artifact_delta_bytes"] == 0
+    assert not summary["post_shutdown_artifacts"]["problems"]
     assert summary["target_reached_waves"] == sum(target_flags)
     assert summary["all_waves_target_reached"] is all(target_flags)
     assert summary["exit_code"] == int(not all(target_flags))
@@ -299,7 +327,7 @@ def test_late_report_failure_retains_wave_without_second_finish(tmp_path, monkey
     last = rows[-1]
     raw = (output / last["raw"]["path"]).read_bytes()
     assert hashlib.sha256(raw).hexdigest() == last["raw"]["sha256"]
-    records = [json.loads(line) for line in raw.splitlines()]
+    records = list(observation_runner.iter_wave_records(output, last["raw"]))
     assert [row["value"]["marker"] for row in records if row["kind"] == "marker"] == [
         "begin",
         "end",
@@ -308,3 +336,424 @@ def test_late_report_failure_retains_wave_without_second_finish(tmp_path, monkey
     report = json.loads((output / last["report"]["path"]).read_bytes())
     assert report["quality_passed"] is False
     assert {"phase": "observation_unhandled", "error": "OSError"} in report["failures"]
+
+
+PUBLICATION_MODE = "commit-framed mmap during HTTP; seal and IPC publication after handlers and sampler stop"
+
+
+def _publication_resources(pid=321):
+    before = {
+        "process_id": pid,
+        "endpoint": "server_observer_publication",
+        "clock": "perf_counter",
+        "monotonic_ns": 100,
+        "cpu_user_seconds": 1.0,
+        "cpu_system_seconds": 0.5,
+    }
+    return {
+        "before": before,
+        "after": dict(before, monotonic_ns=200, cpu_user_seconds=1.25),
+        "scope": "post HTTP seal/fsync and IPC",
+    }
+
+
+def _spooled_state(tmp_path, *, wave_id="wave-unit", messages=None):
+    state = observation_runner.WaveEvidence(tmp_path, wave_id, server_spooled=True)
+    state.server_process_id = 321
+    spool = observation_runner.WaveEventSpool(state.directory, wave_id, max_bytes=4096)
+    messages = messages or [
+        {
+            "kind": "transport",
+            "wave_id": wave_id,
+            "event": {
+                "stage": "response_completed",
+                "request_id": "r1",
+                "monotonic_ns": 50,
+                "process_id": 321,
+            },
+        }
+    ]
+    for message in messages:
+        spool.append(message["kind"], message["event"])
+        state.stream(deepcopy(message))
+    facts = spool.seal()
+    state.observer_evidence = {
+        "mode": PUBLICATION_MODE,
+        "spool": facts,
+        "published_frames": len(messages),
+        "publication_resources": _publication_resources(),
+    }
+    return state, spool
+
+
+def test_spool_receipt_is_independent_and_normal_raw_has_no_server_duplicate(tmp_path):
+    state, _spool = _spooled_state(tmp_path)
+    state.write("client", {"response_bytes_base64": "e30="})
+    receipt = state.close()
+    assert not receipt["errors"], receipt
+    assert receipt is state.close()
+    assert [row["kind"] for row in receipt["auxiliary"]] == ["server_spool"]
+    assert receipt["total_bytes"] == receipt["bytes"] + receipt["auxiliary"][0]["bytes"]
+    assert b"response_completed" not in state.path.read_bytes()
+    originals = list(observation_runner.iter_wave_records(tmp_path, receipt))
+    assert [row["kind"] for row in originals] == ["client", "transport"]
+    server = receipt["server_spool"]
+    assert server["recovered_frames"] == server["received_frames"] == 1
+    assert server["recovery"]["fsync_independently_verified"] is False
+    assert server["publication_cost"]["wall_seconds"] == 0.0000001
+    assert server["publication_cost"]["cpu_seconds"] == 0.25
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "missing",
+        "corrupt",
+        "cross_wave",
+        "delivered",
+        "duplicate",
+        "foreign_spool",
+        "count",
+        "fsync",
+        "seal",
+        "hash",
+        "bytes",
+    ],
+)
+def test_spool_failure_keeps_received_frames_and_every_actual_auxiliary_byte(
+    tmp_path, damage
+):
+    state, spool = _spooled_state(tmp_path)
+    if damage == "missing":
+        spool.path.unlink()
+    elif damage == "corrupt":
+        payload = spool.path.read_bytes()
+        spool.path.write_bytes(
+            payload.replace(b"response_completed", b"response_incorrect")
+        )
+    elif damage == "foreign_spool":
+        other = observation_runner.WaveEventSpool(tmp_path, "foreign", max_bytes=4096)
+        other.append("marker", {"marker": "begin"})
+        other.seal()
+        spool.path.write_bytes(other.path.read_bytes())
+    elif damage == "cross_wave":
+        state.messages[0]["wave_id"] = "other-wave"
+    elif damage == "delivered":
+        state.messages[0]["event"]["request_id"] = "tampered"
+    elif damage == "duplicate":
+        state.messages.append(deepcopy(state.messages[0]))
+    elif damage == "count":
+        state.observer_evidence["published_frames"] = True
+    else:
+        field = {
+            "fsync": "fsync_succeeded",
+            "seal": "sealed",
+            "hash": "sha256",
+            "bytes": "bytes",
+        }[damage]
+        state.observer_evidence["spool"][field] = {
+            "fsync": False,
+            "seal": False,
+            "hash": "0" * 64,
+            "bytes": 0,
+        }[damage]
+    receipt = state.close()
+    assert receipt["errors"]
+    assert receipt["server_spool"]["checks"]
+    mismatch = next(
+        row for row in receipt["auxiliary"] if row["kind"] == "server_delivery_mismatch"
+    )
+    assert [
+        json.loads(line)
+        for line in (tmp_path / mismatch["path"]).read_bytes().splitlines()
+    ] == state.messages
+    assert receipt["total_bytes"] == receipt["bytes"] + sum(
+        row["bytes"] for row in receipt["auxiliary"]
+    )
+    for artifact in receipt["auxiliary"]:
+        payload = (tmp_path / artifact["path"]).read_bytes()
+        assert artifact["sha256"] == hashlib.sha256(payload).hexdigest()
+        assert artifact["bytes"] == len(payload)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "pid",
+        "clock",
+        "time",
+        "cpu_negative",
+        "cpu_regressed",
+        "cpu_bool",
+        "http_not_finished",
+    ],
+)
+def test_post_http_publication_resource_identity_clock_and_cpu_are_required(
+    tmp_path, damage
+):
+    state, _spool = _spooled_state(tmp_path)
+    publication = state.observer_evidence["publication_resources"]
+    if damage == "pid":
+        publication["after"]["process_id"] = 322
+    elif damage == "clock":
+        publication["before"]["clock"] = "other-clock"
+    elif damage == "time":
+        publication["after"]["monotonic_ns"] = 99
+    elif damage == "cpu_negative":
+        publication["before"]["cpu_system_seconds"] = -1
+    elif damage == "cpu_regressed":
+        publication["after"]["cpu_user_seconds"] = 0.9
+    elif damage == "cpu_bool":
+        publication["after"]["cpu_user_seconds"] = True
+    else:
+        publication["before"]["monotonic_ns"] = 49
+    receipt = state.close()
+    assert receipt["server_spool"]["checks"]
+    assert receipt["errors"]
+    assert any(
+        row["kind"] == "server_delivery_mismatch" for row in receipt["auxiliary"]
+    )
+
+
+def _killed_spool_writer(directory, wave_id, sealed, sender):
+    spool = observation_runner.WaveEventSpool(directory, wave_id, max_bytes=4096)
+    spool.append(
+        "transport", {"stage": "response_completed", "request_id": "before-kill"}
+    )
+    if sealed:
+        spool.seal()
+    sender.send({"ready": True})
+    sender.recv()  # Test owns the process termination; no timing sleep.
+
+
+@pytest.mark.parametrize("sealed", [False, True])
+def test_child_kill_recovers_prefix_without_finished_or_fsync_invention(
+    tmp_path, sealed
+):
+    state = observation_runner.WaveEvidence(tmp_path, "killed", server_spooled=True)
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe()
+    process = context.Process(
+        target=_killed_spool_writer,
+        args=(str(state.directory), state.wave_id, sealed, sender),
+    )
+    process.start()
+    sender.close()
+    try:
+        assert receiver.poll(10), "child did not commit its real frame"
+        assert receiver.recv() == {"ready": True}
+        process.terminate()
+        process.join(10)
+        assert not process.is_alive()
+        assert process.exitcode != 0
+        receipt = state.close()
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(10)
+        receiver.close()
+    recovery = receipt["server_spool"]["recovery"]
+    assert recovery["recovered_messages"] == 1
+    assert recovery["seal_marker_present"] is sealed
+    assert recovery["fsync_independently_verified"] is False
+    assert recovery["incomplete"] is (not sealed)
+    assert receipt["errors"]  # Child died without finished/publication; never pass.
+    assert receipt["server_spool"]["control"] is None
+    originals = list(observation_runner.iter_wave_records(tmp_path, receipt))
+    assert originals[0]["value"]["request_id"] == "before-kill"
+
+
+def test_emergency_and_journal_failure_artifacts_are_not_hidden_from_budget(tmp_path):
+    state = observation_runner.WaveEvidence(tmp_path, "overflow", server_spooled=True)
+    spool = observation_runner.WaveEventSpool(
+        state.directory, state.wave_id, max_bytes=512
+    )
+    spool.append("marker", {"marker": "begin"})
+    with pytest.raises(RuntimeError):
+        spool.append("resource", {"padding": "x" * 2048})
+    with pytest.raises(RuntimeError):
+        spool.close()
+    fallback = state.directory / "completion-journal-failure.json"
+    fallback.write_bytes(b'{"known_client": true}\n')
+    receipt = state.close()
+    assert receipt["errors"]
+    assert receipt["server_spool"]["recovery"]["emergency_messages"] == 1
+    assert {row["kind"] for row in receipt["auxiliary"]} == {
+        "server_spool",
+        "server_emergency",
+        "server_delivery_mismatch",
+        "client_journal_failure",
+    }
+    assert receipt["total_bytes"] > 512 + fallback.stat().st_size
+    assert receipt["total_bytes"] == sum(
+        path.stat().st_size for path in state.directory.iterdir()
+    )
+
+
+def test_full_unsealed_mapping_and_client_raw_exceed_original_wave_budget(tmp_path):
+    state = observation_runner.WaveEvidence(
+        tmp_path, "unsealed-budget", server_spooled=True
+    )
+    spool = observation_runner.WaveEventSpool(state.directory, state.wave_id)
+    spool.append("marker", {"marker": "begin"})
+    spool.close()
+    state.write("client_attempt", {"http_started": False})
+    receipt = state.close()
+    assert receipt["auxiliary"][0]["bytes"] == observation_runner.MAX_WAVE_BYTES
+    assert receipt["total_bytes"] > observation_runner.MAX_WAVE_BYTES
+    assert receipt["bytes"] < observation_runner.MAX_WAVE_BYTES
+
+
+def test_all_actual_http_terminals_precede_blocked_server_evidence_consumer(
+    tmp_path, monkeypatch
+):
+    """Blocking only observer delivery cannot hold any real HTTP completion."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    all_terminal, reader_entered, release_reader = (threading.Event() for _ in range(3))
+    original_complete = observation_runner.RunAccounting.client_complete
+    original_stream = observation_runner.WaveEvidence.stream
+    first_delivery_after_terminals = []
+
+    def completed(accounting, record):
+        original_complete(accounting, record)
+        if len(accounting.client_records) == 10:
+            all_terminal.set()
+
+    def blocked_consumer(state, message):
+        if not reader_entered.is_set():
+            first_delivery_after_terminals.append(all_terminal.is_set())
+            reader_entered.set()
+            if not release_reader.wait(10):
+                raise TimeoutError("test evidence consumer release missing")
+        return original_stream(state, message)
+
+    monkeypatch.setattr(observation_runner.RunAccounting, "client_complete", completed)
+    monkeypatch.setattr(observation_runner.WaveEvidence, "stream", blocked_consumer)
+    runs_root, output = tmp_path / "runs", tmp_path / "evidence"
+    output.mkdir()
+    db_paths = observation_runner.build_d0_runs(runs_root)
+    bearer, cursor = b"b" * 32, b"c" * 32
+    identities = observation_runner._identities(bearer, 10)
+    session = observation_runner.ObservationSession()
+    session.start(runs_root, bearer, cursor, 10, 64, evidence_root=output)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as observer:
+            result = observer.submit(
+                session.observe, output, "blocked-consumer", identities, db_paths
+            )
+            try:
+                assert reader_entered.wait(15), "no server evidence delivery"
+                assert (
+                    all_terminal.is_set()
+                ), "HTTP completion depended on evidence consumer"
+                assert first_delivery_after_terminals == [True]
+            finally:
+                release_reader.set()
+            report, receipt = result.result(timeout=30)
+        assert report["quality_passed"], report
+        assert report["completed_requests"] == 10
+        assert not report["checks"]["network"]
+        records = list(observation_runner.iter_wave_records(output, receipt["raw"]))
+        clients = [row["value"] for row in records if row["kind"] == "client"]
+        server = [row["value"] for row in records if row["kind"] == "transport"]
+        assert len(clients) == 10
+        assert all(row["status"] == 200 for row in clients)
+        assert {row["server_request_id"] for row in clients} == {
+            row["request_id"] for row in server
+        }
+        before = report["observer_evidence"]["control"]["publication_resources"][
+            "before"
+        ]
+        assert before["process_id"] == session.ready["process_id"]
+        assert before["monotonic_ns"] >= max(
+            row["monotonic_ns"]
+            for row in server
+            if row["stage"] == "response_completed"
+        )
+    finally:
+        release_reader.set()
+        errors = session.close()
+    assert not errors
+
+
+def _index_closed_state(output, state, receipt):
+    report_path = state.directory / "report.json"
+    report_path.write_bytes(b"{}\n")
+    row = {
+        "wave_id": state.wave_id,
+        "raw": receipt,
+        "report": observation_runner._file_receipt(report_path, output, "report"),
+    }
+    index = output / "index.ndjson"
+    index.write_bytes(observation_runner._json_bytes(row))
+    return receipt["total_bytes"] + report_path.stat().st_size + index.stat().st_size
+
+
+def test_post_shutdown_manifest_detects_late_emergency_after_cached_receipt(tmp_path):
+    state, spool = _spooled_state(tmp_path)
+    receipt = state.close()
+    indexed = _index_closed_state(tmp_path, state, receipt)
+    original_index = (tmp_path / "index.ndjson").read_bytes()
+    with pytest.raises(RuntimeError):
+        spool.append(
+            "transport", {"stage": "response_completed", "request_id": "late-known"}
+        )
+    with pytest.raises(RuntimeError):
+        spool.close()
+    # Per-wave receipt stays the original claim; the independent final manifest
+    # must find the bytes generated afterwards without rewriting that claim.
+    assert state.close() is receipt
+    result = observation_runner._post_shutdown_artifact_manifest(tmp_path, indexed)
+    assert result["problems"]
+    assert result["affected_waves"] == [state.wave_id]
+    emergency = spool.emergency_path.read_bytes()
+    assert b"late-known" in emergency
+    assert result["artifact_delta_bytes"] == len(emergency)
+    assert result["actual_stored_bytes"] == indexed + len(emergency) + result["bytes"]
+    assert (tmp_path / "index.ndjson").read_bytes() == original_index
+    manifest = json.loads((tmp_path / result["path"]).read_bytes())
+    late = [row for row in manifest["artifacts"] if row["status"] == "new"]
+    assert len(late) == 1
+    assert late[0]["actual"]["sha256"] == hashlib.sha256(emergency).hexdigest()
+
+
+def test_post_shutdown_manifest_receipts_root_unattributed_crash_prefix(tmp_path):
+    (tmp_path / "index.ndjson").write_bytes(b"")
+    spool = observation_runner.WaveEventSpool(tmp_path, "unattributed", max_bytes=4096)
+    spool.append(
+        "unattributed",
+        {
+            "origin_wave_id": None,
+            "original_kind": "transport",
+            "original_event": {"stage": "server_received"},
+        },
+    )
+    spool.close()
+    result = observation_runner._post_shutdown_artifact_manifest(tmp_path, 0)
+    assert result["problems"]
+    assert result["affected_waves"] == ["unattributed"]
+    assert result["artifact_delta_bytes"] == 4096
+    manifest = json.loads((tmp_path / result["path"]).read_bytes())
+    assert manifest["artifacts"][0]["recovery"]["recovered_messages"] == 1
+    assert manifest["artifacts"][0]["recovery"]["incomplete"] is True
+    assert manifest["artifacts"][0]["recovery"]["fsync_independently_verified"] is False
+
+
+@pytest.mark.parametrize("damage", ["change", "delete"])
+def test_post_shutdown_manifest_keeps_original_receipt_when_file_changes(
+    tmp_path, damage
+):
+    state, spool = _spooled_state(tmp_path)
+    receipt = state.close()
+    indexed = _index_closed_state(tmp_path, state, receipt)
+    before = spool.path.read_bytes()
+    if damage == "change":
+        spool.path.write_bytes(before + b"late")
+    else:
+        spool.path.unlink()
+    result = observation_runner._post_shutdown_artifact_manifest(tmp_path, indexed)
+    assert result["problems"]
+    assert result["affected_waves"] == [state.wave_id]
+    assert result["artifact_delta_bytes"] == (4 if damage == "change" else -len(before))
+    assert receipt["auxiliary"][0]["sha256"] == hashlib.sha256(before).hexdigest()

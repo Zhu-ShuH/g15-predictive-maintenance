@@ -13,6 +13,7 @@ from collections import Counter
 from dataclasses import asdict
 import hashlib
 import json
+import math
 import multiprocessing
 import os
 from pathlib import Path
@@ -29,6 +30,7 @@ from .client import _finite_float, _invalid_constant
 from .d0_fixture import D0_DEVICE_COUNT, build_d0_runs, device_id, device_run_id
 from .completion_journal import CompletionJournal
 from .evidence import query_plans, source_facts
+from .event_spool import WaveEventSpool
 from .network import MeteredHTTPConnection, SocketNetworkMeter, validate_network_pair
 from .oracle import verify_response
 from .paging import PagingWalk, run_paging
@@ -56,10 +58,89 @@ def _atomic_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-class WaveEvidence:
-    """Persist each original record once while retaining only one wave in RAM."""
+def _file_receipt(path: Path, root: Path, kind: str) -> dict:
+    digest, size = hashlib.sha256(), 0
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+            size += len(block)
+    return {
+        "kind": kind,
+        "path": path.relative_to(root).as_posix(),
+        "sha256": digest.hexdigest(),
+        "bytes": size,
+    }
 
-    def __init__(self, root: Path, wave_id: str) -> None:
+
+def _publication_cost(value: Any, process_id: int, rows: dict) -> tuple[dict, list]:
+    """Validate one server clock/PID; never subtract a client timestamp."""
+    problems = []
+    cost = {
+        "wall_seconds": None,
+        "cpu_user_seconds": None,
+        "cpu_system_seconds": None,
+        "cpu_seconds": None,
+        "valid": False,
+        "scope": "measured server before/after interval: post-handler network snapshot, network/end append, seal/fsync and event IPC; excludes finished control send, final facts hashing, parent validation/hashing and teardown; excluded from request latency/effective load seconds",
+        "unmeasured_costs": [
+            "finished control send",
+            "final server facts hash",
+            "parent post-HTTP validation/hashing",
+            "teardown",
+        ],
+    }
+    if not isinstance(value, dict):
+        return cost, ["publication resources unavailable"]
+    before, after = value.get("before"), value.get("after")
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return cost, ["publication resource endpoints unavailable"]
+    if not isinstance(value.get("scope"), str) or not value["scope"]:
+        problems.append("publication scope unavailable")
+    for sample in (before, after):
+        if (
+            type(sample.get("process_id")) is not int
+            or sample["process_id"] != process_id
+            or sample.get("endpoint") != "server_observer_publication"
+            or sample.get("clock") != "perf_counter"
+        ):
+            problems.append("publication resource process/clock mismatch")
+    clocks = [sample.get("monotonic_ns") for sample in (before, after)]
+    if any(type(clock) is not int or clock <= 0 for clock in clocks):
+        problems.append("publication resource clock invalid")
+    elif clocks[1] < clocks[0]:
+        problems.append("publication resource clock regressed")
+    else:
+        cost["wall_seconds"] = (clocks[1] - clocks[0]) / 1_000_000_000
+        http_clocks = [
+            row.get("monotonic_ns")
+            for kind in ("transport", "resource")
+            for row in rows[kind]
+        ]
+        if any(type(clock) is not int or clock > clocks[0] for clock in http_clocks):
+            problems.append("publication began before HTTP/resource interval ended")
+    for key in ("cpu_user_seconds", "cpu_system_seconds"):
+        numbers = [sample.get(key) for sample in (before, after)]
+        if any(
+            type(number) not in (int, float) or not math.isfinite(number) or number < 0
+            for number in numbers
+        ):
+            problems.append("publication CPU measurement invalid")
+        elif numbers[1] < numbers[0]:
+            problems.append("publication CPU counter regressed")
+        else:
+            cost[key] = numbers[1] - numbers[0]
+    if all(cost[key] is not None for key in ("cpu_user_seconds", "cpu_system_seconds")):
+        cost["cpu_seconds"] = cost["cpu_user_seconds"] + cost["cpu_system_seconds"]
+    cost["valid"] = not problems
+    return cost, problems
+
+
+class WaveEvidence:
+    """One client raw copy and independently receipted durable server frames."""
+
+    def __init__(
+        self, root: Path, wave_id: str, *, server_spooled: bool = False
+    ) -> None:
         self.wave_id = wave_id
         self.directory = root / wave_id
         self.directory.mkdir()
@@ -86,6 +167,11 @@ class WaveEvidence:
         self.report = None
         self.client_sampler = None
         self.accounting = None
+        self.server_spooled = server_spooled
+        self.observer_evidence = None
+        self.server_process_id = None
+        self.messages: list[dict] = []
+        self._receipt = None
 
     def write(self, kind: str, value: Any, *, origin_wave_id: Any = None) -> None:
         payload = _json_bytes(
@@ -108,18 +194,138 @@ class WaveEvidence:
             self.counts[kind] += 1
 
     def stream(self, message: dict[str, Any]) -> None:
+        # These are the actual delivered envelopes, not reconstructed success.
+        if self.server_spooled:
+            self.messages.append(message)
         if message.get("wave_id") != self.wave_id:
             self.errors.append("cross-wave event identity")
         kind, row = message.get("kind"), message.get("event")
         if kind not in self.rows or not isinstance(row, dict):
             self.errors.append("invalid event stream record")
             return
-        self.write(kind, row, origin_wave_id=message.get("wave_id"))
+        if not self.server_spooled:
+            self.write(kind, row, origin_wave_id=message.get("wave_id"))
         self.rows[kind].append(row)
         if kind == "marker" and row.get("marker") == "end":
             self.end.set()
 
+    def _recover_server(self, auxiliary: list) -> dict:
+        path = self.directory / f"{self.wave_id}.events.spool"
+        recovery_facts, recovered = None, Counter()
+        problems = []
+        if path.exists():
+            try:
+                recovery = WaveEventSpool.recover(path, self.wave_id)
+                recovered = _counter(recovery.iter_messages())
+                recovery_facts = recovery.facts()
+                if (
+                    recovery_facts.get("incomplete") is not False
+                    or recovery_facts.get("seal_marker_present") is not True
+                    or recovery_facts.get("errors") != []
+                ):
+                    problems.append("server spool recovery incomplete")
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                problems.append("server spool recovery_" + type(exc).__name__)
+        else:
+            problems.append("server spool missing")
+        delivered = _counter(self.messages)
+        if recovered != delivered:
+            problems.append("server spool/delivery mismatch")
+        control = self.observer_evidence
+        if not isinstance(control, dict):
+            problems.append("server spool control unavailable")
+            control = {}
+        if (
+            control.get("mode")
+            != "commit-framed mmap during HTTP; seal and IPC publication after handlers and sampler stop"
+        ):
+            problems.append("server spool mode mismatch")
+        spool = control.get("spool")
+        if not isinstance(spool, dict):
+            spool = {}
+        expected = {
+            "format": "g15-wave-event-spool-v1",
+            "wave_id": self.wave_id,
+            "path": path.name,
+            "sealed": True,
+            "closed": True,
+            "fsync_succeeded": True,
+            "incomplete": False,
+            "errors": [],
+            "error_count": 0,
+            "emergency": None,
+        }
+        if any(
+            type(spool.get(key)) is not type(value) or spool.get(key) != value
+            for key, value in expected.items()
+        ):
+            problems.append("server spool seal/fsync/control invalid")
+        if recovery_facts is not None:
+            for key in (
+                "sha256",
+                "bytes",
+                "used_bytes",
+                "capacity_bytes",
+                "committed_frames",
+            ):
+                if type(spool.get(key)) is not type(
+                    recovery_facts.get(key)
+                ) or spool.get(key) != recovery_facts.get(key):
+                    problems.append("server spool control/recovery mismatch: " + key)
+            count = recovery_facts["recovered_messages"]
+            if (
+                type(control.get("published_frames")) is not int
+                or control["published_frames"] != count
+                or type(spool.get("attempts")) is not int
+                or spool["attempts"] != count
+                or count != len(self.messages)
+            ):
+                problems.append("server spool publication count mismatch")
+        publication = control.get("publication_resources")
+        cost, resource_problems = _publication_cost(
+            publication, self.server_process_id, self.rows
+        )
+        problems.extend(resource_problems)
+        for name, kind in (
+            (path.name, "server_spool"),
+            (f"{self.wave_id}.events.emergency.ndjson", "server_emergency"),
+        ):
+            actual = self.directory / name
+            if actual.exists():
+                auxiliary.append(_file_receipt(actual, self.directory.parent, kind))
+        if path.exists() and recovery_facts is not None:
+            receipt = next(row for row in auxiliary if row["kind"] == "server_spool")
+            if any(
+                receipt[key] != recovery_facts.get(key) for key in ("sha256", "bytes")
+            ):
+                problems.append("server spool changed during recovery")
+        if problems or self.errors:
+            # Failure-only second copy: preserve every actually received envelope,
+            # even if corrupt/cross-wave durable evidence cannot recover it.
+            mismatch = self.directory / "server-delivery-mismatch.ndjson"
+            with mismatch.open("xb") as handle:
+                for message in self.messages:
+                    handle.write(_json_bytes(message))
+                handle.flush()
+                os.fsync(handle.fileno())
+            auxiliary.append(
+                _file_receipt(
+                    mismatch, self.directory.parent, "server_delivery_mismatch"
+                )
+            )
+        self.errors.extend(problems)
+        return {
+            "recovery": recovery_facts,
+            "control": self.observer_evidence,
+            "checks": problems,
+            "publication_cost": cost,
+            "received_frames": len(self.messages),
+            "recovered_frames": sum(recovered.values()),
+        }
+
     def close(self) -> dict[str, Any]:
+        if self._receipt is not None:
+            return self._receipt
         with self.lock:
             if not self.closed:
                 try:
@@ -130,23 +336,180 @@ class WaveEvidence:
                 finally:
                     self.handle.close()
                     self.closed = True
-        # A failed flush/partial write may have changed actual bytes before the
-        # in-memory digest advanced. Archive the file that really exists.
-        digest = hashlib.sha256()
-        actual_bytes = 0
-        with self.path.open("rb") as handle:
-            for block in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(block)
-                actual_bytes += len(block)
-        return {
-            "path": f"{self.wave_id}/raw.ndjson",
-            "sha256": digest.hexdigest(),
-            "bytes": actual_bytes,
+        auxiliary = []
+        server = self._recover_server(auxiliary) if self.server_spooled else None
+        fallback = self.directory / "completion-journal-failure.json"
+        if fallback.exists():
+            auxiliary.append(
+                _file_receipt(fallback, self.directory.parent, "client_journal_failure")
+            )
+        raw = _file_receipt(
+            self.path,
+            self.directory.parent,
+            "client_raw" if self.server_spooled else "legacy_raw",
+        )
+        raw.pop("kind")
+        self._receipt = {
+            **raw,
+            "auxiliary": auxiliary,
+            "total_bytes": raw["bytes"] + sum(row["bytes"] for row in auxiliary),
             "counts": dict(self.counts),
             "errors": list(self.errors),
-            "count_basis": "successfully written complete records; failed/partial bytes remain in the actual hashed file",
-            "one_copy_basis": "response bytes occur only in client records; no duplicated decoded bodies",
+            "server_spool": server,
+            "count_basis": "successfully written complete records; failed/partial bytes remain in the actual hashed files",
+            "one_copy_basis": (
+                "one client response base64 copy in raw; original server frames in separately hashed durable spool; failure-only delivery/journal copies explicitly receipted"
+                if self.server_spooled
+                else "response bytes occur only in client records; no duplicated decoded bodies"
+            ),
         }
+        return self._receipt
+
+
+def _post_shutdown_artifact_manifest(output: Path, indexed_bytes: int) -> dict:
+    """Audit only after child shutdown; never rewrite the original index/receipts."""
+    expected, wave_ids, problems = {}, set(), []
+    index_path = output / "index.ndjson"
+    if index_path.exists():
+        with index_path.open("rb") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                    wave = row["wave_id"]
+                    wave_ids.add(wave)
+                    for receipt in (
+                        row["raw"],
+                        row["report"],
+                        *row["raw"].get("auxiliary", []),
+                    ):
+                        path = Path(receipt["path"])
+                        if (
+                            path.is_absolute()
+                            or ".." in path.parts
+                            or path.as_posix() in expected
+                        ):
+                            raise ValueError("invalid or repeated indexed path")
+                        expected[path.as_posix()] = (receipt, wave)
+                except (ValueError, KeyError, TypeError):
+                    problems.append("post-shutdown index record invalid")
+    else:
+        problems.append("post-shutdown index unavailable")
+    known = {name: wave for name, (_receipt, wave) in expected.items()}
+    # Include an interrupted, not-yet-indexed wave only when its known files exist.
+    for directory in output.iterdir():
+        if directory.is_dir() and (
+            directory.name in wave_ids
+            or (directory / f"{directory.name}.events.spool").exists()
+        ):
+            wave_ids.add(directory.name)
+    for wave in wave_ids:
+        for name in (
+            "raw.ndjson",
+            "report.json",
+            "server-delivery-mismatch.ndjson",
+            "completion-journal-failure.json",
+            f"{wave}.events.spool",
+            f"{wave}.events.emergency.ndjson",
+        ):
+            path = output / wave / name
+            if path.exists():
+                known[path.relative_to(output).as_posix()] = wave
+    for name in ("unattributed.events.spool", "unattributed.events.emergency.ndjson"):
+        if (output / name).exists():
+            known[name] = "unattributed"
+    artifacts, affected, delta, wave_bytes = [], set(), 0, Counter()
+    for name, wave in sorted(known.items()):
+        path = output / name
+        prior = expected.get(name, (None, None))[0]
+        actual = None
+        try:
+            if path.exists():
+                actual = _file_receipt(path, output, "post_shutdown_artifact")
+        except OSError as exc:
+            problems.append("post-shutdown artifact read_" + type(exc).__name__)
+            affected.add(wave)
+        status = (
+            "missing" if actual is None else "new" if prior is None else "unchanged"
+        )
+        if (
+            actual is not None
+            and prior is not None
+            and any(actual[key] != prior.get(key) for key in ("sha256", "bytes"))
+        ):
+            status = "changed"
+        if status != "unchanged":
+            affected.add(wave)
+        delta += (actual["bytes"] if actual else 0) - (prior["bytes"] if prior else 0)
+        if actual is not None and path.name != "report.json":
+            wave_bytes[wave] += actual["bytes"]
+        item = {"wave_id": wave, "status": status, "indexed": prior, "actual": actual}
+        if (
+            path.name.endswith(".events.spool")
+            and status != "unchanged"
+            and actual is not None
+        ):
+            try:
+                recovery = WaveEventSpool.recover(path, wave)
+                item["recovery"] = recovery.facts()
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                item["recovery_error"] = type(exc).__name__
+        artifacts.append(item)
+    if affected:
+        problems.append("post-shutdown observer artifacts new/changed/missing")
+    over_budget = sorted(
+        wave for wave, size in wave_bytes.items() if size > MAX_WAVE_BYTES
+    )
+    if over_budget:
+        problems.append("post-shutdown wave byte budget exceeded")
+    manifest = {
+        "format": "g15-observation-post-shutdown-artifacts-v1",
+        "scope": "after child shutdown; known raw/report/spool/emergency/delivery/journal artifacts and root unattributed spool; original index and files unchanged",
+        "artifacts": artifacts,
+        "affected_waves": sorted(affected),
+        "problems": problems,
+        "artifact_delta_bytes": delta,
+        "indexed_stored_bytes": indexed_bytes,
+        "actual_stored_bytes_before_manifest": indexed_bytes + delta,
+        "wave_raw_and_auxiliary_bytes": dict(wave_bytes),
+        "over_budget_waves": over_budget,
+    }
+    path = output / "post-shutdown-artifacts.json"
+    # Exclusive final sidecar: an earlier failure or audit is never overwritten.
+    with path.open("xb") as handle:
+        handle.write(_json_bytes(manifest))
+        handle.flush()
+        os.fsync(handle.fileno())
+    return {
+        **_file_receipt(path, output, "post_shutdown_manifest"),
+        "artifact_delta_bytes": delta,
+        "affected_waves": sorted(affected),
+        "problems": problems,
+        "over_budget_waves": over_budget,
+        "actual_stored_bytes": indexed_bytes + delta + path.stat().st_size,
+    }
+
+
+def iter_wave_records(output: Path, receipt: dict):
+    """Read logical originals across v2 NDJSON and v3 client/spool media.
+
+    Failure-only copies are receipted separately, never merged as extra requests.
+    The caller must inspect quality/errors before interpreting recovered prefixes.
+    """
+    with (output / receipt["path"]).open("rb") as handle:
+        for line in handle:
+            yield json.loads(line)
+    for item in receipt.get("auxiliary", []):
+        if item["kind"] == "server_spool":
+            recovery = WaveEventSpool.recover(
+                output / item["path"], Path(item["path"]).parent.name
+            )
+            for message in recovery.iter_messages():
+                yield {
+                    "kind": message["kind"],
+                    "wave_id": message["wave_id"],
+                    "origin_wave_id": message["wave_id"],
+                    "value": message["event"],
+                }
 
 
 class PersistedAccounting(RunAccounting):
@@ -314,7 +677,7 @@ def _concurrent_wave(clients: list[ObservationClient]) -> list:
     if not clients:
         raise ValueError("a concurrent wave needs clients")
     state = clients[0].evidence_writer
-    journal = CompletionJournal(state, len(clients))
+    journal = CompletionJournal(state, len(clients), defer_writes_until_finish=True)
     original_error = None
     try:
         specifications = [
@@ -439,14 +802,29 @@ class ObservationSession:
         self.base_url = ""
 
     def start(
-        self, runs_root: Path, bearer: bytes, cursor: bytes, users: int, workers: int
+        self,
+        runs_root: Path,
+        bearer: bytes,
+        cursor: bytes,
+        users: int,
+        workers: int,
+        evidence_root: Path | None = None,
     ) -> None:
         context = multiprocessing.get_context("spawn")
         self.control, child = context.Pipe()
         self.receiver, sender = context.Pipe(duplex=False)
         self.process = context.Process(
             target=serve_endpoint,
-            args=(child, sender, str(runs_root), bearer, cursor, users, workers),
+            args=(
+                child,
+                sender,
+                str(runs_root),
+                bearer,
+                cursor,
+                users,
+                workers,
+                str(evidence_root) if evidence_root is not None else None,
+            ),
             name="g15-observation-server",
         )
         self.process.start()
@@ -609,6 +987,7 @@ class ObservationSession:
                             }
                         )
                         finished = _receive(self.control, "finished")
+                        state.observer_evidence = finished.get("observer_evidence")
                         if not state.end.wait(20):
                             report["cleanup_errors"].append("end_marker_missing")
                         report.setdefault("endpoint_resources", {})["server"] = (
@@ -623,6 +1002,11 @@ class ObservationSession:
                     for side, value in report.get("endpoint_resources", {}).items()
                 }
                 report["raw_evidence"] = state.close()
+                if state.server_spooled:
+                    report["observer_evidence"] = report["raw_evidence"]["server_spool"]
+                    report.setdefault("checks", {})["observer_evidence"] = report[
+                        "observer_evidence"
+                    ]["checks"]
                 report["completed_requests"] = (
                     len(state.accounting.client_records)
                     if state.accounting is not None
@@ -656,7 +1040,13 @@ class ObservationSession:
         *,
         prelude: bool = False,
     ) -> tuple[dict, dict]:
-        state = WaveEvidence(output, wave_id)
+        state = WaveEvidence(
+            output,
+            wave_id,
+            server_spooled=self.ready.get("observer_event_mode")
+            == "commit-framed-spool",
+        )
+        state.server_process_id = self.ready["process_id"]
         self.current = state
         accounting = PersistedAccounting(state) if prelude else RunAccounting()
         meter = SocketNetworkMeter("client")
@@ -665,7 +1055,7 @@ class ObservationSession:
             for token, actor in identities
         ]
         report: dict[str, Any] = {
-            "format": "g15-d0-observation-wave-v2",
+            "format": "g15-d0-observation-wave-v3",
             "wave_id": wave_id,
             "phase": "serial10_and_full_paging" if prelude else "concurrent",
             "client_process_id": os.getpid(),
@@ -761,6 +1151,7 @@ class ObservationSession:
                 }
             )
             finished = _receive(self.control, "finished")
+            state.observer_evidence = finished.get("observer_evidence")
             if finished.get("wave_id") != wave_id or not state.end.wait(20):
                 raise RuntimeError("end wave marker missing or mismatched")
             report["endpoint_resources"]["server"] = finished["resources"]
@@ -777,6 +1168,7 @@ class ObservationSession:
                         }
                     )
                     finished = _receive(self.control, "finished")
+                    state.observer_evidence = finished.get("observer_evidence")
                     state.end.wait(20)
                     report["endpoint_resources"]["server"] = finished.get("resources")
                 except (
@@ -919,14 +1311,19 @@ class ObservationSession:
             for side, value in report["endpoint_resources"].items()
         }
         report["raw_evidence"] = state.close()
+        if state.server_spooled:
+            report["observer_evidence"] = report["raw_evidence"]["server_spool"]
+            report["checks"]["observer_evidence"] = report["observer_evidence"][
+                "checks"
+            ]
         report["quality_passed"] = (
             not report.get("failures")
             and bool(report["checks"])
             and not any(report["checks"].values())
-            and report["raw_evidence"]["bytes"] <= MAX_WAVE_BYTES
+            and report["raw_evidence"]["total_bytes"] <= MAX_WAVE_BYTES
             and not report["raw_evidence"]["errors"]
         )
-        if report["raw_evidence"]["bytes"] > MAX_WAVE_BYTES:
+        if report["raw_evidence"]["total_bytes"] > MAX_WAVE_BYTES:
             _failure(report, "wave_byte_budget", RuntimeError())
         report["exit_code"] = int(
             not (report["quality_passed"] and report["target_reached"])
@@ -979,7 +1376,7 @@ def run_observation(
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     summary: dict[str, Any] = {
-        "format": "g15-d0-observation-v2",
+        "format": "g15-d0-observation-v3",
         "requested_concurrent_users": concurrent,
         "requested_load_seconds": duration_seconds,
         "formal_duration_requirement_seconds": 60,
@@ -1004,7 +1401,7 @@ def run_observation(
             "page_size": 100,
             "same_server_process_for_all_waves": True,
             "client_dispatcher": "selectors.DefaultSelector",
-            "completion_evidence": "bounded per-wave single writer; no disk wait in HTTP dispatch; drain excluded from request latency",
+            "completion_evidence": "bounded frozen terminal pairs; writer starts after all HTTP dispatch ends; drain excluded from request latency and included in wall/gap costs",
             "serial_smoke": "one user / ten requests before observation",
             "paging": "complete actual page10 traversal before observation",
             "arrival": "selector dispatcher after real TCP/header and exact reader ACK; independent actual first-send timestamps; read-ready checked after each bounded write",
@@ -1016,8 +1413,15 @@ def run_observation(
             "max_waves": max_waves,
             "byte_budget": byte_budget,
             "wave_reservation_bytes": MAX_WAVE_BYTES,
-            "in_memory": "one wave only: at most 50 concurrent client records, 200 transport and 300 application events",
-            "raw_io": "one client base64 response copy; raw streamed to separate per-wave NDJSON",
+            "in_memory": "one wave: up to 50 client records and corresponding transport/application events plus resource samples and network metadata; server file-backed mmap capacity <=16MiB and small JSON scratch <=64KiB; logical event counts do not bound all Python object memory",
+            "raw_io": "one client base64 copy in per-wave raw.ndjson; original server metadata in commit-framed mmap spool, sealed/fsynced then IPC-published after HTTP; all auxiliary bytes count against budgets",
+        },
+        "observer_publication": {
+            "scope": "measured server before/after: post-handler network snapshot, network/end append, seal/fsync and event IPC; excludes finished control/facts hash, parent validation and teardown; request latency/effective load seconds exclude all post-HTTP work",
+            "measured_waves": 0,
+            "unavailable_waves": [],
+            "wall_seconds": 0.0,
+            "cpu_seconds": 0.0,
         },
         "peak_ranges": {
             side: {"min": None, "max": None} for side in ("client", "server")
@@ -1047,8 +1451,23 @@ def run_observation(
         os.fsync(index_handle.fileno())
         index_digest.update(payload)
         index_bytes += len(payload)
-        stored_bytes += facts["raw"]["bytes"] + facts["report"]["bytes"] + len(payload)
+        stored_bytes += (
+            facts["raw"].get("total_bytes", facts["raw"]["bytes"])
+            + facts["report"]["bytes"]
+            + len(payload)
+        )
         summary["stored_evidence_bytes"] = stored_bytes
+        if stored_bytes > byte_budget:
+            summary["stop_reason"] = "evidence_byte_budget_exceeded"
+            _failure(summary, "evidence_byte_budget_exceeded", RuntimeError())
+        cost = report.get("observer_evidence", {}).get("publication_cost", {})
+        publication = summary["observer_publication"]
+        if cost.get("valid") is True:
+            publication["measured_waves"] += 1
+            for key in ("wall_seconds", "cpu_seconds"):
+                publication[key] += cost[key]
+        else:
+            publication["unavailable_waves"].append(facts["wave_id"])
         summary["active_wave"] = None
         _atomic_json(output / "summary.json", summary)
 
@@ -1101,7 +1520,14 @@ def run_observation(
             }
             bearer, cursor = secrets.token_bytes(32), secrets.token_bytes(32)
             identities = _identities(bearer, concurrent)
-            session.start(Path(temporary) / "runs", bearer, cursor, concurrent, workers)
+            session.start(
+                Path(temporary) / "runs",
+                bearer,
+                cursor,
+                concurrent,
+                workers,
+                evidence_root=output,
+            )
             summary["server_process_id"] = session.ready["process_id"]
             with index_path.open("xb") as index_handle:
                 summary["active_wave"] = "prelude"
@@ -1111,6 +1537,8 @@ def run_observation(
                 )
                 summary["prelude_quality_passed"] = prelude["quality_passed"]
                 save_wave(prelude, facts, index_handle)
+                if stored_bytes > byte_budget:
+                    raise RuntimeError("actual retained evidence exceeds byte budget")
                 if not prelude["quality_passed"]:
                     summary["stop_reason"] = "prelude_quality_failed"
                     raise RuntimeError("prelude quality failed")
@@ -1168,6 +1596,10 @@ def run_observation(
                                 else max(bounds["max"], peak)
                             )
                     save_wave(report, facts, index_handle)
+                    if stored_bytes > byte_budget:
+                        raise RuntimeError(
+                            "actual retained evidence exceeds byte budget"
+                        )
                     if not report["quality_passed"]:
                         summary["stop_reason"] = "wave_quality_failed"
                         raise RuntimeError("wave quality failed; observation stopped")
@@ -1181,6 +1613,16 @@ def run_observation(
         summary["shutdown_errors"] = session.close()
         if summary["shutdown_errors"]:
             _failure(summary, "observation_shutdown", RuntimeError())
+        try:
+            manifest = _post_shutdown_artifact_manifest(output, stored_bytes)
+            summary["post_shutdown_artifacts"] = manifest
+            summary["stored_evidence_bytes"] = manifest["actual_stored_bytes"]
+            if manifest["problems"]:
+                _failure(summary, "post_shutdown_artifacts", RuntimeError())
+            if manifest["actual_stored_bytes"] > byte_budget:
+                _failure(summary, "evidence_byte_budget_exceeded", RuntimeError())
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            _failure(summary, "post_shutdown_artifact_audit", exc)
         try:
             source_after = source_facts()
             summary["source_after"] = {

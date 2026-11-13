@@ -111,10 +111,7 @@ def test_actual_http_readiness_precedes_send_without_counting_prepared_as_receiv
     assert not prep["problems"]
     assert prep["server"]["http_started_count"] == 0
     assert len(prep["server"]["readers"]) == concurrent
-    raw = [
-        json.loads(line)
-        for line in (output / "wave-00001" / "raw.ndjson").read_bytes().splitlines()
-    ]
+    raw = list(observation_runner.iter_wave_records(output, report["raw_evidence"]))
     mappings = [row["value"] for row in raw if row["kind"] == "request_connection"]
     received = [
         row["value"]
@@ -174,10 +171,7 @@ def test_failed_preparation_retains_its_record_and_sends_no_http(tmp_path, monke
     assert record["error_type"] == "TimeoutError"
     assert record["client_confirmed_ns"] is None
     assert record["client_wait_completed_ns"] >= record["client_wait_started_ns"]
-    raw = [
-        json.loads(line)
-        for line in (output / "wave-00001" / "raw.ndjson").read_bytes().splitlines()
-    ]
+    raw = list(observation_runner.iter_wave_records(output, report["raw_evidence"]))
     assert [row["value"] for row in raw if row["kind"] == "preparation"] == [record]
     requests = [row["value"] for row in raw if row["kind"] == "request_connection"]
     assert len(requests) == 10

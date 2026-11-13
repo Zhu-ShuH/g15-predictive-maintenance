@@ -375,3 +375,5 @@ subjects:
 11. 概要/详细设计、TOGAF 映射和 Windows/Linux 部署材料如何从 G15 自有事实派生。
 
 清单中的首版单 run/device、认证/授权、只读查询、分页/版本/投影和 HTTP 边界已有 #137/#149 的合入内容与正式 Review，不再视为全部待实现；同步/统计/SLO/资源、代表性查询计划与容量执行仍按 #136 审查和取证。不得把候选数字、已合入文档或低负载实现写成生产认证、十万级冻结标准或验收成绩。
+
+2026-11-13的后续observer反压修订见[interface §17.5](../interface.md#175-观测反压隔离与进程崩溃可恢复证据136后续工具修订)与test_plan §11.11。A仅改tools观测交付：将HTTP中同步IPC发布换成有界、commit-framed file-backed mmap，实际handler和采样闭合后封存/发布；正常server原始只存spool、client原始仍raw，v3双媒介独立核对并合计原预算。SIGKILL进程恢复与seal后的fsync证明分开，拒帧/迟到/partial失败不能被静默丢掉。客户端journal写者后置于all-terminal，read/decode/complete原时刻不变；后置CPU/墙钟资源单列，不改应用排队/服务端阶段或任何接受门槛。基线仪表化仅证明当前同步observer存在阻塞链，不证明历史三miss的GIL/内核根因。修订须新source回归及三平台原档实测，不把实现或旧短诊断当通过。

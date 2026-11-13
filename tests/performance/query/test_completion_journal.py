@@ -178,7 +178,7 @@ def test_real_wave_journal_failure_keeps_all_known_calls_and_fails_quality(
         for row in fallback["items"]
     )
     raw = (output / "wave-00001" / "raw.ndjson").read_bytes()
-    rows = [json.loads(line) for line in raw.splitlines()]
+    rows = list(observation_runner.iter_wave_records(output, report["raw_evidence"]))
     assert not [row for row in rows if row["kind"] == "client"]
     assert (
         len(
@@ -196,3 +196,194 @@ def test_real_wave_journal_failure_keeps_all_known_calls_and_fails_quality(
     ]
     assert hashlib.sha256(raw).hexdigest() == index[-1]["raw"]["sha256"]
     assert b"private injected journal disk failure" not in payload
+
+
+def test_deferred_writer_starts_only_after_http_terminal_and_freezes_pairs(
+    tmp_path, monkeypatch
+):
+    """No write/serialization thread competes with outstanding HTTP work."""
+    from tools.query_load import completion_journal as module
+
+    all_http_terminal = threading.Event()
+    starts = []
+    original_thread = threading.Thread
+
+    class CheckedWriter(original_thread):
+        def start(self):
+            assert all_http_terminal.is_set()
+            starts.append("after_http_terminal")
+            super().start()
+
+    class CheckedEvidence(Evidence):
+        def write(self, kind, value):
+            assert all_http_terminal.is_set()
+            super().write(kind, value)
+
+    monkeypatch.setattr(module.threading, "Thread", CheckedWriter)
+    evidence = CheckedEvidence(tmp_path)
+    journal = CompletionJournal(evidence, 2, defer_writes_until_finish=True)
+    first, mapping = pair(0)
+    journal.emit(first, mapping)
+    journal.emit(*pair(1, started=False))
+    first.status = 0
+    mapping["preparation"]["send_started_ns"] = 999
+    assert starts == []
+    assert evidence.records == []
+    assert not evidence.entered.is_set()
+    assert journal.facts()["submitted_pairs"] == 2
+    assert journal.facts()["writer_started"] is False
+    assert journal.facts()["defer_writes_until_finish"] is True
+    all_http_terminal.set()
+    journal.finish()
+    journal.finish()  # no second writer, serialization or record emission
+    assert starts == ["after_http_terminal"]
+    assert [kind for kind, _value in evidence.records] == [
+        "client",
+        "request_connection",
+        "client_attempt",
+        "request_connection",
+    ]
+    assert evidence.records[0][1]["status"] == 200
+    assert evidence.records[0][1]["completed_monotonic"] == 1.2
+    assert evidence.records[1][1]["preparation"]["send_started_ns"] == 10
+    facts = journal.facts()
+    assert facts["writer_started"] is facts["drained"] is True
+    assert facts["fully_written_pairs"] == facts["max_pending_pairs_observed"] == 2
+    assert facts["errors"] == []
+
+
+@pytest.mark.parametrize("failed_kind", ["client", "request_connection"])
+def test_deferred_writer_failure_keeps_every_known_pair_and_partial_raw(
+    tmp_path, failed_kind
+):
+    class PartialEvidence(Evidence):
+        def write(self, kind, value):
+            if kind == failed_kind:
+                raise OSError("private deferred disk detail")
+            super().write(kind, value)
+
+    evidence = PartialEvidence(tmp_path)
+    journal = CompletionJournal(evidence, 3, defer_writes_until_finish=True)
+    for index in range(3):
+        journal.emit(*pair(index))
+    assert evidence.records == []
+    with pytest.raises(CompletionJournalError):
+        journal.finish()
+    facts = journal.facts()
+    assert facts["drained"] is True
+    assert facts["errors"] == ["OSError"]
+    assert facts["fully_written_pairs"] == 0
+    assert [kind for kind, _value in evidence.records] == (
+        [] if failed_kind == "client" else ["client"]
+    )
+    payload = (tmp_path / facts["fallback"]["path"]).read_bytes()
+    saved = json.loads(payload)
+    assert len(saved["items"]) == facts["submitted_pairs"] == 3
+    assert saved["quality_passed"] is False
+    assert saved["normal_raw_one_copy_claim_applies"] is False
+    assert saved["partial_raw_write_may_exist"] is True
+    assert hashlib.sha256(payload).hexdigest() == facts["fallback"]["sha256"]
+    assert b"private deferred disk detail" not in payload
+
+
+@pytest.mark.parametrize("failure_type", [RuntimeError, KeyboardInterrupt])
+def test_deferred_thread_start_failure_retains_all_pairs_and_preserves_interrupt(
+    tmp_path, monkeypatch, failure_type
+):
+    from tools.query_load import completion_journal as module
+
+    original = failure_type("private thread start detail")
+    starts = []
+
+    class FailedStart:
+        def __init__(self, **_kwargs):
+            pass
+
+        def start(self):
+            starts.append("finish_only")
+            raise original
+
+    monkeypatch.setattr(module.threading, "Thread", FailedStart)
+    evidence = Evidence(tmp_path)
+    journal = CompletionJournal(evidence, 2, defer_writes_until_finish=True)
+    journal.emit(*pair(0))
+    journal.emit(*pair(1))
+    assert starts == []
+    expected = (
+        CompletionJournalError if failure_type is RuntimeError else KeyboardInterrupt
+    )
+    with pytest.raises(expected) as raised:
+        journal.finish()
+    if failure_type is KeyboardInterrupt:
+        assert raised.value is original
+    else:
+        assert raised.value.__cause__ is original
+    facts = journal.facts()
+    assert starts == ["finish_only"]
+    assert facts["writer_started"] is facts["drained"] is False
+    assert facts["submitted_pairs"] == 2
+    assert facts["fully_written_pairs"] == 0
+    payload = (tmp_path / facts["fallback"]["path"]).read_bytes()
+    assert len(json.loads(payload)["items"]) == 2
+    assert b"private thread start detail" not in payload
+    assert evidence.records == []
+
+
+@pytest.mark.parametrize("flag", [None, 1, "true"])
+def test_deferred_flag_requires_an_actual_boolean(tmp_path, flag):
+    with pytest.raises(ValueError):
+        CompletionJournal(Evidence(tmp_path), 1, defer_writes_until_finish=flag)
+
+
+def test_deferred_terminal_buffer_never_expands_past_planned_calls(tmp_path):
+    evidence = Evidence(tmp_path)
+    journal = CompletionJournal(evidence, 1, defer_writes_until_finish=True)
+    journal.emit(*pair(0))
+    with pytest.raises(CompletionJournalError):
+        journal.emit(*pair(1))
+    assert evidence.records == []
+    assert journal.facts()["writer_started"] is False
+    journal.finish()
+    assert journal.facts()["submitted_pairs"] == 1
+    assert journal.facts()["fully_written_pairs"] == 1
+
+
+def test_deferred_interrupt_after_thread_launch_drains_writer_and_keeps_original(
+    tmp_path, monkeypatch
+):
+    from tools.query_load import completion_journal as module
+
+    evidence = Evidence(tmp_path, block=True)
+    original_thread = threading.Thread
+    interrupted = KeyboardInterrupt("private post-launch interruption")
+    created = []
+
+    class StartedThenInterrupted(original_thread):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            created.append(self)
+
+        def start(self):
+            super().start()
+            assert evidence.entered.wait(2)
+            evidence.release.set()
+            raise interrupted
+
+    monkeypatch.setattr(module.threading, "Thread", StartedThenInterrupted)
+    journal = CompletionJournal(evidence, 2, defer_writes_until_finish=True)
+    journal.emit(*pair(0))
+    journal.emit(*pair(1))
+    try:
+        with pytest.raises(KeyboardInterrupt) as raised:
+            journal.finish()
+        assert raised.value is interrupted
+        facts = journal.facts()
+        assert facts["writer_started"] is facts["drained"] is True
+        assert all(not thread.is_alive() for thread in created)
+        payload = (tmp_path / facts["fallback"]["path"]).read_bytes()
+        assert len(json.loads(payload)["items"]) == 2
+        assert b"private post-launch interruption" not in payload
+    finally:
+        evidence.release.set()
+        for thread in created:
+            thread.join(timeout=2)

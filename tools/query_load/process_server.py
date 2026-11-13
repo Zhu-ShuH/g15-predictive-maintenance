@@ -19,6 +19,7 @@ from g15.service.http import QueryHTTPServer, QueryRequestHandler
 
 from .driver import build_application
 from .evidence import resource_snapshot
+from .event_spool import SpoolError, WaveEventSpool
 from .network import SocketNetworkMeter
 
 
@@ -266,6 +267,7 @@ def serve_endpoint(
     cursor_key: bytes,
     users: int,
     workers: int,
+    evidence_root: str | None = None,
 ) -> None:
     """Run the unchanged HTTP/auth/SQLite path in a dedicated spawned process."""
     server = None
@@ -281,6 +283,9 @@ def serve_endpoint(
     active_handlers = 0
     thread_context = threading.local()
     network_meter = SocketNetworkMeter("server")
+    artifact_root = Path(evidence_root).resolve() if evidence_root is not None else None
+    wave_spool: WaveEventSpool | None = None
+    unattributed_spool: WaveEventSpool | None = None
     from .preparation import ReaderReadiness
 
     preparation = ReaderReadiness()
@@ -300,6 +305,10 @@ def serve_endpoint(
 
         def get_request(self):
             request, address = super().get_request()
+            # Overload rejection executes in this accept thread, rather than a
+            # request worker, and still needs its original wave ownership.
+            thread_context.observer_owner = wave_spool
+            thread_context.observer_wave_id = current_wave_id
             try:
                 return network_meter.wrap(request), address
             except BaseException:
@@ -310,6 +319,10 @@ def serve_endpoint(
             nonlocal active_handlers
             with condition:
                 active_handlers += 1
+            # Bind producer ownership once. A delayed callback must never be
+            # attributed to whichever wave happens to be current at delivery.
+            thread_context.observer_owner = wave_spool
+            thread_context.observer_wave_id = current_wave_id
             try:
                 try:
                     local = request.getsockname()
@@ -330,18 +343,56 @@ def serve_endpoint(
                     active_handlers -= 1
                     condition.notify_all()
                 thread_context.connection_ref = None
+                thread_context.observer_owner = None
+                thread_context.observer_wave_id = None
 
-    def stream_event(kind: str, event: dict[str, object]) -> None:
+    def stream_event(
+        kind: str,
+        event: dict[str, object],
+        *,
+        owner: WaveEventSpool | None,
+        origin_wave_id: str | None,
+    ) -> None:
+        nonlocal unattributed_spool
+        if artifact_root is not None and owner is None:
+            stream_errors.append("unattributed_server_observer_event")
+            try:
+                if unattributed_spool is None:
+                    unattributed_spool = WaveEventSpool(artifact_root, "unattributed")
+                unattributed_spool.append(
+                    "unattributed",
+                    {
+                        "original_kind": kind,
+                        "original_event": event,
+                        "origin_wave_id": origin_wave_id,
+                    },
+                )
+            except (SpoolError, OSError, ValueError):
+                stream_errors.append("unattributed_server_observer_retention_failed")
+            return
+        if owner is not None:
+            try:
+                owner.append(kind, event)
+            except SpoolError:
+                # Keep the actual HTTP path running. Evidence failure is sticky
+                # and can never become an accepted observation.
+                stream_errors.append("server_event_spool_failed")
+            return
         try:
             with stream_lock:
                 event_stream.send(
-                    {"kind": kind, "event": dict(event), "wave_id": current_wave_id}
+                    {"kind": kind, "event": dict(event), "wave_id": origin_wave_id}
                 )
         except (OSError, EOFError) as exc:
             stream_errors.append(type(exc).__name__)
 
     def application_event(event: dict[str, object]) -> None:
-        stream_event("application", event)
+        stream_event(
+            "application",
+            event,
+            owner=getattr(thread_context, "observer_owner", None),
+            origin_wave_id=getattr(thread_context, "observer_wave_id", None),
+        )
 
     def transport_event(event: dict[str, object]) -> None:
         # Keep origin timestamps/pid intact. Never stamp on IPC delivery.
@@ -351,8 +402,15 @@ def serve_endpoint(
             if connection_ref is not None:
                 origin["connection_ref"] = dict(connection_ref)
             events.append(origin)
-            stream_event("transport", origin)
             condition.notify_all()
+        # No evidence publication or serialization while owning handler-drain
+        # state. The event retains its original timestamp and process identity.
+        stream_event(
+            "transport",
+            origin,
+            owner=getattr(thread_context, "observer_owner", None),
+            origin_wave_id=getattr(thread_context, "observer_wave_id", None),
+        )
 
     try:
         application, application_events = build_application(
@@ -377,6 +435,11 @@ def serve_endpoint(
                 "kind": "ready",
                 "base_url": f"http://{host}:{port}",
                 "process_id": os.getpid(),
+                "observer_event_mode": (
+                    "commit-framed-spool"
+                    if artifact_root is not None
+                    else "synchronous-ipc"
+                ),
             }
         )
         while True:
@@ -399,6 +462,16 @@ def serve_endpoint(
                             raise RuntimeError("prior handler still active")
                     network_meter.reset_closed()
                     preparation.clear()
+                    if wave_spool is not None:
+                        if wave_spool.facts().get("errors"):
+                            raise RuntimeError("prior observer evidence failed")
+                        wave_spool.close()
+                        wave_spool = None
+                    if artifact_root is not None:
+                        directory = (artifact_root / wave_id).resolve()
+                        if directory.parent != artifact_root or not directory.is_dir():
+                            raise ValueError("invalid observer evidence directory")
+                        wave_spool = WaveEventSpool(directory, wave_id)
                     events.clear()
                     application_events.clear()
                     stream_errors.clear()
@@ -411,10 +484,17 @@ def serve_endpoint(
                             "process_id": os.getpid(),
                             "monotonic_ns": time.perf_counter_ns(),
                         },
+                        owner=wave_spool,
+                        origin_wave_id=current_wave_id,
                     )
                 last_wave_finished = False
                 sampler = EndpointSampler(
-                    "server", on_sample=lambda sample: stream_event("resource", sample)
+                    "server",
+                    on_sample=lambda sample, owner=wave_spool, origin=current_wave_id: (
+                        stream_event(
+                            "resource", sample, owner=owner, origin_wave_id=origin
+                        )
+                    ),
                 )
                 sampler.start()
                 control.send(
@@ -463,10 +543,19 @@ def serve_endpoint(
                     transport = list(events)
                 resources = sampler.stop() if sampler is not None else None
                 sampler = None
+                publication_before = (
+                    endpoint_snapshot("server_observer_publication")
+                    if wave_spool is not None
+                    else None
+                )
                 network = network_meter.snapshot()
-                last_wave_finished = drained and network["active_connections"] == 0
                 if current_wave_id is not None:
-                    stream_event("network", network)
+                    stream_event(
+                        "network",
+                        network,
+                        owner=wave_spool,
+                        origin_wave_id=current_wave_id,
+                    )
                     stream_event(
                         "marker",
                         {
@@ -475,7 +564,39 @@ def serve_endpoint(
                             "process_id": os.getpid(),
                             "monotonic_ns": time.perf_counter_ns(),
                         },
+                        owner=wave_spool,
+                        origin_wave_id=current_wave_id,
                     )
+                observer_evidence = None
+                if wave_spool is not None:
+                    # All HTTP callbacks and resource sampling are over. Seal
+                    # the crash-recoverable event file before publishing it;
+                    # neither requests nor responses wait for this work.
+                    try:
+                        wave_spool.seal()
+                    except SpoolError:
+                        stream_errors.append("server_event_spool_seal_failed")
+                    published = 0
+                    try:
+                        for message in wave_spool.iter_messages():
+                            event_stream.send(message)
+                            published += 1
+                    except (SpoolError, OSError, EOFError):
+                        stream_errors.append("server_event_spool_publication_failed")
+                    publication_after = endpoint_snapshot("server_observer_publication")
+                    observer_evidence = {
+                        "mode": "commit-framed mmap during HTTP; seal and IPC publication after handlers and sampler stop",
+                        "spool": wave_spool.facts(),
+                        "published_frames": published,
+                        "publication_resources": {
+                            "before": publication_before,
+                            "after": publication_after,
+                            "scope": "measured post-handler interval: network snapshot, network/end append, seal/fsync and event IPC; excludes final facts hash/control reply, parent validation and teardown; not request latency/effective seconds; two RSS/FD observations are not interval peaks",
+                        },
+                    }
+                last_wave_finished = (
+                    drained and network["active_connections"] == 0 and not stream_errors
+                )
                 control.send(
                     {
                         "kind": "finished",
@@ -488,6 +609,11 @@ def serve_endpoint(
                         "stream_errors": list(stream_errors),
                         "drain_problems": (
                             [] if drained else ["server completion drain timed out"]
+                        ),
+                        **(
+                            {"observer_evidence": observer_evidence}
+                            if observer_evidence is not None
+                            else {}
                         ),
                     }
                 )
@@ -520,5 +646,16 @@ def serve_endpoint(
             server.server_close()
         if server_thread is not None:
             server_thread.join(timeout=5)
+        observer_failed = bool(
+            unattributed_spool or (wave_spool and wave_spool.facts().get("errors"))
+        )
+        if wave_spool is not None:
+            wave_spool.close()
+        if unattributed_spool is not None:
+            unattributed_spool.close()
         event_stream.close()
         control.close()
+        if observer_failed:
+            # Includes an unexpected late callback after a previously sent
+            # snapshot. Parent shutdown must detect the failure too.
+            raise RuntimeError("server observer evidence failed")
