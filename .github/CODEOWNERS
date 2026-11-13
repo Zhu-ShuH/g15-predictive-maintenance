@@ -3,10 +3,9 @@
 * @Zhu-ShuH
 # 明示性能测试、ADR 与共享层的候选审查者；不扩大 Issue 修改范围。
 /tests/performance/ @kittywent
-/tests/performance/query/ @kittywent
-/tests/integration/test_query_capacity_accounting.py @kittywent @wxm-1
-/tools/query_load/ @kittywent
-/tests/fixtures/query/ @kittywent
+/tests/performance/query/ @Zhu-ShuH @kittywent @wxm-1
+/tools/query_load/ @Zhu-ShuH @kittywent @wxm-1
+/tests/fixtures/query/ @Zhu-ShuH @kittywent @wxm-1
 /docs/adr/ @Zhu-ShuH @kittywent @wxm-1
 /src/g15/common/ @Zhu-ShuH
 # .github/、members/ 和未列出的 docs/*.md 继续由 A 兜底；不改变分支保护。
@@ -43,7 +42,11 @@
 # 2026-10-25 C5 转派 B1 后的归属同步（#9）：以下五条路径改由 B1 承接，避免评审请求自动派给已退出成员。
 /src/g15/reporting/ @kittywent
 /tests/integration/ @kittywent
+# #136 后续由 A 接管；保留 B1/C4 非作者审查候选，不代表已批准。
+/tests/integration/test_query_capacity_accounting.py @Zhu-ShuH @kittywent @wxm-1
 /tests/integration/test_query_service.py @kittywent @wxm-1
+/tests/integration/test_query_execution_stages.py @kittywent @wxm-1
+/tests/integration/test_query_stage_accounting.py @Zhu-ShuH @kittywent @wxm-1
 /tests/fault_injection/ @kittywent
 /docs/test_plan.md @kittywent
 /docs/test_report.md @kittywent

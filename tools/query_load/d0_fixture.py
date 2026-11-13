@@ -47,8 +47,10 @@ def window_start_seq(window_index: int) -> int:
     return window_index * D0_WINDOW_SPAN
 
 
-def build_policy_yaml() -> str:
-    """Return an authorization policy granting one subject all ten devices."""
+def build_policy_yaml(users: int = 1) -> str:
+    """Grant each synthetic subject access to the ten D0 devices."""
+    if not 1 <= users <= 50:
+        raise ValueError("Gate 0 permits 1 to 50 synthetic users")
     allow = "".join(
         "      - run_id: {run}\n        device_id: {dev}\n".format(
             run=device_run_id(i), dev=device_id(i)
@@ -59,11 +61,14 @@ def build_policy_yaml() -> str:
         'authz_schema_version: "1"\n'
         f'policy_version: "{D0_POLICY_VERSION}"\n'
         "subjects:\n"
-        f"  {D0_SUBJECT}:\n"
-        f"    actor_ref: {D0_ACTOR_REF}\n"
-        f"    permission_domain: {D0_PERMISSION_DOMAIN}\n"
-        "    allow:\n"
-        f"{allow}"
+        + "".join(
+            f"  {D0_SUBJECT if i == 0 else f'{D0_SUBJECT}-{i:03d}'}:\n"
+            f"    actor_ref: {D0_ACTOR_REF if i == 0 else f'{D0_ACTOR_REF}-{i:03d}'}\n"
+            f"    permission_domain: {D0_PERMISSION_DOMAIN}\n"
+            "    allow:\n"
+            f"{allow}"
+            for i in range(users)
+        )
     )
 
 

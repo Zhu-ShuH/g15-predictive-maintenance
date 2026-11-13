@@ -8,7 +8,7 @@ Assembles the real read-only query path end to end:
 
 Waves:
 1. serial: one user issues 10 sequential requests across the devices;
-2. concurrent: N requests in flight at once (default 10, opt-in 50).
+2. concurrent: submit 10/50 requests; measure actual overlap independently.
 3. paging: walk every page of one device, verifying each page against the
    oracle independently.
 
@@ -21,14 +21,13 @@ from __future__ import annotations
 
 import os
 import platform
-import secrets
 import threading
-import time
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from g15.query.application import HealthQueryApplication
-from g15.query.auth import AuthorizationPolicy, TokenVerifier, issue_token
+from g15.query.auth import AuthorizationPolicy, TokenVerifier
 from g15.query.cursor import CursorCodec
 from g15.service.http import create_query_server
 
@@ -36,15 +35,12 @@ from .accounting import RunAccounting
 from .client import QueryClient
 from .d0_fixture import (
     D0_DEVICE_COUNT,
-    D0_RULE_ID,
-    D0_WINDOWS_PER_DEVICE,
-    build_d0_runs,
     build_policy_yaml,
     device_id,
     device_run_id,
-    window_start_seq,
 )
 from .oracle import verify_response
+from .paging import run_paging, verify_paging_coverage
 
 BEARER_ISSUER = "issuer-gate0"
 BEARER_AUDIENCE = "audience-gate0"
@@ -60,10 +56,21 @@ def machine_facts() -> dict[str, str]:
 
 
 def build_application(
-    runs_root: Path, bearer_key: bytes, cursor_key: bytes
+    runs_root: Path,
+    bearer_key: bytes,
+    cursor_key: bytes,
+    *,
+    users: int = 1,
+    event_sink: Callable[[Mapping[str, object]], None] | None = None,
 ) -> tuple[HealthQueryApplication, list[dict[str, object]]]:
     events: list[dict[str, object]] = []
-    policy = AuthorizationPolicy.from_yaml(build_policy_yaml())
+
+    def collect_event(event: Mapping[str, object]) -> None:
+        events.append(dict(event))
+        if event_sink is not None:
+            event_sink(event)
+
+    policy = AuthorizationPolicy.from_yaml(build_policy_yaml(users))
     application = HealthQueryApplication(
         runs_root=runs_root,
         token_verifier=TokenVerifier(
@@ -74,7 +81,7 @@ def build_application(
         ),
         authorization_policy=policy,
         cursor_codec=CursorCodec(cursor_key),
-        event_sink=lambda event: events.append(dict(event)),
+        event_sink=collect_event,
     )
     return application, events
 
@@ -116,14 +123,20 @@ def run_serial(
 
 
 def run_concurrent(
-    client: QueryClient, in_flight: int, db_paths: list[Path]
+    client: QueryClient | list[QueryClient], in_flight: int, db_paths: list[Path]
 ) -> list[tuple[int, dict[str, object], str]]:
     results: list[tuple[int, dict[str, object], str]] = []
+
+    if not 1 <= in_flight <= 50:
+        raise ValueError("Gate 0 allows at most 50 requests")
+    barrier = threading.Barrier(in_flight)
 
     def one(index: int) -> tuple[int, dict[str, object], str]:
         device_index = index % D0_DEVICE_COUNT
         run_id = device_run_id(device_index)
-        status, body = client.query(run_id, device_id(device_index), page_size=10)
+        selected = client[index] if isinstance(client, list) else client
+        barrier.wait(timeout=10)
+        status, body = selected.query(run_id, device_id(device_index), page_size=10)
         return status, body, run_id
 
     with ThreadPoolExecutor(max_workers=in_flight) as pool:
@@ -133,183 +146,91 @@ def run_concurrent(
     return results
 
 
-MAX_PAGING_PAGES = 20
-
-
-def run_paging(
-    client: QueryClient,
-    device_index: int,
-    db_paths: list[Path],
-) -> list[tuple[int, dict[str, object], str]]:
-    """Walk all pages of one device, verifying each page via the oracle.
-
-    Windows and alarms paginate independently.  A ``None`` ``next_cursor``
-    means that stream is exhausted; it must not be re-sent as an empty cursor,
-    because the server treats an absent cursor as page one and the driver
-    would silently re-walk the first page.  The two exhausted flags stop the
-    walk; an absent cursor on a live stream still means page one.
-    """
-    run_id = device_run_id(device_index)
-    results: list[tuple[int, dict[str, object], str]] = []
-    windows_cursor: str | None = ""
-    alarms_cursor: str | None = ""
-    windows_done = False
-    alarms_done = False
-    while not (windows_done and alarms_done):
-        if len(results) >= MAX_PAGING_PAGES:
-            raise RuntimeError(
-                f"paging exceeded {MAX_PAGING_PAGES} pages: cursor never exhausted"
-            )
-        status, body = client.query(
-            run_id,
-            device_id(device_index),
-            page_size=10,
-            windows_cursor=windows_cursor,
-            alarms_cursor=alarms_cursor,
-        )
-        if alarms_done and isinstance(body.get("alarms"), dict):
-            # The alarm stream exhausted on an earlier page.  A request that
-            # omits alarms_cursor makes the server re-serve alarm page one, so
-            # discard those duplicates: the driver already consumed the single
-            # alarm and must not count it again in coverage.
-            body["alarms"]["items"] = []
-        results.append((status, body, run_id))
-        next_windows = body.get("windows", {}).get("next_cursor")
-        next_alarms = body.get("alarms", {}).get("next_cursor")
-        if next_windows is None:
-            windows_done = True
-        else:
-            windows_cursor = str(next_windows)
-        if next_alarms is None:
-            alarms_done = True
-        else:
-            alarms_cursor = str(next_alarms)
-    return results
-
-
-def verify_paging_coverage(
-    results: list[tuple[int, dict[str, object], str]],
-) -> list[str]:
-    """Assert the paging walk covered every window exactly once and the alarm
-    exactly once total.
-
-    The server re-serves page one of an exhausted stream whenever that stream's
-    cursor is absent, so a driver that silently re-walks page one would still
-    pass item-by-item verification.  This cross-page check counts window
-    ``start_seq`` values and alarm occurrences, so a re-served page shows up as
-    a duplicate and fails the check.
-    """
-    problems: list[str] = []
-    windows: list[int] = []
-    alarms: list[tuple[int, str]] = []
-    for position, (status, body, _run) in enumerate(results):
-        if status != 200:
-            problems.append(f"paging[{position}] status {status} != 200")
-            continue
-        for item in body.get("windows", {}).get("items", []):
-            windows.append(int(item.get("start_seq")))
-        for item in body.get("alarms", {}).get("items", []):
-            alarms.append((int(item.get("start_seq")), str(item.get("rule_id"))))
-    expected_windows = set(window_start_seq(i) for i in range(D0_WINDOWS_PER_DEVICE))
-    got_windows = set(windows)
-    if len(windows) != D0_WINDOWS_PER_DEVICE:
-        problems.append(
-            f"paging windows total {len(windows)} != {D0_WINDOWS_PER_DEVICE} "
-            "(duplicate or missing pages)"
-        )
-    if got_windows != expected_windows:
-        missing = sorted(expected_windows - got_windows)
-        extra = sorted(got_windows - expected_windows)
-        problems.append(f"paging windows set mismatch: missing={missing} extra={extra}")
-    expected_alarms = {(window_start_seq(D0_WINDOWS_PER_DEVICE - 1), D0_RULE_ID)}
-    if len(alarms) != 1:
-        problems.append(
-            f"paging alarms total {len(alarms)} != 1 (duplicate re-served page)"
-        )
-    if set(alarms) != expected_alarms:
-        problems.append(
-            f"paging alarms set {sorted(set(alarms))} != {sorted(expected_alarms)}"
-        )
-    return problems
-
-
 def verify_all(
     results: list[tuple[int, dict[str, object], str]],
     db_paths: list[Path],
+    *,
+    first_page: bool = False,
+    page_size: int = 10,
+    request_contexts: list[dict[str, object]] | None = None,
 ) -> list[str]:
     problems: list[str] = []
+    if request_contexts is not None and len(request_contexts) != len(results):
+        problems.append("response/request context counts do not match")
     for position, (status, body, run_id) in enumerate(results):
+        streams = None
+        first_streams = ()
+        if request_contexts is not None:
+            context = (
+                request_contexts[position] if position < len(request_contexts) else None
+            )
+            if not isinstance(context, dict) or set(context) != {
+                "request_id",
+                "streams",
+                "page_size",
+                "first_page_streams",
+            }:
+                problems.append(
+                    f"response[{position}] missing or malformed request context"
+                )
+                continue
+            if context["request_id"] != body.get("request_id"):
+                problems.append(
+                    f"response[{position}] request context identity mismatch"
+                )
+            streams = context["streams"]
+            if streams not in (None, "both", "windows", "alarms"):
+                problems.append(f"response[{position}] invalid requested streams")
+                continue
+            selected = (
+                ("windows", "alarms") if streams in (None, "both") else (streams,)
+            )
+            first_streams = context["first_page_streams"]
+            if (
+                not isinstance(first_streams, (list, tuple))
+                or any(
+                    type(stream) is not str or stream not in selected
+                    for stream in first_streams
+                )
+                or len(first_streams) != len(set(first_streams))
+            ):
+                problems.append(
+                    f"response[{position}] invalid first-page request context"
+                )
+                continue
+            if (
+                type(context["page_size"]) is not int
+                or context["page_size"] != page_size
+            ):
+                problems.append(
+                    f"response[{position}] page_size differs from request context"
+                )
         if status != 200:
             problems.append(f"response[{position}] status {status} != 200")
             continue
-        device = str(body.get("device_id", ""))
+        device = next(
+            device_id(i) for i in range(D0_DEVICE_COUNT) if device_run_id(i) == run_id
+        )
         db_path = _db_for_run_id(db_paths, run_id)
-        problems.extend(verify_response(body, db_path, run_id, device, page_size=10))
+        problems.extend(
+            verify_response(
+                body,
+                db_path,
+                run_id,
+                device,
+                page_size=page_size,
+                first_page=first_page,
+                first_page_streams=tuple(first_streams),
+                streams=streams,
+            )
+        )
     return problems
 
 
 def main() -> int:
-    import argparse
-    import tempfile
+    from .runner import main as run
 
-    parser = argparse.ArgumentParser(description="Gate 0 low-load smoke runner")
-    parser.add_argument("--serial", type=int, default=10, help="serial requests")
-    parser.add_argument("--concurrent", type=int, default=10, help="in-flight requests")
-    parser.add_argument("--workers", type=int, default=64, help="server max_workers")
-    args = parser.parse_args()
-
-    bearer_key = secrets.token_bytes(32)
-    cursor_key = secrets.token_bytes(32)
-    accounting = RunAccounting()
-
-    with tempfile.TemporaryDirectory(prefix="g15-gate0-") as tmp:
-        runs_root = Path(tmp) / "runs"
-        db_paths = build_d0_runs(runs_root)
-        application, _ = build_application(runs_root, bearer_key, cursor_key)
-        server, _thread, base_url = start_server(
-            application, accounting, max_workers=args.workers
-        )
-        token = issue_token(
-            key=bearer_key,
-            issuer=BEARER_ISSUER,
-            audience=BEARER_AUDIENCE,
-            subject="subject-d0",
-            now=1_900,
-        )
-        client = QueryClient(base_url, token, "user-d0", accounting)
-        try:
-            print("machine:", machine_facts())
-            started = time.monotonic()
-            serial_results = run_serial(client, args.serial, db_paths)
-            concurrent_results = run_concurrent(client, args.concurrent, db_paths)
-            paging_results = run_paging(client, 0, db_paths)
-            elapsed = time.monotonic() - started
-            all_results = serial_results + concurrent_results + paging_results
-            problems = verify_all(all_results, db_paths)
-            conservation = accounting.conservation_report()
-            print(
-                "serial",
-                len(serial_results),
-                "concurrent",
-                len(concurrent_results),
-                "paging",
-                len(paging_results),
-                "elapsed_seconds",
-                round(elapsed, 3),
-            )
-            print("peak_client_in_flight", accounting.peak_client_in_flight)
-            print("peak_server_in_flight", accounting.peak_server_in_flight)
-            print("oracle_problems", len(problems))
-            print("conservation_problems", len(conservation))
-            for problem in problems:
-                print("ORACLE:", problem)
-            for problem in conservation:
-                print("CONSERVATION:", problem)
-            failed = bool(problems or conservation)
-        finally:
-            server.shutdown()
-            server.server_close()
-    return 1 if failed else 0
+    return run()
 
 
 if __name__ == "__main__":

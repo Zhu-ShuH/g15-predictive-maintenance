@@ -34,7 +34,7 @@
 
 ## 3. 已决定的主目标与分阶段量测
 
-主场景采用 F：100,000 个不同用户在同一受控波次中各发起一条真实主请求。所有阶段使用同一时钟与 request/trace ID，并按匿名化用户去重：
+主场景采用 F：100,000 个不同用户在同一受控波次中各发起一条真实主请求。每个端点的阶段使用本进程单调时钟，跨端用同一 request/trace ID 关联并按匿名化用户去重；跨进程时间不得直接相减：
 
 | 字段 | 定义 |
 |---|---|
@@ -57,6 +57,16 @@
 分别报告客户端与服务端的不同用户在途峰值、发生时刻、排队/执行组成及采样方法。只有某阶段的不同用户峰值真实达到 100,000，才能声称该阶段达到 100k；同步发起不能自动推导服务端已达到同样峰值。重试、重定向、重复请求、连接数和累计请求均不能补足用户数。具体同步窗口、统计区间、时钟误差和最终判定阶段由 Review 精确冻结。
 
 `syc` 为 `src` 的笔误；`test` 与 `src` 的目录对应关系按 B1 复核记录，不再作为待定术语。
+
+### 3.1 #157 阶段观测与分进程量测候选（2026-11-12）
+
+A 继续修复 #157 并补全 Gate 0，候选实现及精确事件边界见 interface §16。新增 `server_executing` 与 `server_execution_completed` 配对，覆盖 framing/认证授权/SQLite 的执行区间，结束点在响应序列化与发送之前；Expect/非 GET 用 execution_not_started。每事件原发纳秒单调时钟和 PID 随证据保留，只在同一个服务端进程内计算执行/接收在途，不能按跨进程事件到达时刻计数。
+
+当前没有应用任务队列，非阻塞 worker 满额即拒绝；queued=null，application_queue=absent，listen_backlog=unmeasured。queued 是否记为验收 N/A 仍待 B1/C4 复核与 A 明确裁定，不能因工具写了 absent 自动通过该项。
+
+`process_runner` 分离客户端/服务端进程。并发主波次预先建立真实 TCP 短连接，再由客户端发送前 barrier 同步起跑；建连与 barrier 等待单列，client_started 在真实请求发送前记录。请求使用已冻结上限内的 page_size=100，真实读取 D0 的100个窗口。服务端没有 barrier、sleep、人工延迟或限速。各进程资源分别采样，CPU按该进程的单调区间求差，RSS/FD/handle采样最大值仅为已观察下界；实际峰值及目标未达必须原样报告。
+
+本增量保持 Gate 0 / D0 / 10与50边界，不授权D1/D2或更高负载。事件、资源与工作负载口径属于本PR候选，真实非作者评审和同SHA双Linux证据仍是完整Gate0前置。
 
 ## 4. 主场景 F 与补充场景 H
 
@@ -196,6 +206,8 @@ subjects:
 - 健康查询可返回契约允许的窗口/告警业务字段；状态部分只能从 `state_json.state` 做允许列表投影并附获准版本字段。不得返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json`、自由文本 `reason` 或 `private_truth`。
 - 新鲜度只依据当前只读事务可见的已提交序号/状态/持久化时间；服务观察时间不得冒充数据生成时间。
 
+**#162双流选择候选（2026-11-13）**：精确外部shape及错误顺序见[interface §17](../interface.md#17-双流显式选择与发送前准备1622026-11-13-候选)。不传`streams`仍为query_contract_version`"1"`原shape/原行为；显式`both/windows/alarms`为`"2"`，两个分页对象各增严格bool`omitted`。未选流`items=[]`、cursor和对应流/顶层高水位null，仍保留sort/page_size；omitted不是无数据。状态和其提交高水位照实读取，未选windows时返回窗口版本集合为空。未选流带任何非None cursor均400；认证401/资源隐藏404仍先于可选参数校验。选中流维持原签名scope和高水位，旧v1 cursor可按相同scope继续v2选择；不重新采快照来替换旧cursor。遍历在一流耗尽后只请求另一个流，D0目标raw100窗/1告警、discard0，独立oracle先验证全部原始条目与请求期望，再验证跨页完整性。此为产品query候选，须真实非作者Review，不改变旧T17710/1/9事实，也不宣告Gate0通过。
+
 #### 5.1.6 失效、撤销与重放边界
 
 - 第一版是无状态 bearer：同一有效 token 在 `exp` 前可重放；`jti` 只供审计关联，不自动阻止重放。短 TTL、issuer/audience 绑定、TLS 与禁止记录凭据只能降低风险，不能宣称已消除。
@@ -236,7 +248,7 @@ subjects:
 | 授权/隐藏 | 允许、主体无映射、越权、资源不存在、Manifest 不匹配 | 允许路径正确；其余同结构 404；无 403 |
 | YAML/路径 | 坏 YAML、重复/未知键、通配符、>10 device、绝对路径、`..`、符号链接逃逸 | 启动 fail closed；不部分加载、不创建数据库 |
 | 生命周期 | 同 token 在 TTL 内重复使用、过期、整体换 key | 重放按已知风险留证；过期/旧 key 拒绝 |
-| 分页 | 告警并列、翻页间追加、cursor 损坏/跨主体/跨 scope、翻页间撤权 | 无重复错序；新行不越过高水位；每页重查授权 |
+| 分页 | 告警并列、翻页间追加、cursor 损坏/跨主体/跨 scope、翻页间撤权 | 无重复错序；新行不越过高水位；每页重查授权。证据限定：v1旧双流协议不能表达耗尽，省略 cursor 会重发首页；#136/T177 分列原始/消费/丢弃数量，客户端丢弃后的覆盖通过不代表服务端原始无重复。#162的显式选择v2候选另按请求上下文验证原始覆盖，不回写旧证据；本要求不降低 |
 | 数据/只读 | 响应对独立 SQL/oracle；缺库；检查文件/Schema/业务行 | 结果一致；缺库不创建；查询路径零业务写入 |
 | 版本/投影 | 各实际持久化版本来源、配置版本缺来源、reset 审计字段与真值扫描 | 返回实际版本并省略无来源 config 版本；敏感字段不可达 |
 | trace | 全阶段 ID、401/404、日志扫描 | ID 可关联；无 token、PII、真值或审计原文 |
@@ -298,6 +310,16 @@ subjects:
 4. **兼容**：Windows 开发回归；Ubuntu 24.04 与 RHEL 9 在同一 SHA 分别 fresh clone 做低负载启停、认证、查询和资源留证。十万级不进入共享 CI。
 5. **性能**：主场景 F 候选先按相同阶段定义验证 100→500→1,000 个不同用户的实际在途请求；先预热，再按待审统计区间留证；冷/热、均匀设备和 80/20 热点分开。
 6. **压力**：F 候选按 1k→5k→10k→25k→50k→100k 个不同用户逐级同步发起并实测客户端/服务端在途；目标档统计区间待 Review。H 的 VU/think time/soak 结果另报，不得混入或替代 F。
+
+2026-11-12的Gate0补充候选采用test_plan §11.8的持续服务端、多真实波次观察：累计至少60秒质量通过的实际请求发送→完整读取并解码区间，墙钟与空档另列，所有波次峰值分布及失败保留；没有handler延迟、压响应或sleep。单波次10/50证据只证明该次瞬时在途，不替代本条一分钟观察，不外推持续恒定在途。工具CLI最低60秒，预算或任何质量失败停止；本观测统计判据仍待B1/C4真实复核后由A记录阶段结论。
+
+2026-11-13的#162准备与阶段候选在[interface §17.3](../interface.md#173-d0量测准备与a候选阶段裁定)、test_plan §11.9登记。A对旧Win50 wave00192复核的last_accept/first_completion分别距first_received 28.3545/22.7892ms，故新tools adapter只观测真实handler reader安装就绪，经本wave精确四元组控制确认后才释放客户端发送前barrier；就绪不计received或已认证在途。headers在barrier前只内存拼装，计时从其后endheaders真实发送前起至完整读解码；建连/accept/reader/确认/barrier时间单列。服务端不等待、无barrier/延迟/响应hold/队列扩容，准备不能保证峰值N。A候选以received→response_completed验收D0 server在途，executing独立；absent/null的queued有条件N/A并保留backlog未测，N/A不等于门禁通过。AND、累计有效60秒和全部67旧未达波不变，新证据仍需固定SHA及B1/C4复核。
+
+2026-11-13的后续客户端调度候选改用纯selectors单loop，精确规则见[interface §17.4](../interface.md#174-selector单loop客户端与有界证据写入162后续候选)与test_plan §11.10。exact ACK仍为前置，selector_backend及共同launch gate元数据单列；launch_mode/launch_released不复用线程barrier语义，gate不能冒充N次请求开始。每socket首次真实send调用尝试之前绑定start，包括当次EAGAIN零进度；从未send的准备失败只记独立client_attempt，不补accounting或latency。每步write后立即处理read-ready，完整body与JSON即complete，不等其余发送、EOF或journal。普通EAGAIN不加字节、不等同真I/O错；真实错误及既有5秒超时留证，数值不变，服务端业务/等待/队列不改。
+
+主并发先用内存即时计数，N有界pairs队列交单证据写者；前置仍沿原持久化路径。drain/flush归gap及资源，不加入请求latency或有效时长；写失败以独立emergency保已知记录并失败，不重写原raw。A早响应而B短写/EAGAIN时，必须A先read/decode/complete再B发送完成，不能靠压读或延后complete造峰。新实现/workload另绑新SHA且不保证N，旧dba1个未达及T17767个未达不改判。AND/10/50/累计60秒、阶段、queued条件N/A、cache和socket层次边界保持，新成绩仍待固定源码回归、三平台各档一次实测与真实非作者Review。
+
+网络资源候选以实际TCP连接的完整HTTP socket应用流字节及错误/生命周期留证，按两端反向四元组逐连接核对。它包含HTTP头/正文，排除TCP/IP开销、重传与物理链路余量；不能用总量巧合一致、正文大小或进程I/O代替逐连接证据，也不能据此宣称跨主机网络容量。精确层次与本阶段充分性须在真实资源/契约Review明确。
 
 前一档的业务正确性、日志计数、负载端余量、服务端资源和缓存状态不可信时，禁止升档。
 
