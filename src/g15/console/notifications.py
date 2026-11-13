@@ -10,6 +10,8 @@ import threading
 from pathlib import Path
 from typing import Callable, Any
 
+from g15.notifications.service import NotificationControlError
+
 from g15.notifications import (
     AlertSnapshot,
     NotificationPolicy,
@@ -48,7 +50,12 @@ class NotificationController:
         self.service = (
             service if service is not None else NotificationService(state_path)
         )
-        token = os.environ.get("G15_PUSHPLUS_TOKEN") if load_environment_token else None
+        token = (
+            os.environ.get("G15_PUSHPLUS_TOKEN")
+            if load_environment_token
+            and not getattr(self.service, "environment_token_suppressed", False)
+            else None
+        )
         if token:
             current = self.service.status()["policy"]
             self.service.configure(NotificationPolicy(**current), token=token)
@@ -168,6 +175,18 @@ class NotificationController:
             "notification": {"id": result["id"], "decision": "queued"},
         }
 
+    def delete_settings(self, payload: dict) -> dict:
+        """Clear this channel only, preserving attempted delivery history."""
+        if not isinstance(payload, dict) or payload:
+            raise NotificationRequestError(400, "invalid_request")
+        try:
+            result = self.service.delete_settings()
+        except NotificationControlError as exc:
+            raise NotificationRequestError(409, str(exc)) from None
+        with self._lock:
+            self._last_error, self._last_checked_at = None, None
+        return {**self.status(), **result}
+
     def status(self) -> dict:
         """Expose only a fixed, bounded projection of settings and delivery history."""
         source = self.service.status()
@@ -176,7 +195,12 @@ class NotificationController:
             checked, error = self._last_checked_at, self._last_error
         error = error or source.get("last_error")
         latest = source.get("latest", [])
-        if not error and latest and latest[0].get("state") in ("failed", "retry_wait"):
+        if (
+            not error
+            and latest
+            and latest[0].get("state") in ("failed", "retry_wait")
+            and latest[0].get("error_code") != "notification_cancelled"
+        ):
             error = latest[0].get("error_code")
         idle = False
         if source["configured"] and policy["enabled"]:
@@ -398,6 +422,16 @@ class EmailNotificationController(NotificationController):
             )
             raise NotificationRequestError(400, code) from None
         return self.status()
+
+    def cancel_pending(self, payload: dict) -> dict:
+        """Cancel paused automatic mail without clearing its current settings."""
+        if not isinstance(payload, dict) or payload:
+            raise NotificationRequestError(400, "invalid_request")
+        try:
+            result = self.service.cancel_pending_automatic()
+        except NotificationControlError as exc:
+            raise NotificationRequestError(409, str(exc)) from None
+        return {**self.status(), **result}
 
     def status(self) -> dict:
         """Report SMTP acceptance only and no authorization code or credential handle."""

@@ -24,9 +24,17 @@ SMTP 返回接受只表示邮件服务器接收了提交，不证明进入收件
 
 自动提醒关闭会暂停自动任务，显式测试仍可发送且不消耗自动去重游标。重试和进程恢复可能重复尝试同一封邮件；同一任务的 Message-ID 保持不变，不能承诺邮箱一定据此去重或严格只收到一次。默认最多尝试 3 次，重试间隔从 30 秒有界退避；发生 DATA 后断连等不确定结果时必须在记录中明确显示。
 
+## 删除设置与清理待发邮件
+
+在当前“163 邮箱”渠道点击“删除通知设置”，页面会先说明影响并要求再次确认。确认后清除本渠道保存的发件/收件地址和进程内授权码，恢复默认规则（关闭、1 条、600 秒），取消所有尚未尝试发送的任务；已发送和已失败的历史记录、来源去重游标及其他渠道保持。未保存的本渠道更改会一并丢弃。删除不需要重新输入授权码，删除后不能继续发送，重启也不会恢复已删除的邮箱设置。
+
+若只需清理积压，先关闭并保存自动提醒，再点击“取消待发邮件”并确认。该操作只取消尚未尝试发送的自动邮件，保留收发件地址、授权码、提醒规则和历史记录，自动提醒继续关闭。未保存的表单更改也保留。已排队的显式测试、已尝试发送、正在重试或结果不确定的任务不会被当成未发送任务清掉。
+
+取消采用终态记录：`state=failed` 且 `error_code=notification_cancelled`，页面显示“已取消 · 未发送”，尝试数仍为 0；正文、附件和原收件地址留作历史，不再派发。存在发送中、等待重试、已尝试待发或未闭合的渠道请求时，两种操作都返回 `409 notification_busy`，不进行部分清理；应先核对记录和收件结果，再重试。自动提醒仍开启时，取消待发返回 `409 notification_enabled`。
+
 ## HTTP 契约
 
-读取接口支持 GET/HEAD，其他来源、请求体及参数边界继承[控制台契约](console.md)。邮箱设置和测试只开放以下两条 POST，要求唯一同源 Origin、`X-G15-Console-Action: notifications`、`application/json` 和唯一、非零、最多 4096 字节的 Content-Length。Transfer-Encoding、Expect、重复 JSON 键、未知键、重复参数及非法值均拒绝。
+读取接口支持 GET/HEAD，其他来源、请求体及参数边界继承[控制台契约](console.md)。邮箱设置、测试、删除与取消动作只开放下表所列 POST，要求唯一同源 Origin、`X-G15-Console-Action: notifications`、`application/json` 和唯一、非零、最多 4096 字节的 Content-Length。Transfer-Encoding、Expect、重复 JSON 键、未知键、重复参数及非法值均拒绝。
 
 | 接口 | 内容 |
 |---|---|
@@ -34,6 +42,8 @@ SMTP 返回接受只表示邮件服务器接收了提交，不证明进入收件
 | `/api/email-notifications/preview?run_id=...&device_id=...` | 先经原真实查询 HTTP 授权和资源归属核对，再从完整快照生成 title、markdown、advice、red_count、报告时间及附件元数据。attachments 每项仅含 filename、content_type、bytes；不发送。 |
 | POST `/api/email-notifications/settings` | 必填 enabled、threshold、cooldown_seconds、sender、recipient；可选 auth_code 和 channel。channel 仅允许 smtp163。 |
 | POST `/api/email-notifications/test` | 仅接受 run_id、device_id；渠道已配置且任务成功持久入队后才返回 202。来源不可读、未授权、内容超限或 outbox 满均明确失败。 |
+| POST `/api/email-notifications/settings/delete` | 仅接受空对象 `{}`；原子删除本渠道设置与凭据，返回安全状态、`deleted=true`、`cancelled_count`；不发送。 |
+| POST `/api/email-notifications/pending/cancel` | 仅接受空对象 `{}`；须自动提醒已关闭，只取消未尝试的自动邮件，返回安全状态及 `cancelled_count`；配置保留，不发送。 |
 
 `sender` 必须是一个 ASCII `@163.com` 邮箱；`recipient` 必须是一个 ASCII 邮箱。不接受显示名、多收件人、抄送、换行或自定义邮件头。阈值为 1..1000000 的整数，间隔为 0..86400 秒整数，均拒绝 bool。邮箱地址属于非秘密配置，会按上述用途持久保存；它们不需要提交到仓库或公开证据。
 

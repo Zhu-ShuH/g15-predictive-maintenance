@@ -521,3 +521,109 @@ def test_cooldown_never_rewrites_attempted_or_uncertain_delivery(
         ).fetchone()
     assert row[0] == 2 and "# Immutable RED2 report" in row[1]
     assert row[2:] == (prior_state, attempts)
+
+
+def test_delete_wechat_settings_preserves_history_and_cursors_without_reviving_queue(
+    tmp_path,
+):
+    engine = service(tmp_path)
+    engine.observe(snapshot(1))
+    assert engine.dispatch_once()["decision"] == "provider_accepted"
+    engine.observe(snapshot(2))
+    engine.enqueue_test(snapshot(2))
+    assert engine.delete_settings() == {"deleted": True, "cancelled_count": 2}
+    assert engine.policy == NotificationPolicy()
+    assert not engine.status()["configured"]
+    assert engine.status()["counts"] == {"failed": 2, "provider_accepted": 1}
+    assert engine.delete_settings() == {"deleted": True, "cancelled_count": 0}
+    engine.configure(NotificationPolicy(enabled=True), TOKEN)
+    assert engine.observe(snapshot(2))["decision"] == "already_queued"
+    assert engine.dispatch_once()["decision"] == "idle"
+    engine.close()
+
+
+def test_deleted_wechat_environment_token_stays_suppressed_until_explicit_new_token(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from g15.console.notifications import NotificationController
+
+    monkeypatch.setenv("G15_PUSHPLUS_TOKEN", TOKEN)
+    path = tmp_path / "environment-delete.sqlite"
+    application = SimpleNamespace()
+    first = NotificationController(application, lambda _: snapshot(), path)
+    assert first.status()["configured"]
+    assert first.delete_settings({})["deleted"]
+    assert first.service.environment_token_suppressed
+    first.close()
+    restored = NotificationController(application, lambda _: snapshot(), path)
+    try:
+        assert not restored.status()["configured"]
+        assert not restored.service.policy.enabled
+        restored.configure({"enabled": False, "threshold": 1, "cooldown_seconds": 600})
+        assert restored.service.environment_token_suppressed
+        restored.configure(
+            {
+                "enabled": False,
+                "threshold": 1,
+                "cooldown_seconds": 600,
+                "token": "explicit-new-synthetic-token-987654",
+            }
+        )
+        assert not restored.service.environment_token_suppressed
+    finally:
+        restored.close()
+    reopened = NotificationController(application, lambda _: snapshot(), path)
+    try:
+        assert reopened.status()["configured"]
+    finally:
+        reopened.close()
+
+
+def test_delete_transaction_failure_does_not_suppress_environment_token(tmp_path):
+    engine = service(tmp_path)
+    try:
+        with sqlite3.connect(tmp_path / "outbox.sqlite") as db:
+            db.execute(
+                "CREATE TRIGGER deny_preferences BEFORE INSERT ON notification_preferences BEGIN SELECT RAISE(ABORT,'synthetic preference failure'); END"
+            )
+        with pytest.raises(
+            NotificationStorageError, match="^notification_storage_error$"
+        ):
+            engine.delete_settings()
+        assert not engine.environment_token_suppressed
+        assert engine.status()["configured"] and engine.policy.enabled
+        with sqlite3.connect(tmp_path / "outbox.sqlite") as db:
+            assert (
+                db.execute(
+                    "SELECT environment_token_suppressed FROM notification_preferences WHERE singleton=1"
+                ).fetchone()[0]
+                == 0
+            )
+    finally:
+        engine.close()
+
+
+def test_old_notification_database_without_preferences_keeps_environment_loading(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from g15.console.notifications import NotificationController
+
+    monkeypatch.setenv("G15_PUSHPLUS_TOKEN", TOKEN)
+    path = tmp_path / "old-notification-schema.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE notification_settings (singleton INTEGER PRIMARY KEY CHECK(singleton=1),policy_json TEXT NOT NULL)"
+        )
+        db.execute(
+            "INSERT INTO notification_settings VALUES(1,?)",
+            (json.dumps(NotificationPolicy().public()),),
+        )
+    control = NotificationController(SimpleNamespace(), lambda _: snapshot(), path)
+    try:
+        assert control.status()["configured"]
+        assert not control.service.environment_token_suppressed
+        assert control.service.policy == NotificationPolicy()
+    finally:
+        control.close()

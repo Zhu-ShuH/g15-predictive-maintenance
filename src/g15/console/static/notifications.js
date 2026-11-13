@@ -2,6 +2,9 @@ const ACTION_HEADER = { "Content-Type": "application/json", "X-G15-Console-Actio
 const ERROR_TEXT = Object.freeze({
   invalid_request: "设置格式无效，请检查告警事件数、提醒间隔与 Token。",
   not_configured: "尚未配置 PushPlus Token，请先保存渠道设置。",
+  notification_busy: "有通知正在发送或等待确认，请先核对记录并稍后重试。",
+  notification_enabled: "请先关闭并保存自动提醒，再取消待发邮件。",
+  notification_cancelled: "该通知已取消，未尝试发送；记录已保留。",
   not_found: "所选设备暂不可读取，请重新选择设备。",
   forbidden_origin: "操作来源未通过校验，请从本机控制台重新打开。",
   unavailable: "通知服务暂不可用，请稍后刷新。",
@@ -74,7 +77,8 @@ export function notificationTestPending(state) {
     row.device_id === state.selected?.device_id &&
     (row.uncertain === true || ["queued", "retry_wait", "sending"].includes(row.state)));
 }
-export function notificationHistoryState(value, channel = "pushplus") {
+export function notificationHistoryState(value, channel = "pushplus", errorCode = null) {
+  if (value === "failed" && errorCode === "notification_cancelled") return "已取消 · 未发送";
   if (channel === "smtp163" && ["accepted", "provider_accepted"].includes(value)) return "SMTP 已接收";
   return ({ accepted: "渠道已接收", provider_accepted: "渠道已接收", queued: "等待发送", retrying: "等待重试", retry_wait: "等待重试", retry: "等待重试",
     pending: "等待发送", failed: "发送失败", sending: "正在发送" })[value] || "状态未知";
@@ -114,6 +118,8 @@ export function createNotificationsClient({ fetchImpl = globalThis.fetch, timeou
     save: (values) => request(`${base}/settings`, normalize(values)),
     preview: (device) => request(`${base}/preview?${new URLSearchParams(selectedBody(device))}`),
     test: (device) => request(`${base}/test`, selectedBody(device)),
+    deleteSettings: () => request(`${base}/settings/delete`, {}),
+    ...(channel === "smtp163" ? { cancelPending: () => request(`${base}/pending/cancel`, {}) } : {}),
   };
 }
 export function createEmailNotificationsClient(options = {}) {
@@ -125,7 +131,7 @@ export function createNotificationsController({ client, channel = "pushplus" } =
   const normalize = email ? emailNotificationSettings : notificationSettings;
   const errorText = email ? emailNotificationErrorText : notificationErrorText;
   let state = { settings: null, configured: false, status: null, history: [], loading: false,
-    saving: false, testing: false, testUncertain: false, previewLoading: false, preview: null, selected: null, error: "", message: "" };
+    saving: false, testing: false, deleting: false, cancelling: false, testUncertain: false, previewLoading: false, preview: null, selected: null, error: "", message: "" };
   let destroyed = false, previewRevision = 0, refreshRevision = 0;
   const listeners = new Set();
   function update(patch) {
@@ -140,7 +146,9 @@ export function createNotificationsController({ client, channel = "pushplus" } =
     update({ settings: { ...settings, channel, ...(email ? { sender: body.settings.sender, recipient: body.settings.recipient } : {}) }, configured: body.configured,
       status: body.status || null, history: Array.isArray(body.history) ? body.history : [], error: "" });
   }
+  const mutationBusy = () => state.saving || state.testing || state.deleting || state.cancelling;
   async function refresh({ silent = false } = {}) {
+    if (state.deleting || state.cancelling || destroyed) return;
     const revision = ++refreshRevision;
     if (!silent) update({ loading: true, error: "" });
     try { const body = await client.settings(); if (revision === refreshRevision && !destroyed) apply(body); }
@@ -157,7 +165,7 @@ export function createNotificationsController({ client, channel = "pushplus" } =
     },
     refresh,
     async save(values) {
-      if (state.saving || destroyed) return;
+      if (mutationBusy() || destroyed) return;
       update({ saving: true, error: "", message: "" });
       try {
         await client.save(normalize(values));
@@ -190,7 +198,7 @@ export function createNotificationsController({ client, channel = "pushplus" } =
       finally { if (revision === previewRevision) update({ previewLoading: false }); }
     },
     async test() {
-      if (!state.configured || !state.selected || notificationTestPending(state) || destroyed) return;
+      if (!state.configured || !state.selected || notificationTestPending(state) || mutationBusy() || destroyed) return;
       update({ testing: true, error: "", message: "" });
       try {
         await client.test({ ...state.selected });
@@ -198,6 +206,33 @@ export function createNotificationsController({ client, channel = "pushplus" } =
         await refresh({ silent: true });
       } catch (error) { update({ error: errorText(error?.code), testUncertain: error?.code === "request_failed" }); }
       finally { update({ testing: false }); }
+    },
+    async deleteSettings() {
+      if (mutationBusy() || destroyed) return false;
+      refreshRevision += 1; previewRevision += 1;
+      update({ deleting: true, previewLoading: false, error: "", message: "" });
+      try {
+        const body = await client.deleteSettings();
+        if (body.deleted !== true || !Number.isSafeInteger(body.cancelled_count) || body.cancelled_count < 0) throw new Error("invalid_response");
+        apply(body);
+        update({ preview: null, testUncertain: false, message: `本渠道通知设置已删除，自动提醒已关闭；已取消 ${body.cancelled_count} 条未发送任务，历史记录保留。` });
+        return true;
+      } catch (error) { update({ error: errorText(error?.code) }); return false; }
+      finally { update({ deleting: false }); }
+    },
+    async cancelPending() {
+      if (!email || mutationBusy() || destroyed) return false;
+      if (state.settings?.enabled !== false) { update({ error: errorText("notification_enabled") }); return false; }
+      refreshRevision += 1;
+      update({ cancelling: true, error: "", message: "" });
+      try {
+        const body = await client.cancelPending();
+        if (!Number.isSafeInteger(body.cancelled_count) || body.cancelled_count < 0) throw new Error("invalid_response");
+        apply(body);
+        update({ message: `已取消 ${body.cancelled_count} 封未发送的自动邮件；邮箱配置和历史记录保留，自动提醒仍关闭。` });
+        return true;
+      } catch (error) { update({ error: errorText(error?.code) }); return false; }
+      finally { update({ cancelling: false }); }
     },
     destroy() { destroyed = true; previewRevision += 1; refreshRevision += 1; listeners.clear(); },
   };
@@ -211,7 +246,7 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     pushplus: createNotificationsController({ client: clients.pushplus }),
     smtp163: createEmailNotificationsController({ client: clients.smtp163 }),
   };
-  let channel = "smtp163", visible = false, timer = null, selected = null, devices = [], deviceSignature = "";
+  let channel = "smtp163", visible = false, timer = null, selected = null, devices = [], deviceSignature = "", confirmation = null;
   const dirty = { pushplus: false, smtp163: false }, drafts = {}, revisions = { pushplus: 0, smtp163: 0 };
   const current = () => controllers[channel];
   const timestamp = (value) => {
@@ -239,18 +274,20 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
   }
   function render(state) {
     const email = channel === "smtp163", pending = notificationTestPending(state);
+    const destructive = state.deleting || state.cancelling, busy = state.saving || state.testing || destructive;
     if (state.settings && !dirty[channel]) fill(state.settings);
     $("notification-title").textContent = email ? "红色告警 · 邮件提醒" : "红色告警 · 微信提醒";
     $("notification-rule-help").textContent = email
       ? "每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；按最短间隔逐封排队发送。"
       : "每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；间隔内新红色事件合并提醒。";
     $("notification-channel-choice").value = channel;
-    $("notification-channel-choice").disabled = state.saving || state.testing;
+    $("notification-channel-choice").disabled = busy;
     $("notification-channel-name").textContent = email ? "163 邮箱" : "PushPlus · 微信";
     $("notification-pushplus-fields").hidden = email;
     $("notification-email-fields").hidden = !email;
-    $("notification-token").disabled = email;
-    for (const id of ["notification-email-sender", "notification-email-recipient", "notification-email-auth"]) $(id).disabled = !email;
+    $("notification-token").disabled = email || destructive;
+    for (const id of ["notification-email-sender", "notification-email-recipient", "notification-email-auth"]) $(id).disabled = !email || destructive;
+    for (const id of ["notification-enabled", "notification-threshold", "notification-cooldown"]) $(id).disabled = destructive;
     $("notification-email-sender").required = email;
     $("notification-email-recipient").required = email;
     const status = !state.settings ? "正在读取设置" : ({ paused: "通知已暂停", unconfigured: "渠道未配置",
@@ -265,18 +302,37 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     const error = state.error || (state.status?.last_error_code ? errorText(state.status.last_error_code) : "");
     $("notification-error").textContent = error; $("notification-error").hidden = !error;
     $("notification-feedback").textContent = state.message; $("notification-feedback").hidden = !state.message;
-    $("notification-save").disabled = !state.settings || state.saving || state.loading;
+    $("notification-save").disabled = !state.settings || busy || state.loading;
     $("notification-save").textContent = state.saving ? "正在保存…" : "保存通知设置";
-    $("notification-refresh").disabled = state.loading;
+    $("notification-refresh").disabled = state.loading || destructive;
     $("notification-refresh").textContent = state.loading ? "正在读取…" : "刷新通知状态";
-    $("notification-preview-button").disabled = !selected || state.previewLoading || dirty[channel] || state.saving;
+    $("notification-preview-button").disabled = !selected || state.previewLoading || dirty[channel] || busy;
     $("notification-preview-button").textContent = state.previewLoading ? "正在生成预览…" : "预览建议与报告";
-    $("notification-test").disabled = !state.configured || !selected || pending || state.saving || dirty[channel];
+    $("notification-test").disabled = !state.configured || !selected || pending || busy || dirty[channel];
     $("notification-test").textContent = state.testing ? "正在提交…" : email ? "发送测试邮件" : "发送测试到微信";
     $("notification-test-scope").textContent = dirty[channel] ? "先保存更改，再预览或发送测试消息。" : pending
       ? "测试仍在发送或接收结果待确认，请先查看通知记录与接收渠道，避免重复发送。"
       : state.configured ? email ? "将向当前收件邮箱发送一封真实测试邮件，请在手机邮箱核对。" : "点击会向已配置渠道发送一条真实测试消息。"
       : email ? "先保存邮箱与授权码，才能发送测试邮件。" : "先保存 Token，才能发送真实测试消息。";
+    $("notification-delete-settings").disabled = !state.settings || busy || state.loading;
+    $("notification-delete-settings").ariaExpanded = String(confirmation?.action === "delete");
+    $("notification-cancel-pending").hidden = !email;
+    $("notification-cancel-pending").disabled = !state.settings || state.settings.enabled || busy || state.loading;
+    $("notification-cancel-pending").ariaExpanded = String(confirmation?.action === "cancel");
+    $("notification-maintenance-note").textContent = email
+      ? "取消待发邮件前，请先关闭并保存自动提醒。取消会保留邮箱配置；删除设置会清除本渠道配置与凭据。"
+      : "删除只影响当前微信渠道，其他渠道和历史发送记录保留。";
+    $("notification-confirmation").hidden = !confirmation;
+    if (confirmation) {
+      const deleting = confirmation.action === "delete";
+      $("notification-confirm-title").textContent = deleting ? `删除${email ? "邮箱" : "微信"}通知设置？` : "取消待发自动邮件？";
+      $("notification-confirm-description").textContent = deleting
+        ? `将${email ? "清除发件邮箱、收件邮箱和授权码" : "清除 Token"}，关闭自动提醒并恢复默认规则，取消本渠道尚未尝试发送的任务。${dirty[channel] ? "本渠道未保存的更改也会丢弃。" : ""}已发送记录和其他渠道不会删除。`
+        : "将取消所有尚未尝试发送的自动邮件，保留邮箱配置、历史记录与未保存的更改，自动提醒继续关闭。";
+      $("notification-confirm-action").textContent = destructive ? "正在处理…" : deleting ? "确认删除设置" : "确认取消待发";
+      $("notification-confirm-action").disabled = busy || state.loading;
+      $("notification-confirm-dismiss").disabled = destructive;
+    }
     $("notification-preview").hidden = !state.preview;
     $("notification-preview-empty").hidden = Boolean(state.preview);
     $("notification-preview-empty").textContent = state.previewLoading ? "正在从所选设备生成消息预览…" : "选择设备并生成预览，核对维护建议与报告内容。预览不会发送消息。";
@@ -291,7 +347,8 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     const history = state.history.map((row) => {
       const item = element("tr"), detail = element("td", row.device_id || "设备未知");
       detail.append(element("small", row.run_id || "运行未知", "notification-run"));
-      const statusCell = element("td", notificationHistoryState(row.state, channel)); statusCell.dataset.state = row.state;
+      const statusCell = element("td", notificationHistoryState(row.state, channel, row.error_code));
+      statusCell.dataset.state = row.error_code === "notification_cancelled" ? "cancelled" : row.state;
       if (row.error_code) statusCell.append(element("small", errorText(row.error_code), "notification-history-error"));
       if (row.uncertain === true) statusCell.append(element("small", "接收结果待确认，请先核对接收渠道", "notification-history-error"));
       item.append(detail, element("td", Number.isSafeInteger(row.red_count) ? row.red_count : "未知"),
@@ -304,18 +361,22 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
   for (const [key, controller] of Object.entries(controllers)) controller.subscribe((state) => { if (channel === key) render(state); });
   $("notification-channel-choice").addEventListener("change", () => {
     const next = $("notification-channel-choice").value;
-    if (!Object.hasOwn(controllers, next) || current().getState().saving || current().getState().testing) {
+    const state = current().getState();
+    if (!Object.hasOwn(controllers, next) || state.saving || state.testing || state.deleting || state.cancelling) {
       $("notification-channel-choice").value = channel; return;
     }
     if (dirty[channel]) drafts[channel] = publicFields();
-    channel = next;
+    confirmation = null; channel = next;
     fill(drafts[channel] || current().getState().settings || { enabled: false, threshold: 1, cooldown_seconds: 600 });
     render(current().getState());
     if (visible) void current().refresh();
   });
-  $("notification-form").addEventListener("input", () => { dirty[channel] = true; revisions[channel] += 1; render(current().getState()); });
+  $("notification-form").addEventListener("input", () => { confirmation = null; dirty[channel] = true; revisions[channel] += 1; render(current().getState()); });
   $("notification-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const state = current().getState();
+    if (state.deleting || state.cancelling || state.testing || state.saving) return;
+    confirmation = null;
     const key = channel, controller = current(), revision = revisions[key], values = publicFields();
     const secretField = $(key === "smtp163" ? "notification-email-auth" : "notification-token");
     const secret = secretField.value; secretField.value = "";
@@ -323,6 +384,30 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     await controller.save(values);
     if (!controller.getState().error && revision === revisions[key]) { dirty[key] = false; delete drafts[key]; }
     if (channel === key) render(controller.getState());
+  });
+  function requestConfirmation(action) {
+    const state = current().getState();
+    if (!state.settings || state.saving || state.testing || state.deleting || state.cancelling || state.loading) return;
+    if (action === "cancel" && (channel !== "smtp163" || state.settings.enabled)) return;
+    confirmation = { action, channel }; render(state);
+    $("notification-confirm-dismiss").focus?.();
+  }
+  $("notification-delete-settings").addEventListener("click", () => requestConfirmation("delete"));
+  $("notification-cancel-pending").addEventListener("click", () => requestConfirmation("cancel"));
+  $("notification-confirm-dismiss").addEventListener("click", () => { confirmation = null; render(current().getState()); });
+  $("notification-confirm-action").addEventListener("click", async () => {
+    if (!confirmation || confirmation.channel !== channel) return;
+    const key = channel, action = confirmation.action, controller = current();
+    const success = await (action === "delete" ? controller.deleteSettings() : controller.cancelPending());
+    if (success) {
+      confirmation = null;
+      if (action === "delete") {
+        dirty[key] = false; delete drafts[key]; revisions[key] += 1;
+        $(key === "smtp163" ? "notification-email-auth" : "notification-token").value = "";
+      }
+    }
+    if (channel === key) render(controller.getState());
+    if (success) $(action === "delete" ? "notification-delete-settings" : "notification-cancel-pending").focus?.();
   });
   $("notification-device").addEventListener("change", (event) => {
     const device = devices.find((item) => deviceIdentity(item) === event.target.value);

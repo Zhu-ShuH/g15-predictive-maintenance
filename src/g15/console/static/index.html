@@ -109,6 +109,14 @@
               </div>
             </div>
             <div class="notification-actions"><button id="notification-save" class="button button-secondary" type="submit" disabled>保存通知设置</button><button id="notification-refresh" class="button button-quiet" type="button">刷新通知状态</button></div>
+            <div class="notification-maintenance-actions">
+              <div class="notification-actions"><button id="notification-cancel-pending" class="button button-quiet" type="button" aria-controls="notification-confirmation" aria-expanded="false" disabled>取消待发邮件</button><button id="notification-delete-settings" class="button button-quiet notification-danger" type="button" aria-controls="notification-confirmation" aria-expanded="false" disabled>删除通知设置</button></div>
+              <p id="notification-maintenance-note" class="notification-note">取消待发邮件前，请先关闭并保存自动提醒。删除设置仅影响当前渠道。</p>
+              <div id="notification-confirmation" class="notification-confirmation" role="group" aria-labelledby="notification-confirm-title" aria-describedby="notification-confirm-description" hidden>
+                <h4 id="notification-confirm-title"></h4><p id="notification-confirm-description" class="notification-note"></p>
+                <div class="notification-actions"><button id="notification-confirm-dismiss" class="button button-quiet" type="button">返回，不作更改</button><button id="notification-confirm-action" class="button button-quiet notification-danger" type="button">确认删除设置</button></div>
+              </div>
+            </div>
             <p id="notification-checked" class="notification-note">最近检查：尚无记录</p>
           </form>
           <section class="notification-composer" aria-labelledby="notification-composer-title">

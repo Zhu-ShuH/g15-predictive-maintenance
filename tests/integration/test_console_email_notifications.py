@@ -437,3 +437,156 @@ def test_queue_failure_is_not_reported_as_an_accepted_test(email_http, monkeypat
     )
     assert status == 503 and result["error"] == "notification_outbox_full"
     assert not f.smtp.sent
+
+
+def test_delete_email_resets_only_its_channel_and_keeps_cancelled_history(email_http):
+    f = email_http
+    assert configure(f, enabled=True)[0] == 200
+    f.wechat_service.configure(f.service.policy, token="synthetic-kept-wechat-012345")
+    assert f.service.observe(f.report)["decision"] == "queued"
+    f.service.enqueue_test(f.report)
+    status, result = f.request("/api/email-notifications/settings/delete", {})
+    assert (
+        status == 200 and result["deleted"] is True and result["cancelled_count"] == 2
+    )
+    assert result["settings"] == {
+        "enabled": False,
+        "threshold": 1,
+        "cooldown_seconds": 600,
+        "channel": "smtp163",
+        "sender": "",
+        "recipient": "",
+    }
+    assert result["configured"] is False
+    assert result["status"]["last_error_code"] is None
+    assert all(
+        row["error_code"] == "notification_cancelled" and row["attempts"] == 0
+        for row in result["history"]
+    )
+    assert f.wechat_service.status()["configured"] and f.wechat_service.policy.enabled
+    assert not f.smtp.sent and not f.wechat_transport.calls
+    assert (
+        f.request("/api/email-notifications/settings/delete", {})[1]["cancelled_count"]
+        == 0
+    )
+
+
+def test_delete_wechat_preserves_email_route_and_credentials(email_http):
+    f = email_http
+    assert configure(f)[0] == 200
+    f.wechat_service.configure(
+        f.service.policy, token="synthetic-deleted-wechat-012345"
+    )
+    f.wechat_service.enqueue_test(f.report)
+    status, result = f.request("/api/notifications/settings/delete", {})
+    assert status == 200 and result["deleted"] and not result["configured"]
+    assert result["cancelled_count"] == 1
+    assert (
+        f.service.status()["configured"]
+        and f.service.email_settings()["sender"] == SENDER
+    )
+    assert not f.service.policy.enabled and not f.smtp.sent
+
+
+def test_cancel_pending_email_preserves_configuration_and_declares_normal_cancellation(
+    email_http,
+):
+    f = email_http
+    assert configure(f, enabled=True)[0] == 200
+    f.service.observe(f.report)
+    assert f.request("/api/email-notifications/pending/cancel", {}) == (
+        409,
+        {"error": "notification_enabled"},
+    )
+    assert configure(f, enabled=False, auth_code=AUTH_CODE)[0] == 200
+    status, result = f.request("/api/email-notifications/pending/cancel", {})
+    assert status == 200 and result["cancelled_count"] == 1 and result["configured"]
+    assert not result["settings"]["enabled"] and result["settings"]["sender"] == SENDER
+    assert result["status"]["last_error_code"] is None
+    assert not f.smtp.sent
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/notifications/settings/delete",
+        "/api/email-notifications/settings/delete",
+        "/api/email-notifications/pending/cancel",
+    ],
+)
+@pytest.mark.parametrize(
+    "payload",
+    [{"unknown": 1}, {"token": "synthetic-not-allowed"}, {"run_id": "email-run"}],
+)
+def test_delete_controls_reject_nonempty_payloads_without_side_effects(
+    email_http, path, payload
+):
+    f = email_http
+    assert configure(f)[0] == 200
+    assert f.request(path, payload) == (400, {"error": "invalid_request"})
+    assert (
+        f.service.status()["configured"]
+        and f.service.email_settings()["sender"] == SENDER
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/notifications/settings/delete",
+        "/api/email-notifications/settings/delete",
+        "/api/email-notifications/pending/cancel",
+    ],
+)
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {
+            "Origin": "https://attacker.invalid",
+            "X-G15-Console-Action": "notifications",
+            "Content-Type": "application/json",
+        },
+        {"X-G15-Console-Action": "notifications", "Content-Type": "application/json"},
+    ],
+)
+def test_delete_controls_retain_same_origin_boundary(email_http, path, headers):
+    f = email_http
+    assert configure(f)[0] == 200
+    assert f.request(path, {}, headers=headers) == (403, {"error": "forbidden_origin"})
+    assert f.service.status()["configured"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/notifications/settings/delete",
+        "/api/email-notifications/settings/delete",
+        "/api/email-notifications/pending/cancel",
+    ],
+)
+def test_delete_controls_reject_duplicate_json_and_lengths(email_http, path):
+    f = email_http
+    assert configure(f)[0] == 200
+    assert f.request(path, raw=b'{"x":1,"x":2}')[0] == 400
+    assert f.raw_request(path, b"{}", [("Content-Length", "2")])[0] == 400
+    assert f.service.status()["configured"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/notifications/settings/delete",
+        "/api/email-notifications/settings/delete",
+        "/api/email-notifications/pending/cancel",
+    ],
+)
+def test_delete_controls_refuse_dispatch_in_progress(email_http, path):
+    f = email_http
+    assert configure(f)[0] == 200
+    target = f.wechat_service if path.startswith("/api/notifications/") else f.service
+    assert target._dispatch_lock.acquire(blocking=False)
+    try:
+        assert f.request(path, {}) == (409, {"error": "notification_busy"})
+    finally:
+        target._dispatch_lock.release()
+    assert f.service.status()["configured"]

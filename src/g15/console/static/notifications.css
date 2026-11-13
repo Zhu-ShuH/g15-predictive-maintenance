@@ -83,3 +83,12 @@
   .notification-delivery-choice>label {flex-basis:auto}
   .notification-delivery-choice select,.notification-workspace input[type=email],.notification-workspace input[type=password] {min-height:44px}
 }
+
+.notification-maintenance-actions {margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+.notification-maintenance-actions>.notification-note {margin-top:10px}
+.notification-workspace .notification-danger {color:#FFBEA8;border-color:#D88770}
+.notification-workspace .notification-danger:not(:disabled):hover {color:#FFF3ED;background:#5B302D;border-color:#FFBEA8}
+.notification-confirmation {margin-top:18px;padding:17px 0;border-top:1px solid #D88770;border-bottom:1px solid var(--line)}
+.notification-confirmation h4 {font-size:14px;line-height:1.6;margin:0 0 8px;color:#FFBEA8}
+.notification-confirmation .notification-actions {margin-top:14px}
+.notification-table [data-state=cancelled] {color:var(--muted)}

@@ -319,3 +319,155 @@ test("saving clears only the submitted authorization code and retains edits made
   assert.equal($("notification-test").disabled, true);
   assert.equal($("notification-channel-choice").disabled, false);
 });
+
+
+test("delete and cancel controls use explicit scoped POST requests with empty bodies", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => { calls.push({ url, ...options }); return json(mailStatus()); };
+  const mail = createEmailNotificationsClient({ fetchImpl });
+  const push = createNotificationsClient({ fetchImpl });
+  assert.equal(calls.length, 0);
+  await mail.deleteSettings(); await mail.cancelPending(); await push.deleteSettings();
+  assert.deepEqual(calls.map((call) => call.url), ["/api/email-notifications/settings/delete", "/api/email-notifications/pending/cancel", "/api/notifications/settings/delete"]);
+  assert.equal(push.cancelPending, undefined);
+  for (const call of calls) {
+    assert.equal(call.method, "POST"); assert.equal(call.body, "{}");
+    assert.equal(call.headers["X-G15-Console-Action"], "notifications");
+    assert.equal(call.headers["Content-Type"], "application/json");
+    assert.equal(call.credentials, "same-origin"); assert.equal(call.redirect, "error");
+  }
+});
+
+const deletedMailStatus = (extra = {}) => mailStatus({ settings: { ...mailSettings, sender: "", recipient: "" },
+  configured: false, deleted: true, cancelled_count: 3, ...extra });
+
+test("delete blocks duplicate actions and ignores a late pre-deletion settings refresh", async () => {
+  const oldRefresh = deferred(), deleting = deferred(); let refreshCalls = 0, deletions = 0, tests = 0;
+  const controller = createEmailNotificationsController({ client: {
+    settings: async () => ++refreshCalls === 1 ? mailStatus() : oldRefresh.promise,
+    deleteSettings: async () => { deletions += 1; await deleting.promise; return deletedMailStatus(); },
+    test: async () => { tests += 1; },
+  } });
+  controller.select(A); await controller.refresh();
+  const refreshOperation = controller.refresh();
+  const deletion = controller.deleteSettings();
+  assert.equal(controller.getState().deleting, true);
+  assert.equal(await controller.deleteSettings(), false); await controller.test();
+  assert.equal(deletions, 1); assert.equal(tests, 0);
+  deleting.resolve(); assert.equal(await deletion, true);
+  oldRefresh.resolve(mailStatus()); await refreshOperation;
+  assert.equal(controller.getState().configured, false);
+  assert.equal(controller.getState().settings.enabled, false);
+  assert.equal(controller.getState().settings.sender, "");
+  assert.equal(controller.getState().preview, null);
+  assert.equal(controller.getState().deleting, false);
+});
+
+test("cancel pending requires a saved paused policy and keeps channel configuration", async () => {
+  let enabled = true, cancellations = 0;
+  const cancelled = { ...A, kind: "automatic", state: "failed", attempts: 0, error_code: "notification_cancelled" };
+  const controller = createEmailNotificationsController({ client: {
+    settings: async () => mailStatus({ settings: { ...mailSettings, enabled } }),
+    cancelPending: async () => { cancellations += 1; return mailStatus({ cancelled_count: 8, history: [cancelled] }); },
+  } });
+  await controller.refresh(); assert.equal(await controller.cancelPending(), false);
+  assert.equal(cancellations, 0); assert.equal(controller.getState().error.includes("先关闭"), true);
+  enabled = false; await controller.refresh(); assert.equal(await controller.cancelPending(), true);
+  assert.equal(cancellations, 1);
+  assert.equal(controller.getState().configured, true);
+  assert.deepEqual(controller.getState().settings, mailSettings);
+  assert.equal(controller.getState().settings.enabled, false);
+  assert.equal(notificationHistoryState("failed", "smtp163", "notification_cancelled"), "已取消 · 未发送");
+  assert.equal(notificationHistoryState("failed", "smtp163"), "发送失败");
+  assert.equal(notificationErrorText("notification_cancelled").includes("未尝试发送"), true);
+});
+
+test("busy deletion preserves configured state and presents a safe recovery message", async () => {
+  const controller = createEmailNotificationsController({ client: {
+    settings: async () => mailStatus(),
+    deleteSettings: async () => { throw Object.assign(new Error("private transport text"), { code: "notification_busy" }); },
+  } });
+  await controller.refresh(); assert.equal(await controller.deleteSettings(), false);
+  assert.equal(controller.getState().configured, true);
+  assert.deepEqual(controller.getState().settings, mailSettings);
+  assert.equal(controller.getState().error.includes("等待确认"), true);
+  assert.equal(controller.getState().error.includes("private transport"), false);
+  assert.equal(controller.getState().deleting, false);
+});
+
+test("delete requires inline confirmation and clears only current-channel fields and draft", async (t) => {
+  const doc = mountedDocument(); let deletions = 0, saves = 0;
+  const mounted = mountNotifications({ document: doc, clients: {
+    smtp163: {
+      settings: async () => mailStatus(), save: async () => { saves += 1; },
+      deleteSettings: async () => { deletions += 1; return deletedMailStatus(); },
+    },
+    pushplus: { settings: async () => status({ settings: { ...settings, threshold: 9 } }) },
+  } });
+  t.after(() => mounted.destroy());
+  mounted.sync({ view: "notifications", selected: A, devices: [A] }); await mounted.refresh();
+  const $ = doc.getElementById;
+  $("notification-token").value = "other-channel-unsaved-token";
+  $("notification-channel-choice").value = "pushplus"; await $("notification-channel-choice").emit("change"); await mounted.refresh();
+  $("notification-threshold").value = "15"; await $("notification-form").emit("input");
+  $("notification-channel-choice").value = "smtp163"; await $("notification-channel-choice").emit("change"); await mounted.refresh();
+  $("notification-email-auth").value = "unsaved-synthetic-auth-code";
+  $("notification-email-recipient").value = "unsaved-recipient@example.com";
+  await $("notification-form").emit("input");
+  await $("notification-delete-settings").emit("click");
+  assert.equal(deletions, 0); assert.equal($("notification-confirmation").hidden, false);
+  assert.equal($("notification-confirm-description").textContent.includes("未保存的更改"), true);
+  await $("notification-confirm-dismiss").emit("click");
+  assert.equal(deletions, 0); assert.equal($("notification-confirmation").hidden, true);
+  await $("notification-delete-settings").emit("click"); await $("notification-confirm-action").emit("click");
+  assert.equal(deletions, 1); assert.equal(saves, 0);
+  assert.equal($("notification-confirmation").hidden, true);
+  assert.equal($("notification-email-auth").value, "");
+  assert.equal($("notification-email-sender").value, "");
+  assert.equal($("notification-email-recipient").value, "");
+  assert.equal($("notification-enabled").checked, false);
+  assert.equal($("notification-test").disabled, true);
+  assert.equal($("notification-token").value, "other-channel-unsaved-token");
+  $("notification-channel-choice").value = "pushplus"; await $("notification-channel-choice").emit("change"); await mounted.refresh();
+  assert.equal($("notification-threshold").value, "15");
+});
+
+test("cancel pending confirmation keeps unsaved fields and never submits settings or a message", async (t) => {
+  const doc = mountedDocument(); let cancellations = 0, saves = 0, tests = 0;
+  const mounted = mountNotifications({ document: doc, clients: {
+    smtp163: {
+      settings: async () => mailStatus(), save: async () => { saves += 1; }, test: async () => { tests += 1; },
+      cancelPending: async () => { cancellations += 1; return mailStatus({ cancelled_count: 4 }); },
+    }, pushplus: { settings: async () => status() },
+  } });
+  t.after(() => mounted.destroy()); mounted.sync({ view: "notifications", selected: A, devices: [A] }); await mounted.refresh();
+  const $ = doc.getElementById;
+  $("notification-email-auth").value = "unsaved-synthetic-code";
+  $("notification-email-recipient").value = "unsaved-new-recipient@example.com";
+  await $("notification-form").emit("input");
+  await $("notification-cancel-pending").emit("click"); assert.equal(cancellations, 0);
+  assert.equal($("notification-confirm-description").textContent.includes("未保存的更改"), true);
+  await $("notification-confirm-action").emit("click");
+  assert.equal(cancellations, 1); assert.equal(saves, 0); assert.equal(tests, 0);
+  assert.equal($("notification-email-auth").value, "unsaved-synthetic-code");
+  assert.equal($("notification-email-recipient").value, "unsaved-new-recipient@example.com");
+  assert.equal($("notification-enabled").checked, false);
+  assert.equal($("notification-feedback").textContent.includes("取消 4 封"), true);
+});
+
+test("changing channel or editing fields dismisses a stale destructive confirmation", async (t) => {
+  const doc = mountedDocument(); let deletions = 0;
+  const mounted = mountNotifications({ document: doc, clients: {
+    smtp163: { settings: async () => mailStatus(), deleteSettings: async () => { deletions += 1; return deletedMailStatus(); } },
+    pushplus: { settings: async () => status() },
+  } });
+  t.after(() => mounted.destroy()); mounted.sync({ view: "notifications", selected: A, devices: [A] }); await mounted.refresh();
+  const $ = doc.getElementById;
+  await $("notification-delete-settings").emit("click");
+  await $("notification-form").emit("input"); await $("notification-confirm-action").emit("click"); assert.equal(deletions, 0);
+  await $("notification-delete-settings").emit("click");
+  $("notification-channel-choice").value = "pushplus"; await $("notification-channel-choice").emit("change"); await mounted.refresh();
+  assert.equal($("notification-confirmation").hidden, true);
+  assert.equal($("notification-cancel-pending").hidden, true);
+  await $("notification-confirm-action").emit("click"); assert.equal(deletions, 0);
+});

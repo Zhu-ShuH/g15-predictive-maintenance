@@ -631,6 +631,9 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             "/api/notifications/test",
             "/api/email-notifications/settings",
             "/api/email-notifications/test",
+            "/api/notifications/settings/delete",
+            "/api/email-notifications/settings/delete",
+            "/api/email-notifications/pending/cancel",
         ):
             self._not_allowed()
             return
@@ -680,7 +683,11 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             )
             if control is None:
                 raise ConsoleError(503, "notifications_unavailable")
-            if self.path.endswith("/settings"):
+            if self.path.endswith("/settings/delete"):
+                result, status = control.delete_settings(payload), 200
+            elif self.path.endswith("/pending/cancel"):
+                result, status = control.cancel_pending(payload), 200
+            elif self.path.endswith("/settings"):
                 result, status = control.configure(payload), 200
             else:
                 if set(payload) != {"run_id", "device_id"}:

@@ -13,6 +13,8 @@ import time
 import pytest
 
 from g15.notifications import AlertSnapshot, NotificationPolicy, ProviderError
+from g15.notifications.service import NotificationControlError, NotificationStorageError
+
 from g15.notifications.smtp import (
     EmailNotificationService,
     SMTP163Transport,
@@ -576,4 +578,287 @@ def test_same_sender_credential_rotation_between_claim_and_send_does_not_drop_ma
         assert factory.sent[0][1] == [RECIPIENT]
         assert factory.clients[0].logins == [(SENDER, OTHER_AUTH_CODE)]
     finally:
+        service.close()
+
+
+def test_delete_email_settings_cancels_unattempted_work_and_stays_deleted_on_restart(
+    tmp_path,
+):
+    service, factory = engine(tmp_path)
+    try:
+        service.observe(snapshot(1))
+        assert service.dispatch_once()["decision"] == "provider_accepted"
+        service.observe(snapshot(2))
+        service.enqueue_test(snapshot(2))
+        result = service.delete_settings()
+        assert result == {"deleted": True, "cancelled_count": 2}
+        assert service.policy == NotificationPolicy()
+        assert service.email_settings() == {
+            "sender": "",
+            "recipient": "",
+            "channel": "smtp163",
+        }
+        assert service.status()["configured"] is False
+        assert service._auth_code is None and service._transport._credential is None
+        assert service.status()["counts"] == {"failed": 2, "provider_accepted": 1}
+        assert service.dispatch_once()["decision"] == "token_missing"
+        with sqlite3.connect(tmp_path / "email-notifications.sqlite") as db:
+            assert db.execute("SELECT COUNT(*) FROM email_settings").fetchone()[0] == 0
+            assert (
+                db.execute(
+                    "SELECT enqueued_count FROM notification_sources"
+                ).fetchone()[0]
+                == 2
+            )
+            assert (
+                db.execute(
+                    "SELECT COUNT(*) FROM notification_outbox WHERE error_code='notification_cancelled' AND attempts=0 AND uncertain=0"
+                ).fetchone()[0]
+                == 2
+            )
+        assert len(factory.sent) == 1
+    finally:
+        service.close()
+    restored = EmailNotificationService(tmp_path / "email-notifications.sqlite")
+    try:
+        assert restored.policy == NotificationPolicy()
+        assert restored.status()["configured"] is False
+        assert restored.email_settings()["sender"] == ""
+        assert restored.status()["counts"] == {"failed": 2, "provider_accepted": 1}
+    finally:
+        restored.close()
+
+
+def test_delete_settings_storage_failure_rolls_back_route_policy_and_queue(tmp_path):
+    service, _factory = engine(tmp_path)
+    try:
+        service.observe(snapshot())
+        old_credentials = service._transport._credential
+        with sqlite3.connect(tmp_path / "email-notifications.sqlite") as db:
+            db.execute(
+                "CREATE TRIGGER deny_delete BEFORE DELETE ON email_settings BEGIN SELECT RAISE(ABORT,'synthetic failure'); END"
+            )
+        with pytest.raises(
+            NotificationStorageError, match="^notification_storage_error$"
+        ):
+            service.delete_settings()
+        assert service.policy.enabled and service.status()["configured"]
+        assert service.email_settings()["sender"] == SENDER
+        assert service.status()["counts"] == {"queued": 1}
+        assert service._transport._credential == old_credentials
+        with sqlite3.connect(tmp_path / "email-notifications.sqlite") as db:
+            assert (
+                json.loads(
+                    db.execute(
+                        "SELECT policy_json FROM notification_settings"
+                    ).fetchone()[0]
+                )["enabled"]
+                is True
+            )
+            assert (
+                db.execute("SELECT sender FROM email_settings").fetchone()[0] == SENDER
+            )
+    finally:
+        service.close()
+
+
+@pytest.mark.parametrize(
+    "state,attempts", [("sending", 1), ("sending", 0), ("retry_wait", 1), ("queued", 1)]
+)
+@pytest.mark.parametrize("operation", ["delete_settings", "cancel_pending_automatic"])
+def test_settings_controls_refuse_possible_delivery_without_modification(
+    tmp_path, state, attempts, operation
+):
+    service, _factory = engine(tmp_path)
+    try:
+        service.enqueue_test(snapshot())
+        service.configure_email(
+            NotificationPolicy(), sender=SENDER, recipient=RECIPIENT
+        )
+        with sqlite3.connect(tmp_path / "email-notifications.sqlite") as db:
+            db.execute(
+                "UPDATE notification_outbox SET state=?,attempts=?,uncertain=1",
+                (state, attempts),
+            )
+        with pytest.raises(NotificationControlError, match="^notification_busy$"):
+            getattr(service, operation)()
+        assert service.status()["configured"]
+        assert service.email_settings()["recipient"] == RECIPIENT
+        with sqlite3.connect(tmp_path / "email-notifications.sqlite") as db:
+            assert db.execute(
+                "SELECT state,attempts,uncertain FROM notification_outbox"
+            ).fetchone() == (state, attempts, 1)
+    finally:
+        service.close()
+
+
+@pytest.mark.parametrize("operation", ["delete_settings", "cancel_pending_automatic"])
+def test_settings_controls_do_not_wait_for_active_dispatcher(tmp_path, operation):
+    service, _factory = engine(tmp_path)
+    try:
+        assert service._dispatch_lock.acquire(blocking=False)
+        try:
+            with pytest.raises(NotificationControlError, match="^notification_busy$"):
+                getattr(service, operation)()
+        finally:
+            service._dispatch_lock.release()
+        assert service.status()["configured"] and service.policy.enabled
+    finally:
+        service.close()
+
+
+def test_cancel_all_192_paused_automatic_jobs_preserves_test_config_and_dedupe(
+    tmp_path,
+):
+    service, factory = engine(tmp_path)
+    try:
+        for count in range(1, 193):
+            assert service.observe(snapshot(count))["decision"] == "queued"
+        service.enqueue_test(snapshot(192))
+        with pytest.raises(NotificationControlError, match="^notification_enabled$"):
+            service.cancel_pending_automatic()
+        service.configure_email(
+            NotificationPolicy(), sender=SENDER, recipient=RECIPIENT
+        )
+        credentials = service._transport._credential
+        assert service.cancel_pending_automatic() == {"cancelled_count": 192}
+        assert service.status()["counts"] == {"failed": 192, "queued": 1}
+        assert (
+            service._transport._credential == credentials
+            and service.status()["configured"]
+        )
+        assert service.email_settings()["recipient"] == RECIPIENT
+        assert service.dispatch_once()["decision"] == "provider_accepted"
+        assert len(factory.sent) == 1
+        assert service.cancel_pending_automatic() == {"cancelled_count": 0}
+        service.configure_email(
+            NotificationPolicy(enabled=True), sender=SENDER, recipient=RECIPIENT
+        )
+        assert service.observe(snapshot(192))["decision"] == "already_queued"
+        assert service.dispatch_once()["decision"] == "idle"
+    finally:
+        service.close()
+
+
+def test_cancel_failure_is_atomic_and_does_not_clear_credentials(tmp_path):
+    service, _factory = engine(tmp_path)
+    try:
+        service.observe(snapshot(1))
+        service.observe(snapshot(2))
+        service.configure_email(
+            NotificationPolicy(), sender=SENDER, recipient=RECIPIENT
+        )
+        old_credentials = service._transport._credential
+        with sqlite3.connect(tmp_path / "email-notifications.sqlite") as db:
+            db.execute(
+                "CREATE TRIGGER deny_cancel BEFORE UPDATE ON notification_outbox BEGIN SELECT RAISE(ABORT,'synthetic failure'); END"
+            )
+        with pytest.raises(
+            NotificationStorageError, match="^notification_storage_error$"
+        ):
+            service.cancel_pending_automatic()
+        assert service.status()["counts"] == {"queued": 2}
+        assert (
+            service._transport._credential == old_credentials
+            and not service.policy.enabled
+        )
+    finally:
+        service.close()
+
+
+def test_delete_blocks_new_observations_until_disabled_state_is_committed(
+    tmp_path, monkeypatch
+):
+    service, _factory = engine(tmp_path)
+    entered, release = threading.Event(), threading.Event()
+    results = []
+    original = service._delete_channel_settings
+
+    def blocked_delete(connection):
+        entered.set()
+        if not release.wait(3):
+            raise RuntimeError("test release missing")
+        original(connection)
+
+    monkeypatch.setattr(service, "_delete_channel_settings", blocked_delete)
+    deleting = threading.Thread(target=service.delete_settings)
+    observing = threading.Thread(
+        target=lambda: results.append(service.observe(snapshot()))
+    )
+    try:
+        deleting.start()
+        assert entered.wait(1)
+        observing.start()
+        release.set()
+        deleting.join(3)
+        observing.join(3)
+        assert not deleting.is_alive() and not observing.is_alive()
+        assert results == [{"decision": "disabled"}]
+        assert service.status()["counts"] == {} and not service.status()["configured"]
+    finally:
+        release.set()
+        deleting.join(3)
+        if observing.ident is not None:
+            observing.join(3)
+        service.close()
+
+
+@pytest.mark.parametrize("operation", ["delete_settings", "cancel_pending_automatic"])
+def test_control_refuses_accepted_request_whose_cleanup_is_still_inflight(
+    tmp_path, operation
+):
+    from types import SimpleNamespace
+
+    service, _factory = engine(tmp_path, policy=NotificationPolicy())
+    try:
+        service._transport._inflight = SimpleNamespace(is_alive=lambda: True)
+        with pytest.raises(NotificationControlError, match="^notification_busy$"):
+            getattr(service, operation)()
+        assert (
+            service.status()["configured"]
+            and service.email_settings()["sender"] == SENDER
+        )
+    finally:
+        service._transport._inflight = None
+        service.close()
+
+
+def test_delete_refuses_real_inflight_send_and_then_preserves_its_acceptance(tmp_path):
+    entered, release = threading.Event(), threading.Event()
+
+    class BlockingSMTPFactory(FakeSMTPFactory):
+        def __call__(self, **options):
+            client = super().__call__(**options)
+            sendmail = client.sendmail
+
+            def blocked_send(*arguments):
+                entered.set()
+                if not release.wait(2):
+                    raise RuntimeError("test release missing")
+                return sendmail(*arguments)
+
+            client.sendmail = blocked_send
+            return client
+
+    service, factory = engine(tmp_path, factory=BlockingSMTPFactory())
+    service.enqueue_test(snapshot())
+    outcomes = []
+    dispatch = threading.Thread(target=lambda: outcomes.append(service.dispatch_once()))
+    try:
+        dispatch.start()
+        assert entered.wait(1)
+        with pytest.raises(NotificationControlError, match="^notification_busy$"):
+            service.delete_settings()
+        assert service.status()["configured"]
+        release.set()
+        dispatch.join(3)
+        assert (
+            not dispatch.is_alive() and outcomes[0]["decision"] == "provider_accepted"
+        )
+        assert service.delete_settings() == {"deleted": True, "cancelled_count": 0}
+        assert service.status()["counts"] == {"provider_accepted": 1}
+        assert len(factory.sent) == 1
+    finally:
+        release.set()
+        dispatch.join(3)
         service.close()

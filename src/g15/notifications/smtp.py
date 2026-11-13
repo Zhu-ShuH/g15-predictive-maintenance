@@ -539,6 +539,13 @@ class EmailNotificationService(NotificationService):
         self._wake.set()
         return self.status()
 
+    def _delete_channel_settings(self, connection) -> None:
+        connection.execute("DELETE FROM email_settings WHERE singleton=1")
+
+    def _forget_channel_credentials(self) -> None:
+        self._sender, self._recipient, self._auth_code, self._token = "", "", None, None
+        self._transport.clear_credentials()
+
     def close(self) -> None:
         """Stop workers and forget memory credentials; unresolved work still raises."""
         try:
