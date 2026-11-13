@@ -7,6 +7,7 @@
   <title>G15 · 设备健康控制台</title>
   <link rel="stylesheet" href="/assets/app.css">
   <link rel="stylesheet" href="/assets/cyber-wafuu.css">
+  <link rel="stylesheet" href="/assets/notifications.css">
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body>
@@ -22,11 +23,12 @@
       <button id="nav-alarms" class="nav-item" data-view="alarms"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4l7 15v2H3v-2zM12 8v5m0 3v.1"/></svg><span>告警中心</span></button>
       <button id="nav-maintenance" class="nav-item" data-view="maintenance"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4-4 4 4-4 4M3 21l9-9m-4 4 4 4m-7-2-2 2 4 4 2-2"/></svg><span>维护建议</span></button>
       <button id="nav-reports" class="nav-item" data-view="reports"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7m-7 4h7"/></svg><span>运行报告</span></button>
+      <button id="nav-notifications" class="nav-item" data-view="notifications"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v20H7zM10 5h4m-3 14h2M4 8v7m16-7v7"/></svg><span>手机通知</span></button>
       <a class="nav-item" href="/diagnosis"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg><span>诊断工作台</span></a>
       <a class="nav-item" href="/screen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v13H3zM8 21h8m-4-4v4"/></svg><span>大屏驾驶舱</span></a>
       <a class="nav-item" href="/operations"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg><span>运营看板</span></a>
     </nav>
-    <div class="sidebar-footer"><span class="read-only"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10h12v11H6zM8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></svg>本机只读</span><p>公开仿真场景<br>查看分析，不控制设备</p></div>
+    <div class="sidebar-footer"><span class="read-only"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10h12v11H6zM8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></svg>本机控制台</span><p>公开仿真场景<br>查看分析与配置提醒</p></div>
   </aside>
   <div class="main-shell">
     <header class="topbar"><div class="breadcrumb">工作台 <span>/</span> 设备监测</div><div class="connection"><span class="connection-dot" aria-hidden="true"></span><span id="connection-status" role="status">正在连接查询服务</span></div></header>
@@ -38,7 +40,7 @@
         <p id="live-note" class="section-note">状态与概览按轮次读取，等待本轮完成后再更新。</p>
       </section>
       <div id="global-message" class="message" role="status" hidden></div>
-      <div class="workspace">
+      <div class="workspace" id="analysis-workspace">
         <aside class="device-roster" aria-label="选择设备">
           <div class="roster-heading"><h2>设备列表</h2><span id="catalog-count" class="count-label">—</span></div>
           <label class="search-field"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span class="sr-only">搜索设备或场景</span><input id="device-search" type="search" placeholder="搜索设备或场景" autocomplete="off"></label>
@@ -77,6 +79,43 @@
           </section>
         </div>
       </div>
+      <section id="notifications-view" class="notification-workspace" aria-label="手机通知设置" hidden>
+        <header class="notification-heading"><div><h2>红色告警 · 微信提醒</h2><p>达到阈值后，发送设备的维护建议与本次运行报告。</p></div><span id="notification-status" class="status-badge" data-level="unknown" role="status">正在读取设置</span></header>
+        <div id="notification-error" class="message" data-level="error" role="alert" hidden></div>
+        <div id="notification-feedback" class="notification-feedback" role="status" hidden></div>
+        <div class="notification-columns">
+          <form id="notification-form" class="notification-settings">
+            <h3>提醒规则</h3>
+            <label class="notification-toggle"><input id="notification-enabled" type="checkbox"><span><strong>启用手机通知</strong><small>监测全部登记设备，按设备分别计数。</small></span></label>
+            <div class="notification-fields">
+              <label for="notification-threshold">触发阈值<span class="notification-input-unit"><input id="notification-threshold" name="threshold" type="number" inputmode="numeric" min="1" max="1000000" step="1" value="1" required><span>条红色事件</span></span></label>
+              <label for="notification-cooldown">最短提醒间隔<span class="notification-input-unit"><input id="notification-cooldown" name="cooldown_seconds" type="number" inputmode="numeric" min="0" max="86400" step="1" value="600" required><span>秒</span></span></label>
+            </div>
+            <p class="notification-note">每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；间隔内新红色事件合并提醒。</p>
+            <div class="notification-channel">
+              <div class="notification-section-heading"><h3>接收渠道</h3><span>PushPlus · 微信</span></div>
+              <p id="notification-channel-status" class="notification-note">尚未配置 Token</p>
+              <label class="notification-token-label" for="notification-token">PushPlus Token<input id="notification-token" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="8192" placeholder="输入 Token，留空保留当前配置" aria-describedby="notification-token-help"></label>
+              <p id="notification-token-help" class="notification-note">Token 保存于本次服务进程，提交后清空且不回显。服务重启后，需通过环境变量配置或重新填写。</p>
+            </div>
+            <div class="notification-actions"><button id="notification-save" class="button button-secondary" type="submit" disabled>保存通知设置</button><button id="notification-refresh" class="button button-quiet" type="button">刷新通知状态</button></div>
+            <p id="notification-checked" class="notification-note">最近检查：尚无记录</p>
+          </form>
+          <section class="notification-composer" aria-labelledby="notification-composer-title">
+            <h3 id="notification-composer-title">核对发送内容</h3>
+            <label class="notification-device-label" for="notification-device">预览设备<select id="notification-device" disabled><option>正在读取设备</option></select></label>
+            <div class="notification-actions"><button id="notification-preview-button" class="button button-secondary" type="button" disabled>预览建议与报告</button></div>
+            <p id="notification-preview-empty" class="notification-empty">选择设备并生成预览，核对维护建议与报告内容。预览不会发送消息。</p>
+            <div id="notification-preview" class="notification-preview" hidden><h4 id="notification-preview-title"></h4><p id="notification-preview-meta" class="notification-note"></p><pre id="notification-preview-body"></pre></div>
+            <div class="notification-test-actions"><button id="notification-test" class="button button-quiet" type="button" disabled>发送测试到微信</button><p id="notification-test-scope" class="notification-note">先保存 Token，才能发送真实测试消息。</p></div>
+          </section>
+        </div>
+        <section class="notification-records" aria-labelledby="notification-history-title">
+          <div class="notification-section-heading"><h3 id="notification-history-title">通知记录</h3><span>渠道已接收 ≠ 手机已送达</span></div>
+          <div class="table-scroll" role="region" aria-label="通知发送记录" tabindex="0"><table class="data-table notification-table"><caption class="sr-only">红色告警提醒与手动测试的发送状态</caption><thead><tr><th scope="col">设备 / 运行</th><th scope="col">红色事件</th><th scope="col">发送状态</th><th scope="col">尝试次数</th><th scope="col">创建时间（北京时间）</th></tr></thead><tbody id="notification-history"></tbody></table></div>
+          <p id="notification-history-empty" class="notification-empty">暂无通知记录。保存规则后，达到阈值的新告警会进入发送队列。</p>
+        </section>
+      </section>
       <footer class="page-footer"><span>G15 预测性维护场景沙盘</span><span>数据来自公开仿真配置与本机已提交结果</span></footer>
     </main>
   </div>

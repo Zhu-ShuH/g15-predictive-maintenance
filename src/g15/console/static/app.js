@@ -1,5 +1,6 @@
 import { createConsoleStore, deviceKey, latestWindow, chronological, activeStatus,
   reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout, liveDevice, liveStatus, deviceStatus, selectedDeviceStatus, VIEWS, maintenanceAdvice } from "./state.js";
+import { mountNotifications } from "./notifications.js";
 
 const $ = (id) => document.getElementById(id);
 const text = (id, value) => {
@@ -42,6 +43,7 @@ function positionText(row, rate) {
 
 export function startConsole() {
   const store = createConsoleStore({ selection: locationSelection(location.search) });
+  const notifications = mountNotifications({ onSelect: (device) => { void store.selectDevice(deviceKey(device)); } });
   let previousLocation = null, restoring = false, chartPoints = [];
   let chartLayout = plotLayout(280, 180), lastChartSize = "", resizeFrame = 0;
   let revealedRosterKey = null, lastRosterSize = "", renderedState = null;
@@ -350,6 +352,7 @@ export function startConsole() {
       alarms: ["告警记录", "按级别和关键词检查当前运行已读取的历史告警。"],
       maintenance: ["维护建议", "把真实告警转为可核查的检查建议，所有处置均需人工确认。"],
       reports: ["运行报告", "读取真实生成报告，保留未判定、误报与逐事件结果。"],
+      notifications: ["手机通知", "配置红色告警阈值，将维护建议与报告发送到微信。"],
     };
     text("view-title", descriptions[state.view][0]); text("view-description", descriptions[state.view][1]);
     for (const view of VIEWS) {
@@ -357,6 +360,8 @@ export function startConsole() {
       const button = $(`nav-${view}`);
       if (state.view === view) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     }
+    $("analysis-workspace").hidden = state.view === "notifications";
+    notifications.sync(state);
     const error = state.catalogError || state.healthError || state.windowError || state.alarmError || state.fullError;
     text("global-message", error || (state.catalogStatus === "loading" ? "正在连接本机只读服务…" :
       state.healthStatus === "loading" ? "正在读取所选设备…" :
@@ -392,6 +397,7 @@ export function startConsole() {
     $("reset-chart-button").disabled = !state.historyPinned && !state.newDataAvailable && state.windows.length === state.initialWindows.length && state.inspectedSeq === null;
     const changed = (...fields) => !renderedState || fields.some((field) => state[field] !== renderedState[field]);
     renderLive(state);
+    if (state.view === "notifications") $("live-monitor").hidden = true;
     if (changed("previews", "devices", "selected", "deviceSearch", "catalogStatus", "live", "liveError", "liveMode", "pollPaused", "clock")) renderDevices(state);
     if (changed("windows", "alarms", "inspectedSeq", "healthStatus", "windowLoading", "fullLoading", "view")) renderChart(state);
     if (changed("alarms", "alarmLevel", "alarmSearch", "alarmCursor", "alarmLoading", "healthStatus")) renderAlarms(state);
@@ -402,7 +408,10 @@ export function startConsole() {
   $("device-search").addEventListener("input", (event) => store.setDeviceSearch(event.target.value));
   $("alarm-search").addEventListener("input", (event) => store.setAlarmFilter(store.getState().alarmLevel, event.target.value));
   $("alarm-level-filter").addEventListener("change", (event) => store.setAlarmFilter(event.target.value));
-  $("refresh-button").addEventListener("click", () => { void store.refresh(); });
+  $("refresh-button").addEventListener("click", () => {
+    if (store.getState().view === "notifications") void notifications.refresh();
+    else void store.refresh();
+  });
   $("show-latest-button").addEventListener("click", () => { void store.returnLatest(); });
   $("load-older-button").addEventListener("click", () => { void store.loadWindows(); });
   $("load-all-windows-button").addEventListener("click", () => { void store.loadAllWindows(); });
@@ -460,6 +469,7 @@ export function startConsole() {
   } else window.addEventListener("resize", scheduleLayoutResize);
   const destroy = store.destroy.bind(store);
   store.destroy = () => {
+    notifications.destroy();
     observer?.disconnect();
     if (resizeFrame) cancelAnimationFrame(resizeFrame);
     window.removeEventListener("resize", scheduleLayoutResize);

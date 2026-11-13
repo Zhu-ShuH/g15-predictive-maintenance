@@ -722,7 +722,7 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 | `/api/report?run_id=...&device_id=...` | 先用同资源真实page_size=1查询验证权限，再读固定已生成summary.json，核对run/device归属 |
 | `/api/report/download?...&format=json或markdown` | 同样授权并核归属，仅下载summary.json或summary.md；没有任意文件下载 |
 
-未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
+除§19两条本机通知设置/测试POST外，未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、其他写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
 
 页面最新健康分取最新已存窗口；活动告警取states，历史告警单列。趋势按真实序号/采样率绘制，只展示已读取范围，全程必须沿cursor读至耗尽才标完整。窗口翻页不消费告警伴随重放，告警翻页同理；切设备与刷新丢弃旧异步响应。报告passed=null、verifiable=false、detection_rate=null保留不可判定含义，不能显示0或通过；受控事件检出通过也必须保留误报计数。显示时间使用明确的Asia/Shanghai时区，原始报告下载不改写时间。
 
@@ -744,3 +744,21 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 控制台可选GET/HEAD `/api/live`，无运行时为404；公开schema_version、session_id、status、started_at_utc/updated_at_utc、sample_rate_hz/window_points/interval_seconds与每设备采集/处理样本、窗口/告警、待分析批次、最近采集/提交和固定安全错误。路径/凭据及任意运行时字段不投影。浏览器无Bearer，内嵌服务在内存按请求签发短期凭据。
 
 持续报告只描述实际提交的运行统计，verifiable=false，passed/detection_rate及无真值支持的指标为null；不计独立检出率。原离线报告路径与身份校验继续保留。详细生命周期、停止、资源保护与首次实测口径见[持续采集说明](live.md)。该候选需真实非作者Review，不改变#136 Gate0。
+
+
+## 19. 手机通知增量（用户直接要求，候选待评审）
+
+最新版控制台增加手机通知视图。业务数据继续只读；仅新增本机通知配置与显式测试动作，不修改健康评分、红黄阈值、采集/存储业务事务或Gate0判据。
+
+- 触发口径：每个登记run/device，本次运行真实`alarms.level=red`事件累计数达到`threshold`，且相比已入队来源有新红色事件时入队。红色是边沿事件，不按异常窗口数/持续秒数/浏览器已加载条数代替；同事件不因轮询重复提醒。
+- `threshold`为1..1000000整数（不接受bool），`cooldown_seconds`为0..86400整数；默认enabled=false、threshold=1、cooldown_seconds=600。间隔内新事件原子保存为唯一未尝试延迟任务，可合并最新完整快照，到期后直接发送；不同run/device独立。重试、发送中、不确定及已接收内容不被改写；策略修改只影响后续新触发。
+- GET/HEAD `/api/notifications`只返回非敏感配置、configured、监测状态和有界通知历史；日期为ISO UTC，页面转换北京时间。`provider_accepted`仅代表渠道确认收到请求，不能写成手机已送达。不确定超时/部分请求须明示，不能冒充已失败或已送达。
+- GET/HEAD `/api/notifications/preview?run_id=...&device_id=...`先通过现有真实HTTP授权和资源归属检查，再从单一只读SQLite事务生成红色计数、来源、建议及完整JSON/Markdown报告；预览不入队、不发送，不读private_truth。来源过多/损坏/身份不符直接失败，不用分页前100条代替全计数。
+- POST `/api/notifications/settings`接受enabled/threshold/cooldown_seconds及可选token、channel=pushplus。必须有唯一同源Origin、自定义`X-G15-Console-Action: notifications`、application/json、唯一有界Content-Length；不接受Transfer-Encoding、Expect、重复JSON键、未知键或超限正文。
+- POST `/api/notifications/test`只接受精确run_id/device_id，具同样写入边界；需配置渠道且用户显式点击，使用真实报告，不消耗自动去重/冷却。未授权资源不读取快照、不发送。
+- Token只在服务进程内存或启动环境`G15_PUSHPLUS_TOKEN`提供，不写SQLite、日志、静态资源、URL或返回体。配置在数据目录的独立notifications.sqlite持久化，同一输出目录只允许一个通知发送进程；进程重启需重新填写Token或使用本机环境变量。
+- 后台监测独立于浏览器与分析线程。只处理近期真实提交，停止/过期/失败/来源不完整不显示正常监测。每设备快照一致，不宣称跨设备原子事务。
+- outbox在单独事务内原子保存来源游标与完整消息快照；固定HTTPS PushPlus微信接口，禁止重定向，正文/响应/重试/队列有界。内容超限明确失败而不截断报告。TLS验证；DNS迟返不继续POST，至多一个请求worker，未闭合停机报错。
+- 重启恢复与响应丢失可能造成至少一次重复尝试，不承诺严格仅一次手机送达。通知记录保留当时阈值、尝试数及不确定标记；自动通知关闭时暂停自动任务，但显式测试仍可发送。
+
+使用和限制见[手机通知说明](notifications.md)。该增量需真实非作者Review，不能以内部测试或手机消息替代独立故障/容量验收。

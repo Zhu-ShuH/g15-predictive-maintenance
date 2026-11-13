@@ -18,7 +18,10 @@ import sys
 import threading
 
 from g15.console.server import create_console_server
+from g15.console.notifications import NotificationController
+from g15.live.notification_snapshot import read_notification_snapshot
 from g15.live import LiveConfig, LiveRuntime
+from g15.live.runtime import _WriterLock
 from g15.live.schema import atomic_json
 from g15.live.reporting import render_live_report
 from g15.query.application import HealthQueryApplication
@@ -81,6 +84,32 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _finish_live_services(runtime, notifications) -> bool:
+    """Drain commits and durably observe the final snapshot before shutdown."""
+    failed = False
+    if runtime is not None:
+        try:
+            final = runtime.stop(timeout=30)
+            final["observed_at_utc"] = _utc_now()
+            _write_json(runtime.session_root / "service-status.json", final)
+            failed = final["status"] in ("error", "stopping")
+        except Exception:  # pylint: disable=broad-exception-caught
+            logging.exception("live session failed to stop cleanly")
+            failed = True
+    if notifications is not None:
+        try:
+            notifications.scan_once()
+        except Exception:  # pylint: disable=broad-exception-caught
+            logging.error("final notification snapshot failed")
+            failed = True
+        try:
+            notifications.close()
+        except Exception:  # pylint: disable=broad-exception-caught
+            logging.error("notification service failed to stop cleanly")
+            failed = True
+    return failed
+
+
 def main(argv: list[str] | None = None) -> int:
     """Start one bounded capture session; retain readable state after it stops."""
     parser = _parser()
@@ -90,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     stopped = threading.Event()
     servers, threads = [], []
     runtime = None
+    notifications = None
+    notification_lock = None
     prior_handlers = {}
     result_code = 0
 
@@ -171,6 +202,18 @@ def main(argv: list[str] | None = None) -> int:
             credential_provider=credential,
             live_report_provider=live_report,
         )
+        notification_lock = _WriterLock(args.output_root / "notifications.writer.lock")
+        notification_lock.acquire()
+        notifications = NotificationController(
+            console.application,
+            lambda pair: read_notification_snapshot(
+                runtime.runs_root,
+                *pair,
+                live_status=runtime.status_snapshot()["status"],
+            ),
+            args.output_root / "notifications.sqlite",
+        )
+        console.application.notifications = notifications
         servers.append(console)
         for server in servers:
             thread = threading.Thread(
@@ -181,6 +224,7 @@ def main(argv: list[str] | None = None) -> int:
             thread.start()
             threads.append(thread)
         runtime.start()
+        notifications.start()
         stop_file = args.stop_file or runtime.session_root / "stop.request"
         ready = {
             "schema_version": "1",
@@ -231,16 +275,8 @@ def main(argv: list[str] | None = None) -> int:
         logging.exception("local live service failed: %s", type(exc).__name__)
         result_code = 1
     finally:
-        if runtime is not None:
-            try:
-                final = runtime.stop(timeout=30)
-                final["observed_at_utc"] = _utc_now()
-                _write_json(runtime.session_root / "service-status.json", final)
-                if final["status"] in ("error", "stopping"):
-                    result_code = 1
-            except Exception:  # pylint: disable=broad-exception-caught
-                logging.exception("live session failed to stop cleanly")
-                result_code = 1
+        if _finish_live_services(runtime, notifications):
+            result_code = 1
         for index, server in enumerate(servers):
             if index < len(threads):
                 server.shutdown()
@@ -248,6 +284,8 @@ def main(argv: list[str] | None = None) -> int:
                 if threads[index].is_alive():
                     result_code = 1
             server.server_close()
+        if notification_lock is not None:
+            notification_lock.release()
         for number, handler in prior_handlers.items():
             signal.signal(number, handler)
     return result_code
