@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 import secrets
 import socket
 import threading
@@ -149,6 +150,7 @@ class QueryHTTPServer(ThreadingHTTPServer):
             b"X-Content-Type-Options: nosniff\r\n"
             b"Connection: close\r\n\r\n" + body
         )
+        delivery_result = "request_head_incomplete"
         if request_head_complete:
             try:
                 request.settimeout(
@@ -156,17 +158,23 @@ class QueryHTTPServer(ThreadingHTTPServer):
                 )
                 request.sendall(response)
                 request.shutdown(socket.SHUT_WR)
+                delivery_result = "written"
             except OSError:
-                pass
+                delivery_result = "connection_error"
         try:
             self.event_sink(
                 {
                     "timestamp_utc": _utc_now(),
+                    "monotonic_ns": time.perf_counter_ns(),
+                    "process_id": os.getpid(),
                     "request_id": request_id,
                     "trace_id": request_id,
                     "stage": "rejected",
                     "query_shape": QUERY_SHAPE,
                     "result": "overloaded",
+                    "execution_started": False,
+                    "request_head_complete": request_head_complete,
+                    "delivery_result": delivery_result,
                 }
             )
         except Exception:  # pylint: disable=broad-exception-caught
@@ -219,7 +227,12 @@ class QueryRequestHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         request_id = _request_id()
         self._emit(request_id, "server_received", "received")
+        self._emit(request_id, "server_executing", "started")
         response_context: QueryResponse | None = None
+        status = HTTPStatus.INTERNAL_SERVER_ERROR
+        result = "internal"
+        body: dict[str, object] = {}
+        extra_headers: dict[str, str] = {}
         try:
             self._validate_request_framing()
             headers = self.headers.get_all("Authorization", failobj=[])
@@ -236,44 +249,49 @@ class QueryRequestHandler(BaseHTTPRequestHandler):
                 device_id=device_id,
                 request_id=request_id,
             )
-            page_size, windows_cursor, alarms_cursor = _parse_parameters(parameters)
+            page_size, windows_cursor, alarms_cursor, streams = _parse_parameters(
+                parameters
+            )
             response_context = self._server.application.query_authorized(
                 authorized=authorized,
                 request_id=request_id,
                 page_size=page_size,
                 windows_cursor=windows_cursor,
                 alarms_cursor=alarms_cursor,
+                streams=streams,
             )
             body = dict(response_context.body)
             body["request_id"] = request_id
             body["trace_id"] = request_id
-            result = (
-                "success"
-                if self._send_json(HTTPStatus.OK, body)
-                else "connection_error"
-            )
+            status, result = HTTPStatus.OK, "success"
         except AuthenticationError:
-            self._send_error(
-                HTTPStatus.UNAUTHORIZED,
-                "unauthorized",
-                request_id,
-                authenticate=True,
-            )
-            result = "unauthorized"
+            status, result = HTTPStatus.UNAUTHORIZED, "unauthorized"
+            extra_headers["WWW-Authenticate"] = "Bearer"
         except ResourceNotFoundError:
-            self._send_error(HTTPStatus.NOT_FOUND, "not_found", request_id)
-            result = "not_found"
+            status, result = HTTPStatus.NOT_FOUND, "not_found"
         except InvalidQueryError:
-            self._send_error(HTTPStatus.BAD_REQUEST, "invalid_request", request_id)
-            result = "invalid_request"
+            status, result = HTTPStatus.BAD_REQUEST, "invalid_request"
         except QueryError:
-            self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "internal", request_id)
-            result = "internal"
+            status, result = HTTPStatus.INTERNAL_SERVER_ERROR, "internal"
         except OSError:
-            result = "connection_error"
+            status, result = HTTPStatus.INTERNAL_SERVER_ERROR, "connection_error"
         except Exception:  # pylint: disable=broad-exception-caught
             # Transport parsing and socket-adjacent failures share one body;
             # exception text can contain paths or request data and is never sent.
+            status, result = HTTPStatus.INTERNAL_SERVER_ERROR, "internal"
+        finally:
+            # This interval ends before serialization and response delivery.
+            self._emit(
+                request_id, "server_execution_completed", result, response_context
+            )
+        if result != "success":
+            body = {"error": result, "request_id": request_id, "trace_id": request_id}
+            if result == "connection_error":
+                body["error"] = "internal"
+        try:
+            if not self._send_json(status, body, extra_headers=extra_headers or None):
+                result = "connection_error"
+        except Exception:  # pylint: disable=broad-exception-caught
             self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "internal", request_id)
             result = "internal"
         if result != "success":
@@ -292,9 +310,16 @@ class QueryRequestHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         request_id = _request_id()
         self._emit(request_id, "server_received", "received")
-        self._send_error(HTTPStatus.BAD_REQUEST, "invalid_request", request_id)
+        self._emit(request_id, "execution_not_started", "invalid_request")
+        delivered = self._send_error(
+            HTTPStatus.BAD_REQUEST, "invalid_request", request_id
+        )
         self._emit(request_id, "rejected", "invalid_request")
-        self._emit(request_id, "response_completed", "invalid_request")
+        self._emit(
+            request_id,
+            "response_completed",
+            "invalid_request" if delivered else "connection_error",
+        )
         return False
 
     def log_message(  # pylint: disable=arguments-differ
@@ -312,21 +337,26 @@ class QueryRequestHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         request_id = _request_id()
         self._emit(request_id, "server_received", "received")
+        extra_headers = None
         try:
             self._validate_request_framing()
         except InvalidQueryError:
-            self._send_error(HTTPStatus.BAD_REQUEST, "invalid_request", request_id)
+            status = HTTPStatus.BAD_REQUEST
             result = "invalid_request"
         else:
-            self._send_error(
-                HTTPStatus.METHOD_NOT_ALLOWED,
-                "method_not_allowed",
-                request_id,
-                extra_headers={"Allow": "GET"},
-            )
+            status = HTTPStatus.METHOD_NOT_ALLOWED
             result = "method_not_allowed"
+            extra_headers = {"Allow": "GET"}
+        self._emit(request_id, "execution_not_started", result)
+        delivered = self._send_error(
+            status, result, request_id, extra_headers=extra_headers
+        )
         self._emit(request_id, "rejected", result)
-        self._emit(request_id, "response_completed", result)
+        self._emit(
+            request_id,
+            "response_completed",
+            result if delivered else "connection_error",
+        )
 
     def _validate_request_framing(self) -> None:
         """Allow only an empty, unambiguous request body on this read API."""
@@ -402,6 +432,8 @@ class QueryRequestHandler(BaseHTTPRequestHandler):
     ) -> None:
         event: dict[str, object] = {
             "timestamp_utc": _utc_now(),
+            "monotonic_ns": time.perf_counter_ns(),
+            "process_id": os.getpid(),
             "request_id": request_id,
             "trace_id": request_id,
             "stage": stage,
@@ -463,7 +495,7 @@ def _parse_target(target: str) -> tuple[str, str, str]:
     return run_id, device_id, parsed.query
 
 
-def _parse_parameters(query: str) -> tuple[int, str | None, str | None]:
+def _parse_parameters(query: str) -> tuple[int, str | None, str | None, str | None]:
     if len(query.encode("utf-8", errors="surrogatepass")) > MAX_QUERY_BYTES:
         raise InvalidQueryError("invalid query parameters")
     try:
@@ -471,11 +503,11 @@ def _parse_parameters(query: str) -> tuple[int, str | None, str | None]:
             query,
             keep_blank_values=True,
             strict_parsing=True,
-            max_num_fields=3,
+            max_num_fields=4,
         )
     except ValueError as exc:
         raise InvalidQueryError("invalid query parameters") from exc
-    allowed = {"page_size", "windows_cursor", "alarms_cursor"}
+    allowed = {"page_size", "windows_cursor", "alarms_cursor", "streams"}
     has_duplicate = any(len(values) != 1 for values in parameters.values())
     if set(parameters) - allowed or has_duplicate:
         raise InvalidQueryError("invalid query parameters")
@@ -488,7 +520,10 @@ def _parse_parameters(query: str) -> tuple[int, str | None, str | None]:
         raise InvalidQueryError("invalid page size")
     windows_cursor = _optional_nonempty(parameters, "windows_cursor")
     alarms_cursor = _optional_nonempty(parameters, "alarms_cursor")
-    return int(raw_page_size), windows_cursor, alarms_cursor
+    streams = _optional_nonempty(parameters, "streams")
+    if streams not in (None, "both", "windows", "alarms"):
+        raise InvalidQueryError("invalid stream selection")
+    return int(raw_page_size), windows_cursor, alarms_cursor, streams
 
 
 def _optional_nonempty(parameters: Mapping[str, list[str]], name: str) -> str | None:

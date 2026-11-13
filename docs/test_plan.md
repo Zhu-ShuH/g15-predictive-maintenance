@@ -178,20 +178,14 @@ spike / step / burst 六个受控事件，见 §3。
 | 损坏后修复再跑 | 正常完成，窗口数等于首次成功写入数（证明库没被写坏） |
 
 ### 6.3 `kill -9` 恢复（Linux）
-在 Linux 上用真实 `SIGKILL` 打断消费者，再重跑，并断言**库内容**与"未中断运行"一致。
+当前用例（测试文件 blob `a250b5eed7e56b9a06de257e4e4fb1e0456d2d50`）采用真实 COMMIT 后管道 checkpoint：
+1. 测试子进程包装 `consumer.transaction`，执行原事务及真实 COMMIT；退出后确认不在事务中，独立只读连接核对恰有第一片 marker。
+2. stdout 管道上报 `after_first_shard_commit` JSON（PID、源码位置、marker、`transaction_open=False`），然后阻塞读 stdin 管道。无 watcher、握手文件、固定 sleep 或生产 hook。
+3. 父进程通过 `select` 等待并逐项核验，确认子进程存活、保存库快照后 SIGKILL，断言 `returncode == -SIGKILL`。
+4. 击杀后断言 `partial == before_kill` 且恰第一片已提交。checkpoint 在两片事务之间，不证明未提交事务内击杀。
+5. 普通未包装消费者重放，断言跳过 1 片、处理剩余 `total_parts - 1` 片，与未中断运行比较五张业务表全部可比内容。
 
-用例 `test_kill_dash_nine_replay_matches_an_uninterrupted_run` 的做法：
-
-1. 子进程**先启动一个监视线程**，轮询消费者自己写出的 `processed_chunks` 表；当该表出现第 1 行（即**第一片事务已提交**）时写握手文件。握手点因此落在"至少一片已落库、整体尚未完成"的真实中间态，而不是在 `consume_run` 调用之前（固定 `sleep` 或调用前握手都能被快机器跑过去，证明不了任何事）。
-   边界说明（按 A 第三轮评审 `5648720609` 的限定）：轮询**不能精确保证**握手发生在"第一片刚提交、正处理第二片"那一刻。监视线程看到第 1 行时，消费者可能已经提交了更晚的片，因此实际观察到的是**某个非空的部分前缀**（`1 <= 已提交片数 < 总片数`），而不是"恰好一片"。用例按这个真实边界断言，不声称更精确的时序。
-2. 握手靠**观察数据库**取得，不往业务代码里加测试专用参数，生产路径保持干净。
-3. 父进程轮询到握手才发信号；发 `SIGKILL` 后断言 `returncode == -SIGKILL`；若子进程自己跑完（`returncode == 0`）则用例失败，而不是静默通过。
-4. 信号之后先断言库处于**部分提交**状态：`processed_chunks` 行数 `>= 1` 且 `< manifest.parts` 总数——否则说明信号打在消费开始前或结束之后，用例失败。
-5. 重跑消费后比对 `runs`、`processed_chunks`、`feature_windows`、`alarms`、`alarm_states` 五张表的**全部内容**（含窗口几何、健康分、告警级别与持久化状态），不只比总行数——这样"写对行数但写错内容"的重放也会被抓到。
-
-该用例在 Windows 上 **skip**，理由写进用例：`kill -9` 是 POSIX 语义，Windows 没有等价物，按 §4 必须在 Linux 留证，不在 Windows 伪造。
-
-**Linux 留证现状（2026-11-02）**：C6 在被测树 main `7daa07c` 上于 Ubuntu 24.04.4 与 RHEL 9.7 各跑 `python -m pytest tests/fault_injection/test_pipeline_faults.py -q`，两次都是 **9 passed、无 skip**。本机 Windows 仍是 `8 passed, 1 skipped`（skip 的就是本条）。留证数字记在 `docs/test_report.md` §4.3。
+Windows 仍 skip，不替代 POSIX Linux 实跑。C6 2026-11-02 在 main `7daa07c` 双 Linux 各 9 passed 对应旧 blob `19cbcab`，不是当前管道用例 `a250b5e`。本次文档修订未重跑 Linux 单文件；当前 CI750 Linux 全量与测试 blob 已核实，双目标机新结果仍待原始日志核验，不能使用旧9通过替代，详见报告 §4.3。
 
 ### 6.4 真值隔离（可证伪）
 - 删除 `private_truth/faults.json` 后**消费仍然成功**（消费者不读真值），但报告必须判为**不可验证**（`verifiable=false`、`passed=null`、`detection_rate=null`），并给出"缺真值"的原因——不能把"文件没了"当成"没有事件"而判正常通过。
@@ -301,8 +295,8 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 ### 11.1 边界与数据口径
 
 - 数据口径（ADR-0007 §5）：D0=10 设备 × 100 窗口（正确性 / 量测可信）；D1=1,000 设备 × 3,906 窗口 = 3,906,000 行 = 1,000 个 run 库；D2=10,000 设备 × 3,906 窗口 = 39,060,000 行 = 10,000 个 run 库。禁止把 D1/D2 合成一个大库。
-- 文件白名单：`tools/query_load/**`、`tests/performance/query/**`、`tests/integration/test_query_capacity_accounting.py`、`tests/fixtures/query/**`、`docs/test_plan.md`、`docs/test_report.md`、`.github/CODEOWNERS`；负载配置在 `tests/performance/query/workloads/**`。明确排除 `src/g15/**`、`scripts/**`、部署文件、#56/#9 保留集。
-- 不改产品代码：harness 只 import 并驱动 `src/g15/query/**` 与 `src/g15/service/**` 的公开入口，不改这些文件。
+- 初版工具范围为 `tools/query_load/**`、容量测试、证据与本计划/报告。2026-11-12 A 已在 [#136](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/136) 登记窄范围授权：`src/g15/service/http.py` 仅限 interface §16 的执行起止、原发时钟/PID、拒绝及响应交付终态；对应阶段集成回归与 interface/ADR 同步列入送审范围。原属地 B1 对2bcd639的[旧批准](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/157#pullrequestreview-5869062668)和对0632e32的[批准](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/157#pullrequestreview-5869226274)分别绑定各自提交；两张历史票后续均已DISMISSED，不能当作新head批准，也不将维护者登记当作非作者批准。`scripts/**`、部署、#56/#9保留集、其他产品模块保持原边界；新增修订仍须按精确SHA真实复核。
+- 负载沿公开 HTTP 入口执行真实认证、授权与 SQLite。EXPLAIN 只读探针绑定实际内部 SELECT helper 的源码位置与摘要，不能冒充完整请求追踪，后续 helper 变更须复核探针。
 
 ### 11.2 可信计数口径（ADR-0007 §3）
 
@@ -313,7 +307,11 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 ### 11.3 已知缺口（文档化，不伪造）
 
-现有传输层 `src/g15/service/http.py` 的 event_sink 只发 3 个阶段 `server_received / rejected / response_completed`，不发 `server_queued / server_executing`。因此 harness 的 `server_in_flight` 只能按 `received - completed` 近似，`server_queued / server_executing` 两层暂时无法直接量测。这是产品侧缺口，harness 不 hack、不改 src，写清后留待后续。
+当前候选传输层增加配对 `server_executing / server_execution_completed`，逐请求保留原发纳秒单调时钟及 PID，执行区间不含响应发送。Expect/非 GET 明确 execution_not_started；过载只发 rejected 并记录读头/交付状态，不补造 received/completed。原始时钟缺失、事件漏失/重复/错序必须失败。当前无应用队列，queued 保持 null；记为 N/A 仍待非作者复核及 A 裁定。
+
+窗口与告警 cursor 独立，但协议不能表达“这一流已耗尽”；省略该 cursor 会重发首页。工具保留每页原始响应并先做 SQLite oracle，再从副本中丢弃已耗尽流；分别报告原始/消费/丢弃数量。D0 的原始告警重发不等于服务端无重复，消费后覆盖通过不能代替原始无重复结论。ADR-0007 的“无重复错序”验收要求保持不变。
+
+原 driver 保留同进程诊断入口；新 process_runner 使用独立客户端/服务端进程，分别采集原始资源样本、区间 CPU 差值和采样 RSS/FD/handle 最大值。采样最大值不等于区间精确峰值，进程启动以来的 RSS 峰值另列。双 Linux、完整 Gate 0 与更高档位仍需固定 SHA 的独立证据及 Review。
 
 ### 11.4 Gate 0 六步（#136）
 
@@ -332,3 +330,81 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 | 性能（opt-in） | `tests/performance/query/test_query_load.py` | `G15_RUN_QUERY_LOAD=1 python -m pytest -q -s tests/performance/query/test_query_load.py` |
 
 harness 在 `tools/query_load/`：`d0_fixture.py`（D0 建库）、`accounting.py`（可信计数）、`oracle.py`（独立对账）、`client.py`（真实 HTTP 客户端）、`driver.py`（串行 + 并发 + 翻页全链驱动）。实测数字见 `docs/test_report.md` §10。
+
+### 11.6 A 接管后的验证与证据入口（2026-11-12，#136）
+
+- CLI、集成与 opt-in 共用 `runner.run_measurement` / `validate_run`：原始 oracle、消费后完整分页覆盖、计数守恒、应用日志三方对账分别给结论。`paging.py` 留原始与消费视图，`evidence.py` 保存每轮 `report.json`；已有目录拒绝覆盖，失败轮次也留档。
+- 每份待核原始响应须与客户端记录逐条关联：request_id 多重集、状态、run/device 与实际收到的原始 JSON 内容一致；删响应、重复补数或事后改写都使验证失败。服务端的未知 ID 事件（含拒绝）不能遗漏；200 请求必须对应 received/received → executing/started → execution_completed/success → response_completed/success。
+- `python -m tools.query_load.driver --concurrent 10 --output <新目录>`；50 波次使用 `--concurrent 50`。串行最多 10、并发只允许 10/50、workers 最多 64；发送前 barrier 仅同步起跑，不人为延迟请求/处理/响应。每个并发客户端有独立已认证且获授权的合成主体，应用 actor_ref 与客户端标签逐请求核对。
+- 提交请求数与实测峰值分列：在途按高精度单调 `perf_counter` 起止区间计算，同时报告峰值时刻不同用户数、全程不同用户数与无法关联数量。目标要求客户端、服务端实际请求与用户峰值都达到该档；不足如实退出 1，不能拿 submitted=50 代替 server=50。基础检查与目标均满足时退出 0，仍不自动宣告完整 Gate 0。
+- 证据包括源码 SHA/dirty/内容摘要、环境、命令模板、全部原始响应和失败、应用/传输日志、每请求原始延迟与 nearest-rank p50/p95/p99、资源点快照。EXPLAIN 调用实际 application SELECT helpers，记录 SQL/参数/源码行/hash；这是独立探针，不是整个 HTTP 路径追踪，D0 告警续页只是 SQL 分支探针。
+- 负例覆盖重复页、缺页、等量替换、乱序、告警重复/缺失/错键，以及仅损坏将被丢弃的原始告警；单项 oracle 正确也不能掩盖跨页重复/缺失。异常 JSON/超时等仍完成客户端记账，ID 重复/错配/完成缺失必须失败。
+- 每页独立检查键类型、唯一性与降序；凡本次请求省略某流 cursor，均按独立 SQLite 首屏键序核验该流，包括已耗尽后被重发、随后会被客户端丢弃的内容。原始空页或页内重复不能由消费视图通过抵消。
+- 存储、查询计划、资源采集、证据计算、验证或工作目录清理的普通异常，按阶段记录安全错误类型并使本轮失败；诊断计算失败仍保留已有客户端/服务端记录与原始页。不会将 KeyboardInterrupt/SystemExit 改写为正常结果；目标目录写入错误仍向调用方报错。
+- 产品阶段量测候选已按本轮扩展范围实现，契约见 interface §16；事件边界、失败与 queued 不适用裁定仍待 B1/C4 复核，不把 TCP backlog 当作应用排队数。
+
+### 11.7 分进程低负载与契约反例（2026-11-12）
+
+- `python -m tools.query_load.process_runner --concurrent 10 --output <新目录>`；50 使用另一新目录，默认 serial=10、workers=64。真实 TCP 预连接后只在客户端发送前 barrier 集合，每个主体发送一条 page_size=100 的合法查询，读取 D0 全部100窗口；服务器无 barrier、sleep、人工延迟、限速或自动重试。连接建立与 barrier 等待另留记录，不计为请求开始或请求延迟。
+- 10次串行请求和分页使用普通短连接；并发主波次使用预连接。原始延迟必须按阶段分列并注明计时基准，不能把混合样本冒充单一冷连接或并发主波次分位数。客户端进程资源含控制、校验及分页 oracle 成本，服务端进程独立采样。
+- oracle 必须独立核对实际持久化信封版本、返回窗口聚合版本、固定 query_contract_version、响应允许字段与严格 JSON 类型。对版本错/缺失、敏感审计字段、bool/float替代整数、nullable键缺失等实施真实 HTTP 损坏注入；measurement、CLI、opt-in 的共享验证必须判失败并留存证据。
+- 执行阶段回归覆盖成功、401/404/400/405、查询异常、Expect、过载、socket写失败与真实断连。计数负例覆盖执行事件缺失/重复/错序、未知 ID、原发时钟和 PID 损坏；导入后的服务端区间不得按客户端收到事件的时刻重打时间。
+
+### 11.8 每档一分钟观察与连接网络证据（2026-11-12 候选）
+
+ADR §8.3的每档一分钟不能由单个短波次替代。新增显式 opt-in：`python -m tools.query_load.observation_runner --concurrent 10 --seconds 60 --output <库外新目录>`，10档质量与资源通过后，50档使用另一新目录。同一服务端进程持续存活，先执行1用户/10请求与真实page10完整遍历，再连续执行真实page100波次；每波有N个不同已认证授权主体，波间沿用同一组身份，仍不超过50并发。
+
+本候选将时长定义为各质量通过并发波次的真实首次发送至最后完整读取并解码的区间之和至少60秒，同时报告墙钟与波次间空档；建连、barrier、校验、落盘时间不填入有效负载时长。各波峰值与达标数全部保留，汇总同时列min/max、达标波数及all_waves_target_reached，不能挑最好一波或外推为全时段恒定在途。任何质量/对账失败停止；时长未满、预算触顶或任一波未达目标均如实失败。此统计口径与最终阶段判据仍须非作者复核。
+
+每波原始客户端记录仅保存一次base64响应；传输/应用/资源/网络数据流写入各波raw.ndjson，普通report剥离重复records/samples/connections；index.ndjson记录每波报告与原始文件大小、SHA-256、时长和结果。内存只保留当前波；默认最多10000波、总证据1GiB、每波预留16MiB，达到上界即停止并保存失败。中断先完成当前波失败证据与索引，再原样传播，不伪装正常完成。CLI拒绝不足60秒；短参数仅用于自动回归，不能取得正式一分钟标志。
+
+socket网络观测显式包装真实连接，包含HTTP头和正文的应用流收发字节，按反向local/peer四元组逐连接对账并关联request_id；网络计数证据不记录payload/token。部分失败字节保持未知，中断、未真实关闭或错误记录不能被reset抹除。原发网络数据流必须与控制快照一致。此口径排除TCP/IP/链路头、重传和物理链路容量，不把socket应用流、正文长度或进程I/O混称wire容量或链路余量。
+
+Windows、Ubuntu24.04、RHEL9须在同一固定实现SHA各自运行并分开署环境。Linux分别fresh clone、核锁文件Git原始blob、pp03/Python3.12与逐包版本，所有测试、缓存、原始观察目录均在笔记库外；只把普通可读摘要/索引/日志留入规划库，完整较大raw证据保留在库外目录并记录哈希与位置。
+
+
+### 11.9 双流选择与发送前准备（#162，2026-11-13 候选）
+
+实施范围与公共契约见[#162](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/162)及[interface §17](interface.md#17-双流显式选择与发送前准备1622026-11-13-候选)。本节为候选验证计划，不是其他角色批准或完整Gate0通过，不修改AND、数据/并发门槛、评分、队列、#56/#9或旧T177产物。
+
+| 组别 | 可执行验证 | 严格预期 |
+|---|---|---|
+| 版本与投影 | 真实HTTP不传streams及显式both/windows/alarms，独立SQLite核对 | v1旧shape无omitted；v2两流各含严格bool，未选items空、cursor/流及顶层高水位null；states仍真实，未选windows的返回版本集合为空 |
+| 参数与错误顺序 | 空值/非法类型/大小写/重复参数；合法与损坏cursor放进未选流；未认证和无授权主体 | 选值仅三个精确枚举，未选cursor400；401/隐藏404先于可选参数，不能靠omitted吞掉cursor或泄露资源 |
+| scope与快照 | 实际签名cursor逐项跨actor/policy/domain/run/device/type/sort/page_size，签名及高水位破坏；另一线程提交新窗口/告警 | scope跨越404，结构/签名400；选中旧cursor无重复/缺失且高水位不变，新首屏与当前states可见新提交 |
+| 原始完整遍历 | both首屏后只选未耗尽流，保留每次选择/cursor上下文和原始响应 | D0 raw100窗/1告警、discard0；对原始键集合/条数/顺序做独立SQL/oracle，再做跨页coverage，不能信响应自报omitted或版本 |
+| 可证伪负例 | 重复/缺失/重放页、伪omitted、未选流混入条目/高水位、版本降级及统计改写 | 集成、工具CLI和opt-in共享检查均失败留证；保留v1耗尽重发首屏兼容用例 |
+| 只读/准备失败 | 请求前后比较真实SQLite业务/Schema；准备ACK丢失、重复、跨wave/PID/端点或超时 | 零业务写入；准备失败停止并保留，不补造received、授权用户或在途，不忽略诊断失败 |
+
+产品HTTP回归入口：`python -m pytest -q tests/integration/test_query_stream_selection.py`。工具负例及既有stage/identity/network回归按实际改动定向执行；全部运行、TMP/TEMP与pytest basetemp在笔记库外。固定SHA前不得将开发期测试数字写成最终候选通过。
+
+准备方案只在tools adapter观察真正handler reader安装完成，并经控制通道确认本wave N个连接的精确四元组/PID就绪后释放客户端发送前barrier；server无等待或barrier。headers在barrier前只内存准备，barrier后endheaders实际发送前起计并立即读响应。TCP、accept、reader、控制确认和barrier准备时长单列；prepared既不是received也不是已认证用户。不得sleep、压住响应、限速或扩队列造峰；即使全部准备完成，也不保证服务端峰值达到N。
+
+A的D0候选判定阶段为server_received→response_completed；executing独立留存。无应用队列时queued保持null/application_queue=absent，有条件N/A且listen_backlog未测，不能推断排队0或该项通过。累计有效60秒与每波目标AND保持§11.8定义，未达如实exit1，旧67未达波和T177六档clean2bcd639/10:1:9原始语义保留。新三平台D0证据须同一固定实现SHA、前后clean、保留全部失败，再由B1/C4复核阶段/资源充分性及A另作门禁结论；不以本节追认旧结果或自动升档。
+
+网络仅核同机socket HTTP头/正文的双向逐连接应用字节，不含TCP/IP/链路头、重传或物理NIC容量；缓存未控制不外推冷/热性能。新数据不替代独立资源、缓存边界及高档位资源授权评审。
+
+### 11.10 Selector单loop与无hold验证（#162后续候选）
+
+实施与计时边界见interface §17.4及#162/#136本次A精确范围登记。本节只登记后续独立工具workload和验证计划，不写新成绩，不替代精确head的B1/C4 Review或追认dba/T177。HTTP调度为纯selectors单loop；控制、采样与journal等整个客户端进程不因此变成单线程。
+
+| 组别 | 可证伪验证 | 必须观察到的结果 |
+|---|---|---|
+| 准备/元数据 | exact ACK与缺失/跨wave/PID/端点失败；实际selector_backend、launch_mode/launch_released及逐socket时间 | 精确连接全就绪才开gate；gate不计N starts/received/授权用户，不复用barrier时间；从未send的失败记client_attempt、status0/http_started=false/latency_eligible=false |
+| 最重要无hold反例 | A早响应read-ready，B短写且多次EAGAIN，在受控传输中固定先后 | A实际read、JSON decode和complete都先于B发送完成；“先写完全部再读”“等B/EOF/journal再complete”的变异必须被击穿 |
+| 真实start/complete | 不同请求首次send尝试、首尝试EAGAIN、从未send、完整body后连接仍开着 | start在各socket首真实send尝试前，即使零字节也只记真实调用；gate不批造starts，无send不入accounting；body+JSON即complete不等EOF/其他请求 |
+| 非阻塞/短写 | 普通EAGAIN、部分写、重复ready零进度、真实send/recv异常 | EAGAIN不误记字节或真I/O错误、不无限续期；按真实返回字节推进，真错误保部分原始字节及失败 |
+| 响应framing | header/body多片、完整JSON、非对象/非有限JSON、提前EOF/cutoff | 不丢补片，完整body不等EOF；未完整或解码失败不得通过，HTTP错误体仍原样留存 |
+| 5秒/断连 | 无进度至既有5秒I/O边界、HTTP非200、reset | 超时数值不放宽，失败/部分字节和终态留存；不将未发或未完记录计成功 |
+| journal容量/失败 | N有界完成pairs、单writer延迟/写失败、队列异常或未排空 | 主波次内存即时计数，不等flush才complete；emit落盘不挡ready读取；失败独立emergency含已知记录/未写边界，原raw不改写或重试 |
+| 中断/退出 | send/read/decode、drain/flush或报告阶段的中断和失败 | 先留存已采记录与失败状态，再原样传播中断；连接、writer、子进程回收，不吞错或伪通过 |
+| 网络/计数守恒 | 真实HTTP认证授权/SQLite、双端反向端点、字节/生命周期、四阶段与身份域 | 无未知部分字节、重复/漏失/错序或跨用户/波；prepared不入在途，server保原发时钟/PID，执行阶段独立 |
+| 两波/源码 | 同server连续两波、每波drain、handler/连接完成与end marker后切换、源码前后采证 | 无前波残留或重复；排空/核验/落盘计gap及资源，不进latency/有效秒；source稳定、raw/report/index全留 |
+
+确定性调度负例可用受控socket/selector替身固定短写/EAGAIN/read-ready次序，不靠sleep撞点；正式正确性和端到端回归仍走真实认证、授权、HTTP、SQLite和独立SQL oracle。替身不计正式D0成绩，不往产品handler加测试等待。选流v1/v2、原始100窗/1告警/0丢弃、版本/投影/请求上下文、proxy隔离及已有异常留存回归保持。
+
+主并发使用纯内存RunAccounting，前置串行/分页仍为PersistedAccounting；completion_journal的N有界单writer在terminal完成后只负责持久化。实际send/read/decode、内存complete与writer进度分别留证；finish/drain在load span外，资源采样覆盖排空，排空/flush及证据核对归墙钟/空档。任何journal/attempt/守恒问题均失败并保已知记录，不把emergency重写成原raw或悄悄重试。
+
+最终实现先固定新SHA、实际selector backend、命令、环境与源码映射，完成Windows/Ubuntu/RHEL exact-source全量回归和静态检查。之后沿用`python -m tools.query_load.observation_runner --concurrent <10或50> --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <新库外目录>`，三平台10→50序贯各一次；观测期间无并行测试/负载/大文件分析，全部失败/未达波/退出码保留，不在同一来源择优重跑。本节本身不执行或报告这些步骤。
+
+每波真实在途及对应授权用户目标继续AND，累计至少60有效秒；server候选为received→response_completed，executing单列。queued null/application_queue absent、backlog未测及条件N/A、cache uncontrolled和仅socket HTTP应用字节的边界不变，不声称稳态/物理链路余量或资源整体充分。旧clean dba六档及Ubuntu10 wave-00024 exit1、T17767个未达和开发/CI失败全留；完整Gate0仍需B1/C4真实Review与A对新SHA另判。

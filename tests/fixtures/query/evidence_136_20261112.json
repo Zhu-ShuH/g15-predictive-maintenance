@@ -1,0 +1,342 @@
+{
+  "issue": 136,
+  "recorded_date_bjt": "2026-11-12",
+  "evidence_scope": "Summary of single Windows observations. Full reports are retained by A; this file is not the raw evidence or full Gate 0 acceptance.",
+  "runs": [
+    {
+      "label": "fixed-5b59b89-10",
+      "raw_report_sha256": "c13a32b6bf5e9631f52e03679b91eafbf0ff023ebfb72561b97806b8d9e0ae12",
+      "raw_report_bytes": 551752,
+      "started_at_utc": "2026-11-11T16:22:46.641656+00:00",
+      "source": {
+        "git_sha": "5b59b89f0c9d20c48926bfcfa4ac2ee07dd08e4a",
+        "git_dirty": false,
+        "machine": {
+          "architecture": "AMD64",
+          "cpu_count": 16,
+          "os": "Windows",
+          "python": "3.12.15",
+          "release": "11",
+          "sqlite": "3.53.4"
+        }
+      },
+      "command": [
+        "python",
+        "-m",
+        "tools.query_load.driver",
+        "--serial",
+        "10",
+        "--concurrent",
+        "10",
+        "--workers",
+        "64",
+        "--output",
+        "<new-evidence-directory>"
+      ],
+      "workload": {
+        "cache": "uncontrolled; no cold-cache claim",
+        "concurrent_submitted": 10,
+        "devices": 10,
+        "distinct_authorized_users": 10,
+        "serial": 10,
+        "windows_per_device": 100,
+        "workers": 64
+      },
+      "checks": {
+        "conservation": [],
+        "consumed_coverage": [],
+        "raw_oracle": [],
+        "request_log": [],
+        "traversal": []
+      },
+      "quality_passed": true,
+      "target_reached": true,
+      "gate0_passed": false,
+      "exit_code": 0,
+      "peaks": {
+        "client": {
+          "at_monotonic": 189036.24281,
+          "distinct_users_at_peak": 10,
+          "in_flight": 10,
+          "known_distinct_users_at_peak": 10,
+          "unmapped_requests_at_peak": 0
+        },
+        "server": {
+          "at_monotonic": 189036.2579671,
+          "distinct_users_at_peak": 10,
+          "in_flight": 10,
+          "known_distinct_users_at_peak": 10,
+          "unmapped_requests_at_peak": 0
+        }
+      },
+      "clock": {
+        "implementation": "QueryPerformanceCounter()",
+        "monotonic": true,
+        "name": "perf_counter",
+        "resolution_seconds": 1e-07
+      },
+      "latency_seconds": {
+        "count": 30,
+        "max": 0.039070700004231185,
+        "method": "nearest-rank",
+        "min": 0.006624000001465902,
+        "p50": 0.010093899996718392,
+        "p95": 0.039067800011252984,
+        "p99": 0.039070700004231185
+      },
+      "paging_counts": {
+        "alarms": {
+          "consumed": 1,
+          "discarded": 9,
+          "raw": 10
+        },
+        "windows": {
+          "consumed": 100,
+          "discarded": 0,
+          "raw": 100
+        }
+      },
+      "raw_coverage_observations": [
+        "paging alarms total 10 != 1"
+      ],
+      "query_plan_count": 70,
+      "resources_before": {
+        "client_server_separable": false,
+        "cpu_system_seconds": 0.109375,
+        "cpu_user_seconds": 0.09375,
+        "endpoint_resources": {
+          "client": null,
+          "server": null
+        },
+        "limitations": [
+          "point snapshots do not establish interval resource peaks",
+          "CPU seconds are cumulative; no CPU utilization or host saturation claim",
+          "client and server share the process; separate endpoint use is unknown"
+        ],
+        "monotonic_seconds": 189035.343,
+        "open_fds": null,
+        "open_handles": 245,
+        "peak_rss_since_process_start_bytes": 41705472,
+        "rss_bytes": 41267200,
+        "scope": "shared_process_client_and_server"
+      },
+      "resources_after": {
+        "client_server_separable": false,
+        "cpu_system_seconds": 0.28125,
+        "cpu_user_seconds": 0.171875,
+        "endpoint_resources": {
+          "client": null,
+          "server": null
+        },
+        "limitations": [
+          "point snapshots do not establish interval resource peaks",
+          "CPU seconds are cumulative; no CPU utilization or host saturation claim",
+          "client and server share the process; separate endpoint use is unknown"
+        ],
+        "monotonic_seconds": 189036.5,
+        "open_fds": null,
+        "open_handles": 314,
+        "peak_rss_since_process_start_bytes": 50880512,
+        "rss_bytes": 48803840,
+        "scope": "shared_process_client_and_server"
+      },
+      "remaining_gates": [
+        "independent review",
+        "two Linux evidence",
+        "separate client/server resources",
+        "server_queued/server_executing instrumentation",
+        "raw exhausted-stream replay protocol limitation"
+      ]
+    },
+    {
+      "label": "fixed-5b59b89-50",
+      "raw_report_sha256": "d83731a32d2b33c7c28f6f7e65359a0d8dbffec9762aa359b1425d0912150ade",
+      "raw_report_bytes": 1098286,
+      "started_at_utc": "2026-11-11T16:22:48.952627+00:00",
+      "source": {
+        "git_sha": "5b59b89f0c9d20c48926bfcfa4ac2ee07dd08e4a",
+        "git_dirty": false,
+        "machine": {
+          "architecture": "AMD64",
+          "cpu_count": 16,
+          "os": "Windows",
+          "python": "3.12.15",
+          "release": "11",
+          "sqlite": "3.53.4"
+        }
+      },
+      "command": [
+        "python",
+        "-m",
+        "tools.query_load.driver",
+        "--serial",
+        "10",
+        "--concurrent",
+        "50",
+        "--workers",
+        "64",
+        "--output",
+        "<new-evidence-directory>"
+      ],
+      "workload": {
+        "cache": "uncontrolled; no cold-cache claim",
+        "concurrent_submitted": 50,
+        "devices": 10,
+        "distinct_authorized_users": 50,
+        "serial": 10,
+        "windows_per_device": 100,
+        "workers": 64
+      },
+      "checks": {
+        "conservation": [],
+        "consumed_coverage": [],
+        "raw_oracle": [],
+        "request_log": [],
+        "traversal": []
+      },
+      "quality_passed": true,
+      "target_reached": false,
+      "gate0_passed": false,
+      "exit_code": 1,
+      "peaks": {
+        "client": {
+          "at_monotonic": 189038.8514091,
+          "distinct_users_at_peak": 50,
+          "in_flight": 50,
+          "known_distinct_users_at_peak": 50,
+          "unmapped_requests_at_peak": 0
+        },
+        "server": {
+          "at_monotonic": 189038.9320194,
+          "distinct_users_at_peak": 23,
+          "in_flight": 23,
+          "known_distinct_users_at_peak": 23,
+          "unmapped_requests_at_peak": 0
+        }
+      },
+      "clock": {
+        "implementation": "QueryPerformanceCounter()",
+        "monotonic": true,
+        "name": "perf_counter",
+        "resolution_seconds": 1e-07
+      },
+      "latency_seconds": {
+        "count": 70,
+        "max": 0.5849519000039436,
+        "method": "nearest-rank",
+        "min": 0.006781600008253008,
+        "p50": 0.10874100000364706,
+        "p95": 0.5812414000101853,
+        "p99": 0.5849519000039436
+      },
+      "paging_counts": {
+        "alarms": {
+          "consumed": 1,
+          "discarded": 9,
+          "raw": 10
+        },
+        "windows": {
+          "consumed": 100,
+          "discarded": 0,
+          "raw": 100
+        }
+      },
+      "raw_coverage_observations": [
+        "paging alarms total 10 != 1"
+      ],
+      "query_plan_count": 70,
+      "resources_before": {
+        "client_server_separable": false,
+        "cpu_system_seconds": 0.09375,
+        "cpu_user_seconds": 0.109375,
+        "endpoint_resources": {
+          "client": null,
+          "server": null
+        },
+        "limitations": [
+          "point snapshots do not establish interval resource peaks",
+          "CPU seconds are cumulative; no CPU utilization or host saturation claim",
+          "client and server share the process; separate endpoint use is unknown"
+        ],
+        "monotonic_seconds": 189037.64,
+        "open_fds": null,
+        "open_handles": 245,
+        "peak_rss_since_process_start_bytes": 41598976,
+        "rss_bytes": 40927232,
+        "scope": "shared_process_client_and_server"
+      },
+      "resources_after": {
+        "client_server_separable": false,
+        "cpu_system_seconds": 0.140625,
+        "cpu_user_seconds": 0.234375,
+        "endpoint_resources": {
+          "client": null,
+          "server": null
+        },
+        "limitations": [
+          "point snapshots do not establish interval resource peaks",
+          "CPU seconds are cumulative; no CPU utilization or host saturation claim",
+          "client and server share the process; separate endpoint use is unknown"
+        ],
+        "monotonic_seconds": 189039.671,
+        "open_fds": null,
+        "open_handles": 314,
+        "peak_rss_since_process_start_bytes": 57630720,
+        "rss_bytes": 49647616,
+        "scope": "shared_process_client_and_server"
+      },
+      "remaining_gates": [
+        "independent review",
+        "two Linux evidence",
+        "separate client/server resources",
+        "server_queued/server_executing instrumentation",
+        "raw exhausted-stream replay protocol limitation"
+      ]
+    }
+  ],
+  "checks": {
+    "pytest": {
+      "passed": 961,
+      "skipped": 15,
+      "seconds": 87.82,
+      "exit_code": 0
+    },
+    "targeted": {
+      "passed": 29,
+      "skipped": 1,
+      "seconds": 4.04,
+      "exit_code": 0
+    },
+    "opt_in": {
+      "passed": 1,
+      "seconds": 1.88,
+      "exit_code": 0
+    },
+    "black": {
+      "files": 80,
+      "exit_code": 0
+    },
+    "pylint": {
+      "score": 9.89,
+      "exit_code": 0
+    },
+    "docrefs": {
+      "issues": 0,
+      "exit_code": 0
+    },
+    "mutation": {
+      "removed_guards": [
+        "windows_count",
+        "windows_keys",
+        "alarms_count",
+        "alarms_keys"
+      ],
+      "expected_exit_codes": [
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  }
+}
