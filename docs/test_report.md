@@ -129,16 +129,14 @@ manifest 升到 2.0 并新增可选键 `scenario_kind` 之后，这条链路按�
 | `test_partial_database_is_reusable_after_a_failed_shard` | 损坏 → 拒收 → 修复 → 重跑 | 重跑成功，`windows_written>0` 且库内窗口数等于写入数 |
 | `test_second_consumption_is_idempotent` | 重复消费 | `windows_written=0`、`alarms_written=0`、`shards_skipped=shards_processed`，库内窗口数不变 |
 
-### 4.3 `kill -9` 恢复（Linux 已留证；Windows 上 skip）
-`test_kill_dash_nine_replay_matches_an_uninterrupted_run` 用真实 `SIGKILL` 打断子进程消费者，再重跑，并与未中断运行比对**库的全部内容**（`runs`/`processed_chunks`/`feature_windows`/`alarms`/`alarm_states` 五张表），不只比总行数。
+### 4.3 `kill -9` 恢复（当前管道 checkpoint；历史 Linux 留证分列）
+当前 a10cab2f 用例通过测试侧包装模块级 `consumer.transaction` 执行真实事务与 COMMIT；退出后断言 `not connection.in_transaction`，独立只读连接核对恰有第一片 marker。子进程经 stdout 管道发送 `after_first_shard_commit` JSON，随后阻塞读 stdin 管道。父进程以 `select` 等待，核验 PID、源码位置、marker 和 `transaction_open=False`，确认子进程仍存活后才 SIGKILL。没有 watcher 线程、握手文件、固定 sleep 或生产 hook。
 
-用例本身做了三件事保证它到 Linux 上真的能证伪：①子进程起一个**监视线程**轮询消费者自己写出的 `processed_chunks`，看到第 1 行即写握手文件，父进程轮询到握手才发信号，不用固定 `sleep`，也不往业务代码里加测试专用参数；②断言 `returncode == -SIGKILL`，子进程若自己跑完（返回 0）用例即失败，不会静默通过；③重跑后逐表比对内容，写对行数但写错内容的重放也会被抓到。
+**准确边界**：checkpoint 在第一片 COMMIT 之后、下一片事务之前，不证明未提交事务内部击杀。必须 `returncode == -SIGKILL`、`partial == before_kill` 且恰好第一片已提交；普通未包装消费者重放须 `shards_skipped == 1`、`shards_processed == total_parts - 1`，五张业务表全部可比内容与未中断参考运行一致。
 
-**握手时机的真实边界**（按 A 第三轮评审 `5648720609` 的限定）：监视线程轮询 `processed_chunks`，看到第 1 行即写握手；但轮询**不能精确保证**此时"第一片刚提交、正处理第二片"，消费者可能已提交更晚的片。因此实际断言的是**某个非空的部分前缀**（`1 <= 已提交片数 < manifest.parts` 总数），不是"恰好一片"。本报告不把该用例描述成能证明更精确的时序。
+**历史 C6 Linux 留证**：2026-11-02 Issue #51，main `7daa07c`，Ubuntu 24.04.4 / RHEL 9.7（Python 3.12.16）分别执行 `python -m pytest tests/fault_injection/test_pipeline_faults.py -q`，各 9 passed、无 skip（1.12s / 0.81s）。这两次对应旧 watcher blob `19cbcab`，不是当前 `a250b5eed7e56b9a06de257e4e4fb1e0456d2d50`。当前文件与该 main 不同，旧 9 passed 不能支撑当前管道用例。
 
-**Linux 留证（C6，2026-11-02，Issue #51）**：C6 在被测树 main `7daa07c` 上分别于 Ubuntu 24.04.4 与 RHEL 9.7（均 Python 3.12.16）执行 `python -m pytest tests/fault_injection/test_pipeline_faults.py -q`，两次都是 **9 passed，无 skip**（1.12 s / 0.81 s）。该文件在本分支与 main 上逐字节相同（blob `19cbcab`），所以这条留证直接对应本节用例，不是另一份实现的结果。
-
-**在 Windows 上仍然 skip**（`kill -9` 是 POSIX 语义，Windows 无等价物）：本机实测 `8 passed, 1 skipped`，skip 的正是这一条。Windows 上**不伪造**该项结果，也不把 Linux 的通过数抄进 Windows 那几行。
+**当前证据边界**：C4 对 a10cab2f 的[独立复核](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/157#pullrequestreview-5886041102)记录 Windows 单文件 8 passed / 1 skipped / 9.03s，全量 1138 passed / 15 skipped / 262.67s。这是 C4 的运行，不是本次新跑结果。Windows 的 SIGKILL skip 不算 Linux 通过。本次仅修文档，未重跑 Linux 单文件或容量；当前 Linux 单文件证据必须绑定当前测试 blob，旧 C6 两次结果不作替代。
 
 ### 4.4 真值隔离（已完成，可证伪）
 
@@ -326,7 +324,7 @@ A 在 `5646201287` 上给了六条 CHANGES_REQUESTED（R1–R6），第三轮 `5
 | R3 | 读另一个硬编码库的 `scoring_version`，空库也能通过；**有 `runs` 行就当整 run 完成** | 一律用**传入的 `database_path`**，按 `manifest.run_id` 查 `runs` 行；**第二轮追加**：`manifest.parts` 每个分片都要有 `processed_chunks` 行且 `sha256` 与清单一致，缺行/不符即部分消费，`verifiable=false`、`passed=null`，并新增 `pending_parts`/`digest_mismatch_parts` 字段 | `test_report_does_not_read_another_runs_database`（A 的库配 B 的 run → `passed=null`）；`test_report_reads_scoring_version_from_the_supplied_database`；`test_report_survives_a_database_that_was_only_initialised`；**`test_report_refuses_a_partially_consumed_run`**（真实生产 65536 点 → 损坏第 2 片 → 消费在第一片提交后失败 → 报告 `pending_parts=[1..6]`、`processed=10240`、`rejected=55296`、`passed=null`；修好重跑 → `passed=true`、`pending=[]`）；**`test_report_refuses_a_run_whose_recorded_digest_was_swapped`**（改 `processed_chunks.sha256` → `digest_mismatch_parts=[3]`、`passed=null`） |
 | R4 | `processed_points` 把整片 rows 当成分析覆盖 | 拆成 `processed_points`（已提交片覆盖）/ `analysed_points`（真实入窗）/ `dropped_points`（片内未成窗）/ `rejected_points`（未消费片）。四个字段不构成一条和式，而是两条恒等式：`processed + rejected = total`（分片口径），`analysed + dropped = processed`（分析口径） | `test_report_reports_analysed_and_dropped_points_separately`：单片 10240、W=7000 → `processed=10240, analysed=7000, dropped=3240, rejected=0`，两式分别为 `10240+0=10240` 与 `7000+3240=10240` |
 | R5 | 告警未去重，一条预测能检出两个事件；贪心反例不成立 | 按 `(device_id, rule_id, start_seq)` 去重并限定 `yellow/red`，被丢弃行计入 `dropped_alarm_count`；贪心反例改成真的反例；并列多解的指派写进断言 | `test_duplicate_alarm_keys_cannot_detect_two_events`、`test_duplicate_keys_on_different_levels_are_still_one_alarm`、`test_alarm_level_outside_the_contract_never_detects`、`test_maximum_matching_beats_greedy_when_a_later_event_has_no_alternative`（A 提的真实反例：A=`[0,1024)`、B=`[0,1)`、告警 0/768 → 最大 2）、`test_tie_break_between_identical_events_is_pinned` |
-| R6 | `kill -9` 用例用固定 sleep、不查返回码、只比行数；**握手点在 `consume_run` 之前** | 改为**子进程监视线程轮询 `processed_chunks`**：第一片事务提交后写握手；断言 `returncode == -SIGKILL`；信号后先断言 `1 <= len(processed_chunks) < manifest.parts` 证明是真实中间态；重跑后逐表比对五张表全部内容。**边界限定**（A `5648720609`）：轮询不能精确保证"刚提交第一片、正处理第二片"，实际观察到的是某个**非空部分前缀**，文档按此表述，不声称更精确时序 | 用例在 Windows 上 skip；到 Linux 上才真正执行。Windows 上**不伪造**该结果。握手靠观察数据库取得，**未给业务代码加任何测试专用参数** |
+| R6 | 旧用例的固定 sleep、行数比较或 watcher 时序竞态 | 当前 a10cab2f 用测试侧真实事务包装，第一片 COMMIT 后只读核验，再经管道 checkpoint 阻塞；父进程 select 核验后 SIGKILL，断言恰一片及 partial == before_kill，普通重放跳过1片并处理余片、五表内容一致 | 位于两片事务之间，不证明未提交事务内击杀；无生产 hook。旧 C6 19cbcab 与当前 a250b5e 证据分列，Windows仍skip，见§4.3 |
 | R7 | 摘要冲突时报告混用两套口径：`processed_points` 扣掉冲突片，`analysed_points` 却仍统计该片窗口 → **负丢弃点**（`-10240`），且检出率仍来自含无效片的窗口/告警 | **统一有效数据范围**：新增 `_part_ranges`/`_contains`，按 manifest 累加 rows 得每片 seq 区间；窗口与告警只在**有效片**（已提交且摘要一致）内计入 `analysed_points`/`alarm_count`/匹配指标。无法归属的行**不静默丢弃**，另列 `raw_feature_windows`/`excluded_feature_windows`/`raw_alarm_count`/`excluded_alarm_count`，把"库中原始记录"与"可归属当前 manifest 的数据"分开；不使用 `max(0, dropped)` 掩盖范围不一致 | `test_report_refuses_a_run_whose_recorded_digest_was_swapped` 扩充：断言 `dropped_points >= 0`、`analysed == processed`、两式恒等、`excluded_feature_windows > 0`、`feature_windows + excluded_feature_windows == raw_feature_windows`、`excluded_alarm_count == raw_alarm_count - alarm_count`、Markdown 与 JSON 同源且不含 `-10240`。新增 `test_report_excludes_alarms_from_a_shard_whose_digest_was_swapped`：往 part 3 插一条告警（`raw_alarm_count=2`、`false_alarm_count=1`）→ 置换 part 3 摘要后 `excluded_alarm_count=1`、`alarm_count=1`、`false_alarm_count=0`，Markdown 同步。**变异测试**：把窗口归属改回"全部计入" → `assert -10240 >= 0` 失败；把告警归属改回"全部保留" → `assert 0 == 1` 失败；两处恢复后均通过 |
 
 另：`docs/test_plan.md` §6.3/§6.4 已同步成上述口径。
@@ -503,7 +501,7 @@ Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
 
 ### 10.8 同实现三平台 D0 一分钟观察（2026-11-12）
 
-本节是§10.5–§10.7之后的完整观察增量，旧失败和单波数字原样保留。全部六档正式观察固定clean源码 `2bcd639668c679c2b5f01ad10e6888fe454d3f00`，前后内容不变；每档只执行一次，三平台依次执行，没有并行压测或失败后择优重跑。其后`487f9915`新增minute证据产物并补报告，`0632e32f`/`0b043093`更正文档；`4481f1bb`则修改query_load客户端的代理隔离与对应测试，并非只有文档差异。上述修订未重采或回写原六档，六档来源仍为clean`2bcd639`，不将后续修订提交号冒充实际测量SHA。
+本节是§10.5–§10.7之后的完整观察增量，旧失败和单波数字原样保留。全部六档正式观察固定clean源码 `2bcd639668c679c2b5f01ad10e6888fe454d3f00`，前后内容不变；每档只执行一次，三平台依次执行，没有并行压测或失败后择优重跑。其后`487f9915`新增minute证据产物并补报告，`0632e32f`/`0b043093`更正文档；`4481f1bb`则修改query_load客户端的代理隔离与对应测试，并非只有文档差异。其后 c6a2a060 修正文档来源及历史票链接，a10cab2f 重写 SIGKILL 测试为真实 COMMIT 后管道 checkpoint；该测试重写不是容量重新测量。上述修订未重采或回写原六档，六档来源仍为clean`2bcd639`，不将后续修订提交号冒充实际测量SHA。
 
 已修复的oracle版本/字段投影/严格类型与身份域漏检、真实执行阶段及分进程资源沿用§10.7；本次另补socket应用流计数、逐连接反向四元组对账和有界的一分钟观察。D0是10设备×100窗，真实认证授权/HTTP/SQLite；先一用户10请求和真实page10完整分页，再以page100重复发起10/50个不同授权用户波次，同一档持续使用一个真实服务端进程。公开数据投影（10设备、1000窗、10告警、10状态）六档SHA-256一致：`990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc`；此值是独立SQL核过的公开响应投影摘要，不是物理或private数据库字节摘要。
 

@@ -178,20 +178,14 @@ spike / step / burst 六个受控事件，见 §3。
 | 损坏后修复再跑 | 正常完成，窗口数等于首次成功写入数（证明库没被写坏） |
 
 ### 6.3 `kill -9` 恢复（Linux）
-在 Linux 上用真实 `SIGKILL` 打断消费者，再重跑，并断言**库内容**与"未中断运行"一致。
+当前 a10cab2f 用例采用真实 COMMIT 后管道 checkpoint：
+1. 测试子进程包装 `consumer.transaction`，执行原事务及真实 COMMIT；退出后确认不在事务中，独立只读连接核对恰有第一片 marker。
+2. stdout 管道上报 `after_first_shard_commit` JSON（PID、源码位置、marker、`transaction_open=False`），然后阻塞读 stdin 管道。无 watcher、握手文件、固定 sleep 或生产 hook。
+3. 父进程通过 `select` 等待并逐项核验，确认子进程存活、保存库快照后 SIGKILL，断言 `returncode == -SIGKILL`。
+4. 击杀后断言 `partial == before_kill` 且恰第一片已提交。checkpoint 在两片事务之间，不证明未提交事务内击杀。
+5. 普通未包装消费者重放，断言跳过 1 片、处理剩余 `total_parts - 1` 片，与未中断运行比较五张业务表全部可比内容。
 
-用例 `test_kill_dash_nine_replay_matches_an_uninterrupted_run` 的做法：
-
-1. 子进程**先启动一个监视线程**，轮询消费者自己写出的 `processed_chunks` 表；当该表出现第 1 行（即**第一片事务已提交**）时写握手文件。握手点因此落在"至少一片已落库、整体尚未完成"的真实中间态，而不是在 `consume_run` 调用之前（固定 `sleep` 或调用前握手都能被快机器跑过去，证明不了任何事）。
-   边界说明（按 A 第三轮评审 `5648720609` 的限定）：轮询**不能精确保证**握手发生在"第一片刚提交、正处理第二片"那一刻。监视线程看到第 1 行时，消费者可能已经提交了更晚的片，因此实际观察到的是**某个非空的部分前缀**（`1 <= 已提交片数 < 总片数`），而不是"恰好一片"。用例按这个真实边界断言，不声称更精确的时序。
-2. 握手靠**观察数据库**取得，不往业务代码里加测试专用参数，生产路径保持干净。
-3. 父进程轮询到握手才发信号；发 `SIGKILL` 后断言 `returncode == -SIGKILL`；若子进程自己跑完（`returncode == 0`）则用例失败，而不是静默通过。
-4. 信号之后先断言库处于**部分提交**状态：`processed_chunks` 行数 `>= 1` 且 `< manifest.parts` 总数——否则说明信号打在消费开始前或结束之后，用例失败。
-5. 重跑消费后比对 `runs`、`processed_chunks`、`feature_windows`、`alarms`、`alarm_states` 五张表的**全部内容**（含窗口几何、健康分、告警级别与持久化状态），不只比总行数——这样"写对行数但写错内容"的重放也会被抓到。
-
-该用例在 Windows 上 **skip**，理由写进用例：`kill -9` 是 POSIX 语义，Windows 没有等价物，按 §4 必须在 Linux 留证，不在 Windows 伪造。
-
-**Linux 留证现状（2026-11-02）**：C6 在被测树 main `7daa07c` 上于 Ubuntu 24.04.4 与 RHEL 9.7 各跑 `python -m pytest tests/fault_injection/test_pipeline_faults.py -q`，两次都是 **9 passed、无 skip**。本机 Windows 仍是 `8 passed, 1 skipped`（skip 的就是本条）。留证数字记在 `docs/test_report.md` §4.3。
+Windows 仍 skip，不替代 POSIX Linux 实跑。C6 2026-11-02 在 main `7daa07c` 双 Linux 各 9 passed 对应旧 blob `19cbcab`，不是当前管道用例 `a250b5e`。本次文档修订未重跑 Linux 单文件，当前与历史证据分列，见报告 §4.3。
 
 ### 6.4 真值隔离（可证伪）
 - 删除 `private_truth/faults.json` 后**消费仍然成功**（消费者不读真值），但报告必须判为**不可验证**（`verifiable=false`、`passed=null`、`detection_rate=null`），并给出"缺真值"的原因——不能把"文件没了"当成"没有事件"而判正常通过。
