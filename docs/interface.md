@@ -738,3 +738,18 @@ A对T177 Windows50的`wave-00192`既有记录复核：以first_received为基准
 新增准备仅在tools观测adapter登记真正handler reader安装完成的就绪事实，不等待、不发received。控制通道须按本wave/PID与精确反向local/peer四元组确认N个连接均已就绪，再释放客户端发送前barrier；缺失、重复、跨wave、错误端点、超时或诊断失败都保留并使本轮失败。请求headers只在barrier前内存拼装，正式计时从barrier后实际endheaders发送前开始，随后立即读取直至完整解码。TCP建连、accept、reader安装、控制确认与barrier准备耗时单列，不填进请求延迟或有效负载时长。
 
 prepared不是received、已认证用户或请求在途；服务端不新增barrier、sleep、响应hold、限速或队列扩容。就绪确认也不保证N峰必达。A的D0候选验收阶段采用`server_received→response_completed`，executing按§16单列，不混算。无应用队列维持absent/null，queued有条件记N/A并保留`listen_backlog=unmeasured`，不能导出排队为0、非瓶颈或Gate0通过。累计有效60秒、全部波次目标AND、所有未达与失败保留不变；socket证据仅为本机HTTP应用字节，不代表物理链路容量，缓存未控制不声称冷/热结果。新协议、准备及阶段/资源充分性仍待B1/C4复核和固定SHA实测后另判。
+
+### 17.4 Selector单loop客户端与有界证据写入（#162后续候选）
+
+A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次HTTP读写，替代N个请求线程的发起；不修改service/query业务或引入服务端等待。单loop仅指HTTP调度，控制通道、资源采样与单证据写者仍有各自开销，不能称整个客户端进程仅一个线程。目标是减少负载端发起散布，不保证峰值N或预先宣称Gate0通过。§17.1/§17.2的v1/v2、真实授权、原始oracle/coverage及§16阶段计数保持原义。
+
+1. **准备与共同gate**：真实TCP连接、请求内存准备后，仍须核验本wave/PID与精确反向端点的reader就绪ACK，失败或超时保留并停止。本机客户端收到并核验回执后记录共同launch gate及实际`selector_backend`，使用`launch_mode`/`launch_released`说明发起方式和释放时刻，不复用线程的`barrier_released`语义。gate的本机时钟与ns口径明确，但不能据它批造N个`client_started`、已认证用户或在途；准备时间单列。服务端事件保原发PID/单调时钟，不与客户端gate跨进程相减。
+2. **逐请求真实边界**：每socket在首次真实`socket.send`调用尝试之前记录自己的`client_start`与发送时刻；即使该次EAGAIN暂为0字节，它也是已实际调用的尝试，字节进度仍为0，不能改成“首次成功字节”口径。首send、实际read、body完整、JSON解码完成分开留证。准备/ACK失败且从未send的attempt不调用accounting start/complete，另记raw `client_attempt`、status0、`http_started=false`、`latency_eligible=false`，纳入失败/attempt核对而非成功请求延迟或已发请求数。
+3. **读写公平与无hold**：socket均为nonblocking；每次推进一个有界write步骤后立即检查并处理read-ready，不能先完成本波所有请求的写入再统一读。短写只推进真实返回字节；普通EAGAIN/BlockingIOError仅无进度，不加假字节、不当成真I/O错误或无限延长截止时间。真实I/O错误、reset、5秒I/O超时及中断分别留存，既有5秒数值不变。不得busy-spin、sleep、节流、压读完整响应或等慢请求造峰。
+4. **即时complete**：按HTTP framing确认body完整且JSON解码完成时立即记该请求complete，不等其他socket发送完、连接EOF或证据flush。非法JSON、HTTP错误与提前EOF保留原始字节和真实失败终态，不补造成功。client的start/complete只按实际逐请求边界计数，不能拿gate或journal进度代替。
+5. **内存计数与journal**：主并发用纯内存`RunAccounting`即时记时间/计数，前置串行与分页保持原`PersistedAccounting`路径。`tools/query_load/completion_journal.py`将本波最多N个完成record/connection元数据pairs交给N有界队列的单写者，emit只负责落盘，不让同步磁盘写入/flush延后complete或阻塞ready读取。容量、接纳/写出/未排空数量及writer错误须可对账，不允许无界积压、静默丢弃或假成功。写失败/队列异常使本波质量失败，以单独emergency artifact保留已知记录及未写边界，不重试或改写原raw，不能用空报告覆盖已有证据。
+6. **排空与波界**：journal finish/drain/flush和记录核对属于load span之外的波后工作，计入墙钟/波间空档及客户端资源观察，不加入请求latency或有效秒。下一波前须确认本波排空、真实handler/连接完成、network与marker闭合；退出须回收写者等资源。失败和中断先留存再传播，清理不得抹掉原记录。网络仍按实际socket逐连接计字节和生命周期，不记录请求头、凭据或cursor值。
+
+最重要的可证伪反例：A的响应已read-ready，B仍短写/EAGAIN，A必须先完成read、JSON解码及complete，再发生B的发送完成。“先发完全部再读”或“等writer落盘再complete”必须被负例击穿；完整body不能等EOF。fragment、cutoff、HTTP错误、timeout、reset、中断、journal失败及跨两波守恒见test_plan §11.10。
+
+本候选独立于clean`dba4dce9`的线程发起实现/工作负载，须固定新SHA后另作同SHA三平台回归和逐档观察。原dba六档、Ubuntu10 wave-00024真实server9/exit1及T17767个未达波全部保留。AND、10/50、累计有效60秒、received→response_completed候选和executing单列不变；queued仍null/absent且仅有条件N/A，backlog未测、cache uncontrolled和非物理网络边界不变。本节不产生新成绩或批准，精确新head仍须B1/C4真实Review及A门禁裁定。

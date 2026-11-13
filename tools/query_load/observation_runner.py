@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import base64
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 import hashlib
 import json
@@ -28,6 +27,7 @@ from urllib.parse import quote, urlsplit
 from .accounting import ClientRecord, RunAccounting
 from .client import _finite_float, _invalid_constant
 from .d0_fixture import D0_DEVICE_COUNT, build_d0_runs, device_id, device_run_id
+from .completion_journal import CompletionJournal
 from .evidence import query_plans, source_facts
 from .network import MeteredHTTPConnection, SocketNetworkMeter, validate_network_pair
 from .oracle import verify_response
@@ -309,36 +309,43 @@ class ObservationClient:
 
 
 def _concurrent_wave(clients: list[ObservationClient]) -> list:
-    references = []
-    lock = threading.Lock()
+    from .dispatcher import RequestSpec, dispatch_wave
 
-    def register(reference):
-        with lock:
-            references.append(reference)
-
-    def confirm():
-        if clients[0].confirm_preparation is not None:
-            clients[0].confirm_preparation(references)
-
-    barrier = threading.Barrier(len(clients), action=confirm)
-
-    def one(index: int):
-        run_id = device_run_id(index % D0_DEVICE_COUNT)
-        status, body = clients[index].query(
-            run_id,
-            device_id(index % D0_DEVICE_COUNT),
-            page_size=100,
-            launch_barrier=barrier,
-            on_connected=register,
+    if not clients:
+        raise ValueError("a concurrent wave needs clients")
+    state = clients[0].evidence_writer
+    journal = CompletionJournal(state, len(clients))
+    original_error = None
+    try:
+        specifications = [
+            RequestSpec(
+                base_url=client.location.geturl(),
+                actor=client.actor,
+                token=client.token,
+                run_id=device_run_id(index % D0_DEVICE_COUNT),
+                device_id=device_id(index % D0_DEVICE_COUNT),
+                page_size=100,
+            )
+            for index, client in enumerate(clients)
+        ]
+        return dispatch_wave(
+            specifications,
+            accounting=clients[0].accounting,
+            meter=clients[0].meter,
+            confirm_preparation=clients[0].confirm_preparation,
+            emit_completed=journal.emit,
         )
-        return status, body, run_id
-
-    responses = []
-    with ThreadPoolExecutor(max_workers=len(clients)) as pool:
-        futures = [pool.submit(one, index) for index in range(len(clients))]
-        for future in as_completed(futures):
-            responses.append(future.result())
-    return responses
+    except BaseException as exc:
+        original_error = exc
+        raise
+    finally:
+        try:
+            journal.finish()
+        except BaseException:
+            if original_error is None:
+                raise
+        finally:
+            state.report["completion_journal"] = journal.facts()
 
 
 def _counter(rows: list) -> Counter:
@@ -651,14 +658,14 @@ class ObservationSession:
     ) -> tuple[dict, dict]:
         state = WaveEvidence(output, wave_id)
         self.current = state
-        accounting = PersistedAccounting(state)
+        accounting = PersistedAccounting(state) if prelude else RunAccounting()
         meter = SocketNetworkMeter("client")
         clients = [
             ObservationClient(self.base_url, token, actor, accounting, meter, state)
             for token, actor in identities
         ]
         report: dict[str, Any] = {
-            "format": "g15-d0-observation-wave-v1",
+            "format": "g15-d0-observation-wave-v2",
             "wave_id": wave_id,
             "phase": "serial10_and_full_paging" if prelude else "concurrent",
             "client_process_id": os.getpid(),
@@ -673,7 +680,7 @@ class ObservationSession:
             "latency_basis": (
                 "prelude calls include TCP setup; complete raw paging preserved"
                 if prelude
-                else "each concurrent request starts after TCP preconnect/client barrier and ends after complete read and decode"
+                else "each concurrent request starts at its first nonblocking socket send attempt after TCP/header preparation and exact ACK; terminal is immediate full read and decode; journal drain excluded"
             ),
         }
         state.report = report
@@ -870,13 +877,23 @@ class ObservationSession:
             }
             records = accounting.client_records
             report["load_interval"] = {
-                "start_monotonic": min(row.started_monotonic for row in records),
-                "end_monotonic": max(row.completed_monotonic for row in records),
-                "seconds": max(row.completed_monotonic for row in records)
-                - min(row.started_monotonic for row in records),
+                "start_monotonic": min(
+                    (r.started_monotonic for r in records), default=None
+                ),
+                "end_monotonic": max(
+                    (r.completed_monotonic for r in records), default=None
+                ),
+                "seconds": (
+                    max(r.completed_monotonic for r in records)
+                    - min(r.started_monotonic for r in records)
+                    if records
+                    else 0.0
+                ),
                 "clock": "client perf_counter only; no cross-process subtraction",
-                "counted_toward_duration": not prelude,
+                "counted_toward_duration": not prelude and bool(records),
             }
+            if not records:
+                _failure(report, "no_http_started", RuntimeError())
             report["endpoint_resources"] = {
                 side: _summary_resources(value)
                 for side, value in report["endpoint_resources"].items()
@@ -962,7 +979,7 @@ def run_observation(
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     summary: dict[str, Any] = {
-        "format": "g15-d0-observation-v1",
+        "format": "g15-d0-observation-v2",
         "requested_concurrent_users": concurrent,
         "requested_load_seconds": duration_seconds,
         "formal_duration_requirement_seconds": 60,
@@ -986,9 +1003,11 @@ def run_observation(
             "windows_per_device": 100,
             "page_size": 100,
             "same_server_process_for_all_waves": True,
+            "client_dispatcher": "selectors.DefaultSelector",
+            "completion_evidence": "bounded per-wave single writer; no disk wait in HTTP dispatch; drain excluded from request latency",
             "serial_smoke": "one user / ten requests before observation",
             "paging": "complete actual page10 traversal before observation",
-            "arrival": "preconnected real TCP; exact accepted/reader-installed endpoints confirmed over control IPC before client-only launch barrier",
+            "arrival": "selector dispatcher after real TCP/header and exact reader ACK; independent actual first-send timestamps; read-ready checked after each bounded write",
             "duration_basis": "sum of quality-verified actual concurrent send-to-read-and-decode spans; all gaps excluded; failed attempts retained separately",
             "cache": "uncontrolled; no cold-cache claim",
             "delays": "no sleep, response holding, server barrier, throttle or retry",

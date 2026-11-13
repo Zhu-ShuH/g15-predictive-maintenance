@@ -389,3 +389,28 @@ Windows、Ubuntu24.04、RHEL9须在同一固定实现SHA各自运行并分开署
 A的D0候选判定阶段为server_received→response_completed；executing独立留存。无应用队列时queued保持null/application_queue=absent，有条件N/A且listen_backlog未测，不能推断排队0或该项通过。累计有效60秒与每波目标AND保持§11.8定义，未达如实exit1，旧67未达波和T177六档clean2bcd639/10:1:9原始语义保留。新三平台D0证据须同一固定实现SHA、前后clean、保留全部失败，再由B1/C4复核阶段/资源充分性及A另作门禁结论；不以本节追认旧结果或自动升档。
 
 网络仅核同机socket HTTP头/正文的双向逐连接应用字节，不含TCP/IP/链路头、重传或物理NIC容量；缓存未控制不外推冷/热性能。新数据不替代独立资源、缓存边界及高档位资源授权评审。
+
+### 11.10 Selector单loop与无hold验证（#162后续候选）
+
+实施与计时边界见interface §17.4及#162/#136本次A精确范围登记。本节只登记后续独立工具workload和验证计划，不写新成绩，不替代精确head的B1/C4 Review或追认dba/T177。HTTP调度为纯selectors单loop；控制、采样与journal等整个客户端进程不因此变成单线程。
+
+| 组别 | 可证伪验证 | 必须观察到的结果 |
+|---|---|---|
+| 准备/元数据 | exact ACK与缺失/跨wave/PID/端点失败；实际selector_backend、launch_mode/launch_released及逐socket时间 | 精确连接全就绪才开gate；gate不计N starts/received/授权用户，不复用barrier时间；从未send的失败记client_attempt、status0/http_started=false/latency_eligible=false |
+| 最重要无hold反例 | A早响应read-ready，B短写且多次EAGAIN，在受控传输中固定先后 | A实际read、JSON decode和complete都先于B发送完成；“先写完全部再读”“等B/EOF/journal再complete”的变异必须被击穿 |
+| 真实start/complete | 不同请求首次send尝试、首尝试EAGAIN、从未send、完整body后连接仍开着 | start在各socket首真实send尝试前，即使零字节也只记真实调用；gate不批造starts，无send不入accounting；body+JSON即complete不等EOF/其他请求 |
+| 非阻塞/短写 | 普通EAGAIN、部分写、重复ready零进度、真实send/recv异常 | EAGAIN不误记字节或真I/O错误、不无限续期；按真实返回字节推进，真错误保部分原始字节及失败 |
+| 响应framing | header/body多片、完整JSON、非对象/非有限JSON、提前EOF/cutoff | 不丢补片，完整body不等EOF；未完整或解码失败不得通过，HTTP错误体仍原样留存 |
+| 5秒/断连 | 无进度至既有5秒I/O边界、HTTP非200、reset | 超时数值不放宽，失败/部分字节和终态留存；不将未发或未完记录计成功 |
+| journal容量/失败 | N有界完成pairs、单writer延迟/写失败、队列异常或未排空 | 主波次内存即时计数，不等flush才complete；emit落盘不挡ready读取；失败独立emergency含已知记录/未写边界，原raw不改写或重试 |
+| 中断/退出 | send/read/decode、drain/flush或报告阶段的中断和失败 | 先留存已采记录与失败状态，再原样传播中断；连接、writer、子进程回收，不吞错或伪通过 |
+| 网络/计数守恒 | 真实HTTP认证授权/SQLite、双端反向端点、字节/生命周期、四阶段与身份域 | 无未知部分字节、重复/漏失/错序或跨用户/波；prepared不入在途，server保原发时钟/PID，执行阶段独立 |
+| 两波/源码 | 同server连续两波、每波drain、handler/连接完成与end marker后切换、源码前后采证 | 无前波残留或重复；排空/核验/落盘计gap及资源，不进latency/有效秒；source稳定、raw/report/index全留 |
+
+确定性调度负例可用受控socket/selector替身固定短写/EAGAIN/read-ready次序，不靠sleep撞点；正式正确性和端到端回归仍走真实认证、授权、HTTP、SQLite和独立SQL oracle。替身不计正式D0成绩，不往产品handler加测试等待。选流v1/v2、原始100窗/1告警/0丢弃、版本/投影/请求上下文、proxy隔离及已有异常留存回归保持。
+
+主并发使用纯内存RunAccounting，前置串行/分页仍为PersistedAccounting；completion_journal的N有界单writer在terminal完成后只负责持久化。实际send/read/decode、内存complete与writer进度分别留证；finish/drain在load span外，资源采样覆盖排空，排空/flush及证据核对归墙钟/空档。任何journal/attempt/守恒问题均失败并保已知记录，不把emergency重写成原raw或悄悄重试。
+
+最终实现先固定新SHA、实际selector backend、命令、环境与源码映射，完成Windows/Ubuntu/RHEL exact-source全量回归和静态检查。之后沿用`python -m tools.query_load.observation_runner --concurrent <10或50> --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <新库外目录>`，三平台10→50序贯各一次；观测期间无并行测试/负载/大文件分析，全部失败/未达波/退出码保留，不在同一来源择优重跑。本节本身不执行或报告这些步骤。
+
+每波真实在途及对应授权用户目标继续AND，累计至少60有效秒；server候选为received→response_completed，executing单列。queued null/application_queue absent、backlog未测及条件N/A、cache uncontrolled和仅socket HTTP应用字节的边界不变，不声称稳态/物理链路余量或资源整体充分。旧clean dba六档及Ubuntu10 wave-00024 exit1、T17767个未达和开发/CI失败全留；完整Gate0仍需B1/C4真实Review与A对新SHA另判。

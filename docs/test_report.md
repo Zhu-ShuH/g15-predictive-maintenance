@@ -567,7 +567,7 @@ Linux先核官方Miniforge安装包SHA及锁文件的Git规范LF摘要，再仅�
 
 **A按现行每波目标AND候选判定：完整Gate0仍未通过。** 六档均达到有效时长、质量通过且HTTP错误0；唯一未达是Ubuntu10的`wave-00024`，server真实峰值9，原exit1保持。它不能推断“服务端最多只能服务9用户”。§10.8的T177实现、六档数据、67个未达波及§10.9失败来源均原样保留，不能与本节合并样本或改判。
 
-本次正式实现固定为`dba4dce9b326a883f572ce0809ce1d5f8275bd11`，Git tree为`c7bd8439caf6771d509026c1409f3bea9b55096c`；六档前后均clean/source unchanged。后续提交只追加本节和[公开白名单证据摘要](../tests/fixtures/query/evidence_162_20261113_gate0.json)，不改正式量测源码或原始结果。完整raw、逐波报告、index、控制记录及失败由A在笔记库外留档；摘要只给相对artifact标签与SHA-256，不包含机器路径、主机名、SSH地址、凭据、cursor值或完整响应。
+本次正式实现固定为`dba4dce9b326a883f572ce0809ce1d5f8275bd11`，Git tree为`c7bd8439caf6771d509026c1409f3bea9b55096c`；六档前后均clean/source unchanged。紧接该次量测的`ed884c991ef350ab11bc73b51d85d1b39da44bb0`仅追加本节和[公开白名单证据摘要](../tests/fixtures/query/evidence_162_20261113_gate0.json)；本轮selector为之后的独立实现与工作负载，须另绑新源码和观察证据，不改该次正式量测源码或原始结果。完整raw、逐波报告、index、控制记录及失败由A在笔记库外留档；摘要只给相对artifact标签与SHA-256，不包含机器路径、主机名、SSH地址、凭据、cursor值或完整响应。
 
 同一SHA的双Linux正式D0证据现已补齐，不把原summary静态remaining_gates中的“two Linux evidence”当作采完六档后的最新缺口；原summary/aggregate不改。当前仍待处置的是唯一真实target miss、B1/C4对精确head协议/同步统计/负载端调度与资源/cache充分性的真实Review，以及A的阶段裁定。
 

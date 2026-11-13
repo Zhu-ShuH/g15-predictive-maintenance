@@ -315,6 +315,10 @@ subjects:
 
 2026-11-13的#162准备与阶段候选在[interface §17.3](../interface.md#173-d0量测准备与a候选阶段裁定)、test_plan §11.9登记。A对旧Win50 wave00192复核的last_accept/first_completion分别距first_received 28.3545/22.7892ms，故新tools adapter只观测真实handler reader安装就绪，经本wave精确四元组控制确认后才释放客户端发送前barrier；就绪不计received或已认证在途。headers在barrier前只内存拼装，计时从其后endheaders真实发送前起至完整读解码；建连/accept/reader/确认/barrier时间单列。服务端不等待、无barrier/延迟/响应hold/队列扩容，准备不能保证峰值N。A候选以received→response_completed验收D0 server在途，executing独立；absent/null的queued有条件N/A并保留backlog未测，N/A不等于门禁通过。AND、累计有效60秒和全部67旧未达波不变，新证据仍需固定SHA及B1/C4复核。
 
+2026-11-13的后续客户端调度候选改用纯selectors单loop，精确规则见[interface §17.4](../interface.md#174-selector单loop客户端与有界证据写入162后续候选)与test_plan §11.10。exact ACK仍为前置，selector_backend及共同launch gate元数据单列；launch_mode/launch_released不复用线程barrier语义，gate不能冒充N次请求开始。每socket首次真实send调用尝试之前绑定start，包括当次EAGAIN零进度；从未send的准备失败只记独立client_attempt，不补accounting或latency。每步write后立即处理read-ready，完整body与JSON即complete，不等其余发送、EOF或journal。普通EAGAIN不加字节、不等同真I/O错；真实错误及既有5秒超时留证，数值不变，服务端业务/等待/队列不改。
+
+主并发先用内存即时计数，N有界pairs队列交单证据写者；前置仍沿原持久化路径。drain/flush归gap及资源，不加入请求latency或有效时长；写失败以独立emergency保已知记录并失败，不重写原raw。A早响应而B短写/EAGAIN时，必须A先read/decode/complete再B发送完成，不能靠压读或延后complete造峰。新实现/workload另绑新SHA且不保证N，旧dba1个未达及T17767个未达不改判。AND/10/50/累计60秒、阶段、queued条件N/A、cache和socket层次边界保持，新成绩仍待固定源码回归、三平台各档一次实测与真实非作者Review。
+
 网络资源候选以实际TCP连接的完整HTTP socket应用流字节及错误/生命周期留证，按两端反向四元组逐连接核对。它包含HTTP头/正文，排除TCP/IP开销、重传与物理链路余量；不能用总量巧合一致、正文大小或进程I/O代替逐连接证据，也不能据此宣称跨主机网络容量。精确层次与本阶段充分性须在真实资源/契约Review明确。
 
 前一档的业务正确性、日志计数、负载端余量、服务端资源和缓存状态不可信时，禁止升档。

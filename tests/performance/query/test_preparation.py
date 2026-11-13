@@ -50,6 +50,7 @@ def test_preparation_requires_exact_active_connections_and_never_reuses_old_wave
     [
         "wave",
         "pid",
+        "pid_float",
         "started",
         "bool_started",
         "endpoint",
@@ -136,9 +137,17 @@ def test_actual_http_readiness_precedes_send_without_counting_prepared_as_receiv
         assert (
             timing["connected_ns"]
             <= timing["headers_prepared_ns"]
-            <= timing["barrier_released_ns"]
+            <= timing["launch_released_ns"]
+            <= timing["send_started_ns"]
+            <= timing["send_completed_ns"]
+            <= timing["body_complete_ns"]
+            <= timing["decoded_ns"]
         )
-        assert prep["client_confirmed_ns"] <= timing["barrier_released_ns"]
+        assert prep["client_confirmed_ns"] <= timing["launch_released_ns"]
+        assert timing["launch_mode"] == "selector"
+        assert timing["http_started"] is True
+        assert "barrier_released_ns" not in timing
+        assert row["latency_eligible"] is True
         assert timing["request_sent"] is True
         assert "windows_cursor" not in row["request_context"]
         assert "alarms_cursor" not in row["request_context"]
@@ -173,6 +182,14 @@ def test_failed_preparation_retains_its_record_and_sends_no_http(tmp_path, monke
     requests = [row["value"] for row in raw if row["kind"] == "request_connection"]
     assert len(requests) == 10
     assert all(row["preparation"]["request_sent"] is False for row in requests)
+    assert all(row["preparation"]["http_started"] is False for row in requests)
+    assert all(row["preparation"]["send_started_ns"] is None for row in requests)
+    assert not [row for row in raw if row["kind"] == "client"]
+    assert len([row for row in raw if row["kind"] == "client_attempt"]) == 10
+    assert report["completed_requests"] == 0
+    assert report["accounting"]["latency_seconds"]["count"] == 0
+    assert report["load_interval"]["seconds"] == 0
+    assert report["load_interval"]["counted_toward_duration"] is False
     assert not [row for row in raw if row["kind"] == "transport"]
     index = [
         json.loads(line) for line in (output / "index.ndjson").read_text().splitlines()
