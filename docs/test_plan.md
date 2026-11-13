@@ -178,14 +178,14 @@ spike / step / burst 六个受控事件，见 §3。
 | 损坏后修复再跑 | 正常完成，窗口数等于首次成功写入数（证明库没被写坏） |
 
 ### 6.3 `kill -9` 恢复（Linux）
-当前 a10cab2f 用例采用真实 COMMIT 后管道 checkpoint：
+当前用例（测试文件 blob `a250b5eed7e56b9a06de257e4e4fb1e0456d2d50`）采用真实 COMMIT 后管道 checkpoint：
 1. 测试子进程包装 `consumer.transaction`，执行原事务及真实 COMMIT；退出后确认不在事务中，独立只读连接核对恰有第一片 marker。
 2. stdout 管道上报 `after_first_shard_commit` JSON（PID、源码位置、marker、`transaction_open=False`），然后阻塞读 stdin 管道。无 watcher、握手文件、固定 sleep 或生产 hook。
 3. 父进程通过 `select` 等待并逐项核验，确认子进程存活、保存库快照后 SIGKILL，断言 `returncode == -SIGKILL`。
 4. 击杀后断言 `partial == before_kill` 且恰第一片已提交。checkpoint 在两片事务之间，不证明未提交事务内击杀。
 5. 普通未包装消费者重放，断言跳过 1 片、处理剩余 `total_parts - 1` 片，与未中断运行比较五张业务表全部可比内容。
 
-Windows 仍 skip，不替代 POSIX Linux 实跑。C6 2026-11-02 在 main `7daa07c` 双 Linux 各 9 passed 对应旧 blob `19cbcab`，不是当前管道用例 `a250b5e`。本次文档修订未重跑 Linux 单文件，当前与历史证据分列，见报告 §4.3。
+Windows 仍 skip，不替代 POSIX Linux 实跑。C6 2026-11-02 在 main `7daa07c` 双 Linux 各 9 passed 对应旧 blob `19cbcab`，不是当前管道用例 `a250b5e`。本次文档修订未重跑 Linux 单文件；当前 CI750 Linux 全量与测试 blob 已核实，双目标机新结果仍待原始日志核验，不能使用旧9通过替代，详见报告 §4.3。
 
 ### 6.4 真值隔离（可证伪）
 - 删除 `private_truth/faults.json` 后**消费仍然成功**（消费者不读真值），但报告必须判为**不可验证**（`verifiable=false`、`passed=null`、`detection_rate=null`），并给出"缺真值"的原因——不能把"文件没了"当成"没有事件"而判正常通过。

@@ -11,10 +11,10 @@
 | 受控事件检出 | **6 / 6（TP=6，FN=0，detection_rate=1.0）** |
 | 正常场景误报 | **0**（两个 seed 各 0） |
 | 退化场景判定 | **通过**（两 seed 后半段中位数均低于前半段） |
-| 三类独立故障注入 | 业务故障 ✔　文件损坏/SHA ✔　Linux `kill -9` ✔（C6 于 #51 在 Ubuntu 24.04.4 与 RHEL 9.7 各跑出 9 passed、无 skip；本机 Windows 仍按平台 skip，留证与边界见 §4.3） |
+| 三类独立故障注入 | 业务故障 ✔　文件损坏/SHA ✔；当前 `kill -9` 用例有 CI Linux 全量通过证据，双目标机原始日志本轮未核验，不以旧 C6 9 passed 认定当前双机通过；来源与限制见 §4.3 |
 | Issue 验收命令 | `pytest -q tests/integration tests/fault_injection` → **155 passed, 6 skipped，退出码 0**（main `195f5aa`，2026-11-04 复跑，与 `2054bb5` 一致） |
 | 工程门禁 | black ✔（53 files）　pylint **9.91/10** ✔　全量 pytest **755 passed, 14 skipped** ✔（main `195f5aa`） |
-| 双 Linux 实测 | `kill -9`（§4.3）、百万点基准（§5.3 A 表）、公开仓库全新克隆已有 Ubuntu 24.04.4 / RHEL 9.7 留证；主链接通后的 `545a598c` 还在两机完成 setup→clean→demo→verify→benchmark（均退出 0，#10 评论 `6759021839`）。**仍未完成**的是 #56/#9 独立保留集检出率的双系统复现及最终候选 SHA 整包复证 |
+| 双 Linux 实测 | 历史百万点基准（§5.3 A 表）及公开仓库部署留证保留；当前 `kill -9` 仅将可核实 CI Linux 结果列为当前证据，原双目标机新跑数待原始日志与 blob 核验（§4.3）。#56/#9 独立保留集双系统复现及最终候选 SHA 整包复证仍未完成 |
 
 ## 2 被测身份与环境
 
@@ -130,13 +130,18 @@ manifest 升到 2.0 并新增可选键 `scenario_kind` 之后，这条链路按�
 | `test_second_consumption_is_idempotent` | 重复消费 | `windows_written=0`、`alarms_written=0`、`shards_skipped=shards_processed`，库内窗口数不变 |
 
 ### 4.3 `kill -9` 恢复（当前管道 checkpoint；历史 Linux 留证分列）
-当前 a10cab2f 用例通过测试侧包装模块级 `consumer.transaction` 执行真实事务与 COMMIT；退出后断言 `not connection.in_transaction`，独立只读连接核对恰有第一片 marker。子进程经 stdout 管道发送 `after_first_shard_commit` JSON，随后阻塞读 stdin 管道。父进程以 `select` 等待，核验 PID、源码位置、marker 和 `transaction_open=False`，确认子进程仍存活后才 SIGKILL。没有 watcher 线程、握手文件、固定 sleep 或生产 hook。
+当前用例（测试文件 blob `a250b5eed7e56b9a06de257e4e4fb1e0456d2d50`）通过测试侧包装模块级 `consumer.transaction` 执行真实事务与 COMMIT；退出后断言 `not connection.in_transaction`，独立只读连接核对恰有第一片 marker。子进程经 stdout 管道发送 `after_first_shard_commit` JSON，随后阻塞读 stdin 管道。父进程以 `select` 等待，核验 PID、源码位置、marker 和 `transaction_open=False`，确认子进程仍存活后才 SIGKILL。没有 watcher 线程、握手文件、固定 sleep 或生产 hook。
 
 **准确边界**：checkpoint 在第一片 COMMIT 之后、下一片事务之前，不证明未提交事务内部击杀。必须 `returncode == -SIGKILL`、`partial == before_kill` 且恰好第一片已提交；普通未包装消费者重放须 `shards_skipped == 1`、`shards_processed == total_parts - 1`，五张业务表全部可比内容与未中断参考运行一致。
 
 **历史 C6 Linux 留证**：2026-11-02 Issue #51，main `7daa07c`，Ubuntu 24.04.4 / RHEL 9.7（Python 3.12.16）分别执行 `python -m pytest tests/fault_injection/test_pipeline_faults.py -q`，各 9 passed、无 skip（1.12s / 0.81s）。这两次对应旧 watcher blob `19cbcab`，不是当前 `a250b5eed7e56b9a06de257e4e4fb1e0456d2d50`。当前文件与该 main 不同，旧 9 passed 不能支撑当前管道用例。
 
-**当前证据边界**：C4 对 a10cab2f 的[独立复核](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/157#pullrequestreview-5886041102)记录 Windows 单文件 8 passed / 1 skipped / 9.03s，全量 1138 passed / 15 skipped / 262.67s。这是 C4 的运行，不是本次新跑结果。Windows 的 SIGKILL skip 不算 Linux 通过。本次仅修文档，未重跑 Linux 单文件或容量；当前 Linux 单文件证据必须绑定当前测试 blob，旧 C6 两次结果不作替代。
+**当前证据边界**：C4 对 a10cab2f 的[独立复核](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/157#pullrequestreview-5886041102)记录 Windows 单文件 8 passed / 1 skipped / 9.03s，全量 1138 passed / 15 skipped / 262.67s。这是 C4 的运行，不是本次新跑结果。Windows 的 SIGKILL skip 不算 Linux 通过。本次仅修文档，未重跑 Linux 单文件或容量；当前 Linux CI、历史双机自报与旧 C6 证据按下文分列。
+
+
+**当前可核实的 Linux CI 原始日志（2026-11-13）**：[CI750 / job131697443920](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43368176563/job/131697443920) 为 GitHub 托管 Ubuntu 26.04.1 LTS x64、Python 3.12.16；日志实际检出 PR 合成 merge `f73e0c2329a7b56caea787c9dae7c0e7db15db08`，将候选 `0d97f51c0053fa8c259fd00a185c048dd76d4137` 合入 `c75bb9d6`。命令 `python -m pytest -q` 的 CI 步骤成功（退出码0），原输出为 **1340 passed / 14 skipped / 113.84s**。该实际 merge 树的测试文件 blob 经 GitHub 内容接口核实为 `a250b5eed7e56b9a06de257e4e4fb1e0456d2d50`，与本节当前用例一致；该用例平台 skip 条件为 Windows。此证据来自 CI 全量，既不是两台目标机实跑，也不是单文件 9 passed 的新日志；不从简略 pytest 输出补造单项耗时或 checkpoint stdout。
+
+**历史双目标机自报与待核边界**：旧 PR 正文曾登记本地提交 `7ca4fd7be58b0abfc1cc43bd7c4c575981ea8ef6`（Git 提交标识，不是树摘要/内容摘要）下 Ubuntu 0.97s、RHEL 0.78s，各一次单项 1 passed / 0 skipped，夹具7片、returncode=-9、已提交1片/重放6片、五表一致。这里保留为历史自报，不升级为本轮核验结果：原始单项日志、发行版/机器记录及该本地提交到当前 blob 的可比对映射存于当前离线电脑，本轮无法读取；公开仓库也未找到对应原始证据附件。故当前统一结论是 **CI Linux 已通过，双目标机当前证据待核**。不否认历史运行发生，也不以 PR 自述代替原始证据，更不把旧 C6 的 9 passed 归到当前用例。
 
 ### 4.4 真值隔离（已完成，可证伪）
 
@@ -324,21 +329,21 @@ A 在 `5646201287` 上给了六条 CHANGES_REQUESTED（R1–R6），第三轮 `5
 | R3 | 读另一个硬编码库的 `scoring_version`，空库也能通过；**有 `runs` 行就当整 run 完成** | 一律用**传入的 `database_path`**，按 `manifest.run_id` 查 `runs` 行；**第二轮追加**：`manifest.parts` 每个分片都要有 `processed_chunks` 行且 `sha256` 与清单一致，缺行/不符即部分消费，`verifiable=false`、`passed=null`，并新增 `pending_parts`/`digest_mismatch_parts` 字段 | `test_report_does_not_read_another_runs_database`（A 的库配 B 的 run → `passed=null`）；`test_report_reads_scoring_version_from_the_supplied_database`；`test_report_survives_a_database_that_was_only_initialised`；**`test_report_refuses_a_partially_consumed_run`**（真实生产 65536 点 → 损坏第 2 片 → 消费在第一片提交后失败 → 报告 `pending_parts=[1..6]`、`processed=10240`、`rejected=55296`、`passed=null`；修好重跑 → `passed=true`、`pending=[]`）；**`test_report_refuses_a_run_whose_recorded_digest_was_swapped`**（改 `processed_chunks.sha256` → `digest_mismatch_parts=[3]`、`passed=null`） |
 | R4 | `processed_points` 把整片 rows 当成分析覆盖 | 拆成 `processed_points`（已提交片覆盖）/ `analysed_points`（真实入窗）/ `dropped_points`（片内未成窗）/ `rejected_points`（未消费片）。四个字段不构成一条和式，而是两条恒等式：`processed + rejected = total`（分片口径），`analysed + dropped = processed`（分析口径） | `test_report_reports_analysed_and_dropped_points_separately`：单片 10240、W=7000 → `processed=10240, analysed=7000, dropped=3240, rejected=0`，两式分别为 `10240+0=10240` 与 `7000+3240=10240` |
 | R5 | 告警未去重，一条预测能检出两个事件；贪心反例不成立 | 按 `(device_id, rule_id, start_seq)` 去重并限定 `yellow/red`，被丢弃行计入 `dropped_alarm_count`；贪心反例改成真的反例；并列多解的指派写进断言 | `test_duplicate_alarm_keys_cannot_detect_two_events`、`test_duplicate_keys_on_different_levels_are_still_one_alarm`、`test_alarm_level_outside_the_contract_never_detects`、`test_maximum_matching_beats_greedy_when_a_later_event_has_no_alternative`（A 提的真实反例：A=`[0,1024)`、B=`[0,1)`、告警 0/768 → 最大 2）、`test_tie_break_between_identical_events_is_pinned` |
-| R6 | 旧用例的固定 sleep、行数比较或 watcher 时序竞态 | 当前 a10cab2f 用测试侧真实事务包装，第一片 COMMIT 后只读核验，再经管道 checkpoint 阻塞；父进程 select 核验后 SIGKILL，断言恰一片及 partial == before_kill，普通重放跳过1片并处理余片、五表内容一致 | 位于两片事务之间，不证明未提交事务内击杀；无生产 hook。旧 C6 19cbcab 与当前 a250b5e 证据分列，Windows仍skip，见§4.3 |
+| R6 | 旧用例的固定 sleep、行数比较或 watcher 时序竞态 | 当前用例（blob `a250b5e`）用测试侧真实事务包装，第一片 COMMIT 后只读核验，再经管道 checkpoint 阻塞；父进程 select 核验后 SIGKILL，断言恰一片及 partial == before_kill，普通重放跳过1片并处理余片、五表内容一致 | 位于两片事务之间，不证明未提交事务内击杀；无生产 hook。旧 C6 19cbcab 与当前 a250b5e 证据分列，Windows仍skip，见§4.3 |
 | R7 | 摘要冲突时报告混用两套口径：`processed_points` 扣掉冲突片，`analysed_points` 却仍统计该片窗口 → **负丢弃点**（`-10240`），且检出率仍来自含无效片的窗口/告警 | **统一有效数据范围**：新增 `_part_ranges`/`_contains`，按 manifest 累加 rows 得每片 seq 区间；窗口与告警只在**有效片**（已提交且摘要一致）内计入 `analysed_points`/`alarm_count`/匹配指标。无法归属的行**不静默丢弃**，另列 `raw_feature_windows`/`excluded_feature_windows`/`raw_alarm_count`/`excluded_alarm_count`，把"库中原始记录"与"可归属当前 manifest 的数据"分开；不使用 `max(0, dropped)` 掩盖范围不一致 | `test_report_refuses_a_run_whose_recorded_digest_was_swapped` 扩充：断言 `dropped_points >= 0`、`analysed == processed`、两式恒等、`excluded_feature_windows > 0`、`feature_windows + excluded_feature_windows == raw_feature_windows`、`excluded_alarm_count == raw_alarm_count - alarm_count`、Markdown 与 JSON 同源且不含 `-10240`。新增 `test_report_excludes_alarms_from_a_shard_whose_digest_was_swapped`：往 part 3 插一条告警（`raw_alarm_count=2`、`false_alarm_count=1`）→ 置换 part 3 摘要后 `excluded_alarm_count=1`、`alarm_count=1`、`false_alarm_count=0`，Markdown 同步。**变异测试**：把窗口归属改回"全部计入" → `assert -10240 >= 0` 失败；把告警归属改回"全部保留" → `assert 0 == 1` 失败；两处恢复后均通过 |
 
 另：`docs/test_plan.md` §6.3/§6.4 已同步成上述口径。
 
 ## 7 未覆盖与风险（不得在答辩中宣称）
 
-1. **双 Linux 实测（G4 已补、最终发布待复证）**：`kill -9` 见 §4.3，百万点见 §5.3；公开仓库全新克隆见 #10 评论 `6582119780`。主链接通后的 `545a598c` 又在 RHEL 9.7 / Ubuntu 24.04.4 完成 setup→clean→demo→verify→benchmark，均退出 0，并各跑 abrupt-stop 1 passed、故障注入 9 passed（#10 评论 `6759021839`）。仍未完成的是 #56/#9 独立保留集检出率的双系统复现，以及 `main@997acaeb` 之后最终候选 SHA 的整包复证；本报告 §3 的开发期检出率不能替代。
-2. **`kill -9` 恢复**：Linux 侧已有双系统留证（§4.3，Ubuntu 24.04.4 / RHEL 9.7 各 9 passed 无 skip）。本机 Windows 无 POSIX 信号语义，仍按平台 skip，不在 Windows 上伪造该项。
+1. **双 Linux 实测（历史与当前分列）**：历史 `545a598c` 的 RHEL 9.7 / Ubuntu 24.04.4 setup→clean→demo→verify→benchmark、abrupt-stop 及 9 passed 记录见 #10 评论 `6759021839`，不归给当前管道用例。当前 `kill -9` 的 CI Linux 与双目标机待核状态见 §4.3；#56/#9 独立保留集双系统复现及最终候选 SHA 整包复证仍未完成。
+2. **`kill -9` 恢复**：当前 blob `a250b5e` 有 §4.3 所列 CI Linux 全量通过证据；PR 历史自报的双目标机单项结果尚待原始日志与源码映射核验，不用旧 C6 各 9 passed 替代。Windows 仍按 POSIX 平台条件 skip。
 3. **百万点 60 秒的结论**：生产基准计时方法见 `docs/test_plan.md` §5.3、实测数字见 §5.3（含 C6 的双 Linux 正式留证）。本报告 §3 的受控轮廓只有 65536 点，两套口径不能互换，也不能拿受控轮廓的成绩代替生产基准。
 4. **真实工业准确率**：本报告的"100%"只指 §3 预定义教学测试集上的事件召回率。
 5. **去抖/升级/恢复（N>1）**：受控轮廓固定 N=1，未覆盖 N>1 边界。
 6. **规则内容指纹**：`scoring_version` 变更会被拒收，但同版本改规则内容或改尾窗策略目前不会自动检查（#57 遗留 P2，C2/A 侧收口）。
 7. **`verify_run` 不校验时间轴**：七项 checks 不含 `timestamp_ns` 的绝对时间公式（`start + seq / sample_rate`）。`timestamp_ns` 整列置 0 或倒序、摘要重算后仍 `passed=True`，已实测（§5.1）。原始分片完整性通过不等于时间轴核验，不得在答辩中说"产物全部核验通过"。
-8. **压力测试的边界**：§5.2 已覆盖重复生产、重放幂等、3 进程争用同一 SQLite、以及本平台上的中途终止后重放；Linux `kill -9` 的正式留证在 §4.3（C6 双系统 9 passed），它属于故障注入那一类，不是压力测试的自动化。仍**没有**长时间浸泡（soak）、没有并发度梯度（只固定 3 个），也**不**把并发消费写成受支持能力——3 个消费者里通常只有 1 个成功，其余按唯一键冲突或锁超时被拒。不得拿这一节当"并发能力已验证"的证据。
+8. **压力测试的边界**：§5.2 已覆盖重复生产、重放幂等、3 进程争用同一 SQLite、以及本平台上的中途终止后重放；当前 Linux `kill -9` 的 CI 证据及双目标机待核状态见 §4.3（旧 C6 双系统 9 passed 仅属历史版本），它属于故障注入那一类，不是压力测试的自动化。仍**没有**长时间浸泡（soak）、没有并发度梯度（只固定 3 个），也**不**把并发消费写成受支持能力——3 个消费者里通常只有 1 个成功，其余按唯一键冲突或锁超时被拒。不得拿这一节当"并发能力已验证"的证据。
 
 ## 8 复现命令
 
@@ -501,7 +506,7 @@ Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
 
 ### 10.8 同实现三平台 D0 一分钟观察（2026-11-12）
 
-本节是§10.5–§10.7之后的完整观察增量，旧失败和单波数字原样保留。全部六档正式观察固定clean源码 `2bcd639668c679c2b5f01ad10e6888fe454d3f00`，前后内容不变；每档只执行一次，三平台依次执行，没有并行压测或失败后择优重跑。其后`487f9915`新增minute证据产物并补报告，`0632e32f`/`0b043093`更正文档；`4481f1bb`则修改query_load客户端的代理隔离与对应测试，并非只有文档差异。其后 c6a2a060 修正文档来源及历史票链接，a10cab2f 重写 SIGKILL 测试为真实 COMMIT 后管道 checkpoint；该测试重写不是容量重新测量。上述修订未重采或回写原六档，六档来源仍为clean`2bcd639`，不将后续修订提交号冒充实际测量SHA。
+本节是§10.5–§10.7之后的完整观察增量，旧失败和单波数字原样保留。全部六档正式观察固定clean源码 `2bcd639668c679c2b5f01ad10e6888fe454d3f00`，前后内容不变；每档只执行一次，三平台依次执行，没有并行压测或失败后择优重跑。其后`487f9915`新增minute证据产物并补报告，`0632e32f`/`0b043093`更正文档；`4481f1bb`则修改query_load客户端的代理隔离与对应测试，并非只有文档差异。其后 c6a2a060 修正文档来源及历史票链接，a10cab2f 重写 SIGKILL 测试为真实 COMMIT 后管道 checkpoint；该测试重写不是容量重新测量。合并提交 `0d97f51c` 随后把 #165 的 §17 与 §10.10–§10.13 并入本分支。T177 的2969波/44730请求仍绑定 `2bcd639`；§10.11 的2903波/45510请求绑定 `3ddf12d`，§10.13 的180请求短诊断绑定 `7c5b160e`，三者不是同一批测量。上述修订未重采或回写原六档，六档来源仍为clean`2bcd639`，不将后续修订提交号冒充实际测量SHA。
 
 已修复的oracle版本/字段投影/严格类型与身份域漏检、真实执行阶段及分进程资源沿用§10.7；本次另补socket应用流计数、逐连接反向四元组对账和有界的一分钟观察。D0是10设备×100窗，真实认证授权/HTTP/SQLite；先一用户10请求和真实page10完整分页，再以page100重复发起10/50个不同授权用户波次，同一档持续使用一个真实服务端进程。公开数据投影（10设备、1000窗、10告警、10状态）六档SHA-256一致：`990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc`；此值是独立SQL核过的公开响应投影摘要，不是物理或private数据库字节摘要。
 
