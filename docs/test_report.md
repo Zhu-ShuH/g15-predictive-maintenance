@@ -718,3 +718,40 @@ No new formal capacity run, full-suite or Linux run was performed. Previous
 server-side timing gaps which this client optimization does not establish or
 resolve. Full Gate0 remains unaccepted; 100k is unverified. Independent exact-head
 review remains required. This is a local candidate, not a merged delivery.
+
+
+### 10.13 Final bounded follow-up and honest stopping point (2026-11-13)
+
+After the user requested one further limited attempt, the published READ-only poll
+fix was checked at clean `7c5b160e931bda958a7971d0c1fb44f5504ebdce` without
+instrumenting product or observation code. Windows 10 and 50 each ran ONCE, exactly
+three waves: 180 main requests total. Both levels had quality=true and all three
+client/server peaks reached their requested level; effective durations were
+0.112581s and 0.629181s. Source stayed unchanged. The public summary and original
+summary/index hashes are in
+`tests/fixtures/query/evidence_162_20261113_read_poll_bounded.json`.
+This was a diagnostic API invocation with bounded waves, not the formal 60-second
+CLI test, and both original reports correctly retain Gate0=false. No repeat until
+pass, workload increase or new Linux capacity result is claimed. CI744 for the
+published implementation completed successfully.
+
+The earlier six-platform-level 3ddf12d evidence remains authoritative for its own
+source: 2903 waves, 45510 main requests, zero HTTP errors, all quality checks passed,
+but RHEL10 wave-00661/wave-00780 and RHEL50 wave-00070 missed full overlap. Their
+original failures remain; Windows diagnostics do not retroactively close them.
+The exact cause is unresolved. Client send spread explains part of wave-00661;
+the other two include server-side timing gaps. Existing wrapper clocks do not
+identify kernel scheduling/GIL/lock causes or establish insufficient hardware.
+
+A separate instrumented Windows diagnostic found measurable synchronous observer
+IPC lock waits (application max 2.138ms, transport max 1.601ms). This is a candidate
+source of measurement overhead, not proof of the historical RHEL cause. An
+asynchronous evidence prototype passed eight local contract tests, but was NOT
+connected or published: rejected frames, future in-flight events, resource samples,
+network-I/O evidence size and durable child teardown lack a complete bounded
+preservation proof. Shipping that change could trade a timing issue for lost
+evidence. The safer stopping point is to retain the verified client fix, document
+these limitations, and leave full Gate0 unaccepted pending independent review and
+any future properly controlled validation. Course-project presentation may explain
+this residual limitation; it must not label the unchanged AND threshold passed.
+100k simultaneous users remain unverified. No merge or grading claim is implied.
