@@ -323,6 +323,19 @@ class WaveEvidence:
             "recovered_frames": sum(recovered.values()),
         }
 
+    def release_runtime_references(self) -> None:
+        """Retire a closed wave only after callers extracted all diagnostics."""
+        if not self.closed:
+            raise RuntimeError("cannot retire open wave evidence")
+        self.accounting = None
+        sampler = self.client_sampler
+        if (
+            sampler is not None
+            and sampler._stop_result is not None
+            and (sampler._thread is None or not sampler._thread.is_alive())
+        ):
+            self.client_sampler = None
+
     def close(self) -> dict[str, Any]:
         if self._receipt is not None:
             return self._receipt
@@ -1028,6 +1041,7 @@ class ObservationSession:
                     "interrupted": report["interrupted"],
                 }
                 self.current = None
+                state.release_runtime_references()
                 exc.observation_wave_result = (report, facts)
             raise
 
@@ -1347,6 +1361,7 @@ class ObservationSession:
             "latency_seconds": report.get("accounting", {}).get("latency_seconds"),
         }
         self.current = None
+        state.release_runtime_references()
         return report, facts
 
 

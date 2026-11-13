@@ -175,6 +175,7 @@ class EndpointSampler:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._host_before: dict[str, Any] | None = None
+        self._stop_result: dict[str, Any] | None = None
 
     def _capture(self) -> None:
         try:
@@ -198,10 +199,15 @@ class EndpointSampler:
 
     def stop(self) -> dict[str, Any]:
         """Return raw samples, CPU deltas and explicitly sampled resource maxima."""
+        if self._stop_result is not None:
+            self._on_sample = None
+            return self._stop_result
         self._stop.set()
+        stopped = self._thread is None
         if self._thread is not None:
             self._thread.join(timeout=5)
-            if self._thread.is_alive():
+            stopped = not self._thread.is_alive()
+            if not stopped:
                 self.errors.append("sampler_thread_not_stopped")
         self._capture()
         before = self.samples[0] if self.samples else {}
@@ -224,7 +230,7 @@ class EndpointSampler:
             if isinstance(first_io, dict) and isinstance(last_io, dict)
             else None
         )
-        return {
+        result = {
             "host_before": self._host_before,
             "host_after": host_snapshot(),
             "process_io_delta": io_delta,
@@ -257,6 +263,13 @@ class EndpointSampler:
                 "OS process I/O may combine file/device/other operations; it is not per-process network traffic",
             ],
         }
+
+        if stopped:
+            # Only a completed final capture/report may retire the owner.
+            # A live worker or interrupted construction retains its callback.
+            self._stop_result = result
+            self._on_sample = None
+        return result
 
 
 def serve_endpoint(

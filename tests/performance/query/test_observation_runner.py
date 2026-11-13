@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import gc
 import json
 import multiprocessing
 import threading
+import weakref
 from copy import deepcopy
 
 import pytest
@@ -757,3 +759,230 @@ def test_post_shutdown_manifest_keeps_original_receipt_when_file_changes(
     assert result["affected_waves"] == [state.wave_id]
     assert result["artifact_delta_bytes"] == (4 if damage == "change" else -len(before))
     assert receipt["auxiliary"][0]["sha256"] == hashlib.sha256(before).hexdigest()
+
+
+def _closed_client_sampler_references(tmp_path):
+    state = observation_runner.WaveEvidence(tmp_path, "sampler-lifetime")
+    sampler = observation_runner.EndpointSampler(
+        "client",
+        interval_seconds=3600,
+        on_sample=lambda row: state.write("resource_client", row),
+    )
+    state.client_sampler = sampler
+    sampler.start()
+    resources = sampler.stop()
+    assert (
+        sampler.stop() is resources
+    )  # Stop cannot invent an unpersisted extra final sample.
+    receipt = state.close()
+    return weakref.ref(state), weakref.ref(sampler), resources, receipt
+
+
+def test_closed_wave_sampler_cycle_releases_by_reference_count_and_keeps_final_sample(
+    tmp_path,
+):
+    """Disable cyclic GC only here; stopped waves must not need it to retire."""
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        state_ref, sampler_ref, resources, receipt = _closed_client_sampler_references(
+            tmp_path
+        )
+        assert (
+            state_ref() is None
+        ), "closed wave still retained through sampler callback"
+        assert (
+            sampler_ref() is None
+        ), "stopped sampler still belongs to a reference cycle"
+        raw = (tmp_path / receipt["path"]).read_bytes()
+        rows = [json.loads(line) for line in raw.splitlines()]
+        assert not resources["errors"]
+        assert len(resources["samples"]) == 2  # Initial and stop's final capture.
+        assert [row["value"] for row in rows] == resources["samples"]
+        assert receipt["counts"] == {"resource_client": 2}
+        assert receipt["sha256"] == hashlib.sha256(raw).hexdigest()
+    finally:
+        if enabled:
+            gc.enable()
+
+
+def test_sampler_that_cannot_join_keeps_late_callback_and_original_failure():
+    """An unproven worker stop must not discard known future observations."""
+    captured = []
+    sampler = observation_runner.EndpointSampler("client", on_sample=captured.append)
+
+    class StillRunning:
+        def join(self, timeout):
+            assert timeout == 5
+
+        def is_alive(self):
+            return True
+
+    sampler._thread = StillRunning()
+    resources = sampler.stop()
+    assert resources["errors"] == ["sampler_thread_not_stopped"]
+    assert sampler._on_sample is not None
+    assert captured == resources["samples"]
+    assert len(captured) == 1
+    # Represent the already-running worker's eventual capture: it is preserved.
+    sampler._capture()
+    assert len(captured) == 2
+    assert captured == resources["samples"]
+
+
+def test_interrupted_final_capture_keeps_callback_and_propagates_without_fake_stop(
+    monkeypatch,
+):
+    sampler = observation_runner.EndpointSampler("client", on_sample=lambda _row: None)
+    callback = sampler._on_sample
+    interrupted = KeyboardInterrupt("unit-only interruption")
+
+    def interrupt():
+        raise interrupted
+
+    monkeypatch.setattr(sampler, "_capture", interrupt)
+    with pytest.raises(KeyboardInterrupt) as error:
+        sampler.stop()
+    assert error.value is interrupted
+    assert sampler._on_sample is callback
+    assert sampler._stop_result is None
+
+
+def test_interrupted_stop_report_construction_retains_callback_for_real_cleanup(
+    monkeypatch,
+):
+    from tools.query_load import process_server
+
+    captured = []
+    sampler = observation_runner.EndpointSampler("client", on_sample=captured.append)
+    callback = sampler._on_sample
+    host_snapshot = process_server.host_snapshot
+    interrupted = KeyboardInterrupt("unit-only report interruption")
+
+    def interrupt_host():
+        raise interrupted
+
+    monkeypatch.setattr(process_server, "host_snapshot", interrupt_host)
+    with pytest.raises(KeyboardInterrupt) as error:
+        sampler.stop()
+    assert error.value is interrupted
+    assert len(captured) == 1
+    assert sampler._on_sample is callback
+    assert sampler._stop_result is None
+    monkeypatch.setattr(process_server, "host_snapshot", host_snapshot)
+    resources = sampler.stop()
+    assert captured == resources["samples"]
+    assert len(captured) == 2
+    assert sampler._on_sample is None
+    assert sampler.stop() is resources
+    assert len(captured) == 2
+
+
+def _completed_prelude_references(tmp_path):
+    state = observation_runner.WaveEvidence(tmp_path, "prelude-lifetime")
+    accounting = observation_runner.PersistedAccounting(state)
+    state.accounting = accounting
+    started = accounting.client_start()
+    accounting.client_complete(
+        observation_runner.ClientRecord(
+            "actor",
+            "run",
+            "device",
+            started,
+            started,
+            started,
+            200,
+            "request",
+            response_bytes_base64="e30=",
+        )
+    )
+    count = len(accounting.client_records)
+    receipt = state.close()
+    state.release_runtime_references()
+    return weakref.ref(state), weakref.ref(accounting), count, receipt
+
+
+def test_closed_prelude_accounting_cycle_releases_without_cyclic_gc_and_keeps_raw(
+    tmp_path,
+):
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        state_ref, accounting_ref, count, receipt = _completed_prelude_references(
+            tmp_path
+        )
+        assert state_ref() is None, "closed prelude retained by PersistedAccounting"
+        assert accounting_ref() is None
+        assert count == 1
+        raw = (tmp_path / receipt["path"]).read_bytes()
+        record = json.loads(raw)["value"]
+        assert record["server_request_id"] == "request"
+        assert record["response_bytes_base64"] == "e30="
+        assert receipt["counts"] == {"client": 1}
+        assert receipt["sha256"] == hashlib.sha256(raw).hexdigest()
+    finally:
+        if enabled:
+            gc.enable()
+
+
+def test_runtime_release_requires_closed_evidence_and_keeps_live_sampler(tmp_path):
+    state = observation_runner.WaveEvidence(tmp_path, "still-live")
+    sampler = observation_runner.EndpointSampler(
+        "client", on_sample=lambda row: state.write("resource_client", row)
+    )
+    state.client_sampler = sampler
+    callback = sampler._on_sample
+    with pytest.raises(RuntimeError):
+        state.release_runtime_references()
+    assert state.client_sampler is sampler
+    state.close()
+    state.release_runtime_references()
+    assert (
+        state.client_sampler is sampler
+    )  # stop has not proved this producer finished.
+    assert sampler._on_sample is callback
+
+
+def test_interrupted_observation_releases_accounting_only_after_preserving_completed_count(
+    tmp_path, monkeypatch
+):
+    session = observation_runner.ObservationSession()
+    state = observation_runner.WaveEvidence(tmp_path, "interrupted-lifetime")
+    accounting = observation_runner.PersistedAccounting(state)
+    state.accounting = accounting
+    for index in range(3):
+        started = accounting.client_start()
+        accounting.client_complete(
+            observation_runner.ClientRecord(
+                "actor",
+                "run",
+                "device",
+                started,
+                started,
+                started,
+                200,
+                f"request-{index}",
+                response_bytes_base64="e30=",
+            )
+        )
+    state.end.set()  # All original delivery is already present; no live server in this pure unit.
+    interruption = KeyboardInterrupt("unit-only observer interruption")
+
+    def fail_observation(*_args, **_kwargs):
+        session.current = state
+        raise interruption
+
+    monkeypatch.setattr(session, "_observe", fail_observation)
+    monkeypatch.setattr(session, "close", lambda: [])
+    with pytest.raises(KeyboardInterrupt) as error:
+        session.observe(tmp_path, state.wave_id, [], [], prelude=True)
+    assert error.value is interruption
+    report, facts = interruption.observation_wave_result
+    assert report["completed_requests"] == 3
+    assert report["quality_passed"] is False
+    assert report["interrupted"] is True
+    assert state.accounting is None
+    assert session.current is None
+    raw = (tmp_path / facts["raw"]["path"]).read_bytes()
+    assert len([json.loads(line) for line in raw.splitlines()]) == 3
+    assert facts["raw"]["sha256"] == hashlib.sha256(raw).hexdigest()
