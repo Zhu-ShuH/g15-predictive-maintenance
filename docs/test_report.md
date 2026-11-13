@@ -753,3 +753,93 @@ these limitations, and leave full Gate0 unaccepted pending independent review an
 any future properly controlled validation. Course-project presentation may explain
 this residual limitation; it must not label the unchanged AND threshold passed.
 100k simultaneous users remain unverified. No merge or grading claim is implied.
+
+### 10.14 #136 RHEL观测反压修订与固定源码复证（2026-11-13）
+
+本节是§10.13之后的独立修订，不把3dd历史三个RHEL未达、后续Windows三波诊断或外置探针结果追认为正式通过。实现候选与后续正式量测固定clean `f3964c64a83322b8774b59542b16ff89cf3b10fe`，tree `b87a763f534d8b212d8f0718cc1c297965764ded`，从父#157当前`0d97f51c0053fa8c259fd00a185c048dd76d4137`新检出；保留已有READ-only selector和SIGKILL文档更正。本节及公开摘要以后续报告提交追加，报告head不冒充测量source。
+
+定位先在clean 0d97用独立外置harness（SHA `d3c2f79f49a4e4914429514f4da1967f9f40cc5a0d6ba2efa6981623b8f489d7`）记录本线程wall/thread CPU及实际锁/IPC。RHEL10/50各一次10有效秒诊断，102/18波、质量均通过，**不计正式60秒成绩**。其中同进程嵌套区间证实handler condition等待与其他transport线程持condition跨stream-lock/IPC的作用域重叠；50档一段47.664ms condition作用域包含30.231ms stream-lock等待和17.025ms Pipe.send。探针改变调度/CPU，不能把诊断极值追认为3dd历史值或指定GIL/内核原因；另两历史miss的before-origin缺口也不能直接归因其自身后续IPC。诊断完整归档SHA `5df63807f9549d53fc9a5f69ec31022eb62960cb2dace11af7e93c6da2eb682d`，与正式原件分列。
+
+确定修正的是源码可见且本次可观测的同步反压链，而非靠微优化试峰：
+
+- `process_server.py`不再在handler condition内序列化或发送证据。HTTP期间原事件提交至本wave独占、有界commit-framed mmap；实际handler及资源采样闭合后才seal/fsync及原IPC交付，不压住HTTP响应，不提前计received/认证或回填时间。sampler与handler producer绑定原wave，迟到不能随当前全局变量重标下一波。
+- `event_spool.py`按长度/序号/SHA/最后commit marker恢复原发事件。SIGKILL进程而OS/page cache仍运行时可恢复已提交前缀；未完整尾帧保留并明确incomplete。封存回执的fsync与单独读到seal marker分开；不承诺断电/内核崩溃持久性。overflow、部分写、late、不可JSON/敏感输入为sticky失败，合法拒帧和未来known帧另存；不能静默丢弃、reset或假完整。
+- `completion_journal.py`主波次启用all-terminal后才创建写者的N有界模式，emit只冻结已完成pair。完整read/decode后的逐请求terminal与原5秒规则不动；默认legacy API保留。
+- `observation_runner.py`的v3原始证据为client raw加server spool，正常不重复服务器原件；独立重核帧/文件SHA、控制与交付Counter、原ID/clock/网络双向字节及资源。全部辅助文件计原16MiB wave/1GiB总预算，退出后另核迟到/变更文件及manifest自身字节，原index不回写。核心采样之后的server publication实测区间单列，含network snapshot/end append、seal及event IPC，明确不含末次facts hash/control回复、parent恢复校验或teardown，不冒称全部端点成本或RSS精确峰。
+
+产品src、认证/授权/只读SQL、D0内容、10/50个不同subject、每档累计有效60秒、所有波次AND和原资源预算均未改。JSON冻结、短锁、mmap复制及page fault仍有观测成本，不宣称零开销；无新增应用队列、sleep、response hold、优先级或GIL开关。
+
+开发定向原件全部保留：spool48项、journal14项、父侧40项纯反例通过；固定293422a的真实链路首轮113 passed/1 failed，唯一旧journal失败断言仍直接去NDJSON找server阶段。将读取切换为v3逻辑原件后，2cbee822同一数量/状态/失败断言单例通过（2.79s），没有放宽断言或改产品。这些开发检查不累加成独立验收次数，最终以固定发布源码全量及正式档为准。
+
+[实现CI754](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43387330712)四job success；3.11.18/3.12.16各1426 passed/14 skipped、112.68/93.41s；Black82+20=102、Pylint src9.87、docrefs0。实际checkout为PR166合成merge `87ea189bfee26635e0bb6c0676e55b02e7b2daff`（f396进0d97），与三平台exact-head检出分列。CI锁步骤实际仅pip check，不冒充逐包精确版本复核。
+
+| 固定实现全量回归 | 真实结果 |
+|---|---|
+| Windows11/AMD64，16 CPU，pp03 Python3.12.15/SQLite3.53.4 | 新clone exact f396，前后clean；1425 passed/15 skipped，243.84s，Black102/Pylint9.87/docrefs0/pipcheck0。原pp03加独立四项dev/build锁定overlay，21/21匹配，未改全局环境。 |
+| Ubuntu24.04.5/x86_64，16 vCPU，Python3.12.16/SQLite3.54.1 | 新clone exact f396，1426 passed/14 skipped，176.40s；Black102/Pylint9.87/docrefs0/pipcheck0，21锁包0差。 |
+| RHEL9.7/x86_64，4 vCPU，Python3.12.16/SQLite3.54.1 | 新clone exact f396，1426 passed/14 skipped，163.84s；Black102/Pylint9.87/docrefs0/pipcheck0，21锁包0差。 |
+
+两Linux71源码及342tracked字节前后及互相一致；Windows71源码原始hash前后一致，342项canonical Git blob映射同tree，CRLF原始字节不冒称等同Linux LF。source.json是带机器元数据的文档，其文件SHA与源码tree/hash映射分别留存。Windows多1个skip为POSIX SIGKILL恢复用例差异；未将不同环境结果累加为一次验收。系统背景负载存在，不声明专用主机或整个OS完全空闲。
+
+本轮f396正式六档结果（原CLI参数逐档各一次；workers64、max-waves10000、总预算1GiB、每档累计有效≥60秒）：
+
+| 平台/并发 | 全重叠波/全部波 | 有效秒 | 质量/离线审计 | 原退出码 |
+|---|---:|---:|---|---:|
+| windows-10 | 1326/1326 | 60.035991 | true / valid、0问题 | 0 |
+| windows-50 | 259/259 | 60.026478 | true / valid、0问题 | 0 |
+| ubuntu-10 | 345/345 | 60.079602 | true / valid、0问题 | 0 |
+| ubuntu-50 | 52/52 | 60.321388 | true / valid、0问题 | 0 |
+| rhel-10 | 818/825 | 60.072763 | true / valid、0问题 | 1 |
+| rhel-50 | 98/100 | 60.165932 | true / valid、0问题 | 1 |
+
+总计2907主波、45510主请求、HTTP错误0，六档质量均通过；全波AND仍为false，不能接受完整Gate0。RHEL10未达wave-00105、00132、00153、00398、00447、00710、00772，RHEL50未达wave-00022、00095，九波均保留原失败与完整raw/spool/index/report，不挑选更佳重复批次。Windows/Ubuntu通过不抵消RHEL未达。原报告remaining_gates是生成当时的固定文本，不因这次外置汇总而回写；Linux已完成的事实只在本节补充。
+
+后续只读取证显示：九波中的10/00447、10/00710及50/00022客户端首完成早于末次实际send；其余六波客户端已经全部发完，服务端读取/解析仍未全重叠。10/00105与00132各一条首次recv wrapper开始晚于ACK，但reader-installed均早于ACK；该契约不证明内核已阻塞recv，不能把准备状态提前计为received。冻结诊断SHA `d312b33b3a6f3bdf9bad0f0f94819296215ec997704e7d9b3852732ea264feef`。
+
+独立外置GC/细分span诊断仍基于f396，10/50档各一次10有效秒，115/115与18/19波；唯一新miss为50/wave00007，client/server49，同波最大GC仅0.735/0.831ms。其他达标波出现34.904ms client-write GC，不能由此宣称所有miss由GC造成。_request_id与socket.settimeout最大wall span分别57.360/33.170ms，同一span线程CPU仅0.205/0.138ms；显著非本线程CPU时间不能指定RNG、GIL或内核原因。探针改变调度，只作诊断，不计正式容量。原阈值/GC设置及生产源码未改，诊断归档SHA `d3ba9fae4b47e41f4e952c8a427ea24a4a4416a247006bfc4624830fdb8c0dc8`。
+
+### 10.15 已停止采样器及已关闭波次引用释放修订（2026-11-13）
+
+固定发布源码 `3f111e51a8a182258a3792bcf43c8d1d8d0d3e96`，tree `f374cfb06a90ee823e6d8090524bdd24055fadc9`。在f396上，真实stop/close后仍存在两条确定的引用环：WaveEvidence→client_sampler→callback→WaveEvidence，以及prelude accounting→evidence_writer→WaveEvidence。weakref纯测试证实它们使已完成波对象等待循环GC；这是可重复生命周期缺陷，并不证明历史九波的具体停顿来源。
+
+EndpointSampler仅在采样线程真实结束、最终采样尝试与完整stop结果正常返回后，缓存stop结果并清除callback；重复stop不追加重复raw sample。普通采样Exception仍按既有逻辑记入errors并使后续质量失败，不冒称该样本成功；仍存活线程或BaseException中断的capture/host snapshot不假定成功、不缓存结果、不清除所需回调。WaveEvidence仅在关闭及完成数、证据回执已提取后释放accounting/已停止sampler回指；异常路径保留真实已完成数。生产没有gc.disable/collect/set_threshold、睡眠、响应hold、阶段重标、门槛或预算修改。
+
+新反例首轮1 failed/1 passed证实旧实现保留引用，原日志保留；修后新增7项纯测试通过，覆盖weakref、两次raw采样哈希、幂等、活线程、中断恢复、prelude accounting、未关闭保护及异常完成数。固定本地同tree9257539的真实HTTP回归58 passed/0 skipped、27.72s；Black/Pylint/diff通过。后续全量和三平台正式结果分别绑定上述实际发布SHA，不能混记开发提交或f396成绩。
+
+[实现CI756](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43396091624)四job success；CPython3.11.18/3.12.16分别1433 passed/14 skipped、103.06/93.59s。Black82+20=102，Pylint src9.87，文档引用检查通过。CI实际checkout是合成merge `76091de87cd93101f2da85339d0f451c907ccfa3`（3f111e5进0d97），不冒称exact源码实测；锁步骤仍只是pip check。
+
+双Linux全新exact 3f111e5完整回归：Ubuntu1433 passed/14 skipped、174.48s；RHEL1433 passed/14 skipped、167.34s。Black102/Pylint9.87/docrefs0/pipcheck0，21pins、71source、342tracked前后与跨Linux零差、clean。新控制器在import前禁bytecode，仅控制产物位置，两个checkout均0 pyc。工具额度中断只影响后续本机留档，两个已启动full run自然完成且未重跑。
+
+Windows exact 3f111e5全新clone完整回归1432 passed/15 skipped、265.72s（进程墙钟268.3967s）；Black102/Pylint9.87/docrefs0/pipcheck0。pp03保留原全局安装，独立四项dev/build overlay对齐21pins；71源码原始及342tracked canonical/physical映射前后一致、clean，import来自新clone，bytecode禁用。Windows比Linux多的POSIX强杀skip明确保留，不合并为单次成绩。
+
+本轮3f正式六档结果（新源码每档各唯一一次，原60秒/64workers/10000波/1GiB参数）：
+
+| 平台/并发 | 全重叠波/全部波 | 有效秒 | 质量/独立离线审计 | 原退出码 |
+|---|---:|---:|---|---:|
+| windows-10 | 1359/1359 | 60.012099 | true / valid、0问题 | 0 |
+| windows-50 | 259/259 | 60.192125 | true / valid、0问题 | 0 |
+| ubuntu-10 | 362/366 | 60.069732 | true / valid、0问题 | 1 |
+| ubuntu-50 | 59/59 | 60.545542 | true / valid、0问题 | 0 |
+| rhel-10 | 842/861 | 60.008695 | true / valid、0问题 | 1 |
+| rhel-50 | 107/110 | 60.365023 | true / valid、0问题 | 1 |
+
+总计3014主波、47260主请求、HTTP错误0。质量/时长/独立raw重算六档均通过，但Ubuntu10四未达、RHEL10十九未达、RHEL50三未达，总26波，AND仍false，完整Gate0仍不能接受。以下所有未达ID原样保留：
+
+- ubuntu-10：wave-00201, wave-00270, wave-00281, wave-00339。
+- rhel-10：wave-00063, wave-00085, wave-00095, wave-00146, wave-00152, wave-00204, wave-00301, wave-00349, wave-00528, wave-00620, wave-00644, wave-00654, wave-00670, wave-00686, wave-00780, wave-00794, wave-00798, wave-00836, wave-00854。
+- rhel-50：wave-00019, wave-00085, wave-00087。
+
+这里修复了两条可证实的观测反压/生命周期缺陷，但不能声称RHEL剩余问题或完整Gate0已修复。与f396、3dd各自固定来源的成绩分列；不平均失败率、不保留较好重复批次，不把新Windows全达或Linux新回归通过抵消未达波。
+
+诊断时钟统一更正：`network.py`的`completed_monotonic_ns`在`SocketNetworkMeter._io`入口、获取计量锁之前记录；`MeteredSocket.recv/recv_into`还须完成该记账才实际返回。故该完成观测点到server_received的间隙包含计量锁等待/持锁、HTTP头解析、settimeout、request_id与调度等，既不是完整wrapper返回后的纯解析时间，也不是内核syscall-return轨迹。此前诊断若简称recv返回，应按本处精确边界理解；原raw和冻结诊断JSON/hash不回写。
+
+公开紧凑双批次证据见 `tests/fixtures/query/evidence_162_20261113_observer_lifetime.json`。两份完整严格白名单各自SHA/大小锚定保留；紧凑投影省略成功波逐峰、逐文件列表及逐波RSS端点对，保留全部未达ID/峰、质量失败、原退出码/Gate0=false、所有总数与摘要/index/manifest/审计哈希、资源和字节总数。publication RSS仅端点范围，不能当作区间精确峰。实际完整raw/spool/archive另留库外，不将测试目录搬入笔记库。
+
+本节外置探针、离线审计与静态核对均为A的实现自核，不计B1/C4非作者Review。当前精确最终head的真实复核、queued条件N/A、资源/cache和阶段裁定仍分别保留；不合并、不关单、不升档。
+
+补充有界计量锁/系统调用诊断（仍非正式容量）：外置harness固定SHA `ca7ded306f421a54e788d37e4c7528d433c2983553c028a71a102058f94eac73`，生产源码仍exact 3f、21pins/import/hash前后一致、原GC/GIL/优先级/预算未改。RHEL10/10有效秒两种条件各唯一一次：
+
+- strace仅getrandom/ioctl/fcntl，getrandom以raw指针/长度显示，不输出随机字节或HTTP payload；5/5波达峰、有效10.6533615s、过程wall24.7901s。ptrace严重改变调度，不能用其达峰证明正式缺陷消失。
+- 同一冻结harness关闭strace的配对对照128/130波达峰、2miss（wave-00059、00061），有效10.0676703s、过程wall29.0524s，quality=true、exit1。其8313个计量锁acquire span与跨线程‘真实release调用前保证持锁’区间交集为0；唯一12.934ms acquire长span的同线程CPU0.051ms，未见owner持锁重叠，不能把wall长直接称为mutex争用。两miss内_meter._io最大wall0.210/0.076ms、acquire0.014/0.008ms，而_request_id整体wall23.148/10.440ms、CPU0.438/0.164ms。该配对未证明network meter形成可修的毫秒级反压链，也未指出非CPU时间的具体来源。
+
+确定范围内的观测反压与引用环修订已完成；残余发送/接收路径间隙尚无充分可归因根因。当前证据不足以支持继续改per-connection锁、RNG或GIL参数。所有正式未达与诊断负例均保留；完整Gate0修复任务仍未闭环，不能按已修复验收。诊断的同线程CPU/锁区间结论只对应各自仪表条件，不追认为旧失败的因果解释。
