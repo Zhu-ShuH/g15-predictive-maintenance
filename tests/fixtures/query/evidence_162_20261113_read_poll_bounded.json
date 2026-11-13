@@ -1,0 +1,64 @@
+{
+  "format": "g15-read-poll-bounded-diagnostic-v1",
+  "source_sha": "7c5b160e931bda958a7971d0c1fb44f5504ebdce",
+  "scope": "Windows diagnostics, one invocation per level, 3 waves each; no formal duration credit",
+  "main_requests": 180,
+  "formal_gate0_passed": false,
+  "historical_rhel_misses_preserved": [
+    "10/wave-00661",
+    "10/wave-00780",
+    "50/wave-00070"
+  ],
+  "observations": [
+    {
+      "concurrent": 10,
+      "waves": 3,
+      "quality_passed": true,
+      "target_reached": true,
+      "effective_seconds": 0.11258089996408671,
+      "peaks": {
+        "client": {
+          "min": 10,
+          "max": 10
+        },
+        "server": {
+          "min": 10,
+          "max": 10
+        }
+      },
+      "source_clean": true,
+      "source_unchanged": true,
+      "summary_sha256": "5bf1128c267ff3c1a3bbb1fa51f249a687f433776e60f0e24941f92c571c8273",
+      "index_sha256": "110a0244585de8899683b1aca3d53e9a1b9a22f6bcff94b10e29682c2af2b430"
+    },
+    {
+      "concurrent": 50,
+      "waves": 3,
+      "quality_passed": true,
+      "target_reached": true,
+      "effective_seconds": 0.6291814000578597,
+      "peaks": {
+        "client": {
+          "min": 50,
+          "max": 50
+        },
+        "server": {
+          "min": 50,
+          "max": 50
+        }
+      },
+      "source_clean": true,
+      "source_unchanged": true,
+      "summary_sha256": "f97494400c6ded3f787324f674c92174c5b9dcaa8c6590c635aeeb70312e14b4",
+      "index_sha256": "0e30fe95e633d998e701def12f2903a4fffa5616f3cb2f439535de3ff7b4bf84"
+    }
+  ],
+  "limitations": [
+    "Not a one-minute observation or Linux result.",
+    "No formal reruns of historical missed waves.",
+    "Does not prove historical RHEL scheduler, GIL, IPC or hardware root cause.",
+    "The asynchronous server evidence prototype is not integrated or published.",
+    "Queued remains null/conditional N/A and other outstanding Gate0 conditions remain.",
+    "100000 simultaneous users remain unverified."
+  ]
+}

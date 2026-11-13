@@ -560,3 +560,196 @@ Linux先核官方Miniforge安装包SHA及锁文件的Git规范LF摘要，再仅�
 - 状态：§10.8分别记录已失效实现票、B1对0632e32的新批准及C4修改请求；旧分钟证据与失败不覆盖，新提交按远端实际票状态核验。
 - 维护归属：CODEOWNERS加入A是#136接管后工具/证据维护的候选归属；B1/C4仍列为候选。候选owner不是已批准，作者A不自批，内部复核不重复计为独立批准。
 - 本修订不重采T177容量、不调整AND门槛，不以代理修复或10台仿真设备实测替代完整Gate0。原六档源码仍为clean2bcd639，所有未达波和退出码保持原义。
+
+### 10.10 #162 选流与连接准备修订后的三平台固定源码观察（2026-11-13）
+
+**A按现行每波目标AND候选判定：完整Gate0仍未通过。** 六档均达到有效时长、质量通过且HTTP错误0；唯一未达是Ubuntu10的`wave-00024`，server真实峰值9，原exit1保持。它不能推断“服务端最多只能服务9用户”。§10.8的T177实现、六档数据、67个未达波及§10.9失败来源均原样保留，不能与本节合并样本或改判。
+
+本次正式实现固定为`dba4dce9b326a883f572ce0809ce1d5f8275bd11`，Git tree为`c7bd8439caf6771d509026c1409f3bea9b55096c`；六档前后均clean/source unchanged。紧接该次量测的`ed884c991ef350ab11bc73b51d85d1b39da44bb0`仅追加本节和[公开白名单证据摘要](../tests/fixtures/query/evidence_162_20261113_gate0.json)；本轮selector为之后的独立实现与工作负载，须另绑新源码和观察证据，不改该次正式量测源码或原始结果。完整raw、逐波报告、index、控制记录及失败由A在笔记库外留档；摘要只给相对artifact标签与SHA-256，不包含机器路径、主机名、SSH地址、凭据、cursor值或完整响应。
+
+同一SHA的双Linux正式D0证据现已补齐，不把原summary静态remaining_gates中的“two Linux evidence”当作采完六档后的最新缺口；原summary/aggregate不改。当前仍待处置的是唯一真实target miss、B1/C4对精确head协议/同步统计/负载端调度与资源/cache充分性的真实Review，以及A的阶段裁定。
+
+`source.source_file_sha256`是整份source.json文档bytes的摘要，包含平台/机器元数据，三平台不同是正常的；每档前后content_sha256源码映射稳定、同一Git tree及跨Linux64项映射0差异另行核对。六档相同的是下述公开投影hash，不声称source.json文档hash跨平台相同。
+
+相同D0为10设备×100窗，真实认证授权、HTTP和只读SQLite。每档先做10设备page100串行查询及一次真实page10完整遍历，再由10/50个不同授权用户重复page100波次；同档始终使用同一个真实服务端进程。命令为`python -m tools.query_load.observation_runner --concurrent <10或50> --seconds 60 --workers 64 --max-waves 10000 --byte-budget 1073741824 --output <新的库外目录>`，各档只执行一次、拒绝覆盖；顺序为Windows10→50、Ubuntu10→50、RHEL10→50，期间无并行测试、负载或大文件分析。
+
+选流首请求显式both，之后仅查询未耗尽的流；六次page10均为windows raw/consumed/discarded=100/100/0、alarms=1/1/0。旧v1回放负例仍保留，原始全程重复/缺失、假omitted、版本降级或请求上下文缺失会使质量失败。10设备1000窗/10告警/10状态的公开page100投影六档SHA-256均为`990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc`；此为去掉顶层request/trace ID、按run排序并规范JSON后的公开投影，不能当作物理或private数据库字节摘要。
+
+准备阶段只确认本波精确连接端点与handler reader安装，控制ACK后才释放客户端发送前barrier；headers此前只在内存组装，正式计时从实际endheaders发送前至完整读取并解码。prepared不计received、认证用户或在途；服务端无barrier、sleep、压住响应、限速或队列扩容。有效时长只累计质量通过的真实主波跨度，准备/前置/核验/落盘/波间空档均不计入；这不证明连续60秒恒定N在途或稳态吞吐。
+
+| 平台/授权用户 | 完成/达峰波 | 主请求数 | client / server在途范围 | executing范围 | 质量/AND目标/原退出码 |
+|---|---|---|---|---|---|
+| Windows/10 | 1227/1227 | 12270 | 10–10 / 10–10 | 10–10 | true/true/0 |
+| Windows/50 | 233/233 | 11650 | 50–50 / 50–50 | 47–50 | true/true/0 |
+| Ubuntu/10 | 317/316 | 3170 | 10–10 / 9–10 | 9–10 | true/false/1 |
+| Ubuntu/50 | 48/48 | 2400 | 50–50 / 50–50 | 36–50 | true/true/0 |
+| RHEL/10 | 867/867 | 8670 | 10–10 / 10–10 | 5–10 | true/true/0 |
+| RHEL/50 | 100/100 | 5000 | 50–50 / 50–50 | 19–50 | true/true/0 |
+
+在途与对应不同授权用户的峰值范围逐波重算并保留，不能用连接数、准备数或executing替换。上表server仅指候选`server_received→response_completed`；executing独立计数。六档合计**2792波、43160个主并发请求**，另有120个前置请求；2791/2792是达峰波数，不是HTTP成功率、SLA或新的接受阈值。
+
+| 平台/档 | 有效/墙钟/空档（秒） | 全局主请求p50/p95/p99（秒） |
+|---|---|---|
+| Windows/10 | 60.050526 / 170.033900 / 109.983374 | 0.041105 / 0.054886 / 0.072431，n=12270 |
+| Windows/50 | 60.012153 / 144.050703 / 84.038549 | 0.210483 / 0.292567 / 0.334384，n=11650 |
+| Ubuntu/10 | 60.052344 / 83.127926 / 23.075583 | 0.173034 / 0.212236 / 0.225267，n=3170 |
+| Ubuntu/50 | 60.196581 / 73.666140 / 13.469559 | 1.060739 / 1.257463 / 1.320293，n=2400 |
+| RHEL/10 | 60.006674 / 124.260245 / 64.253571 | 0.056983 / 0.077838 / 0.085945，n=8670 |
+| RHEL/50 | 60.604963 / 92.146983 / 31.542020 | 0.512976 / 0.657887 / 0.692803，n=5000 |
+
+分位数来自每档全部主并发原始延迟，采用全局`(n−1)p`线性插值，排除前置、包含未达波，不平均逐波分位数。它与§10.8的nearest-rank口径不同，两组值各自保留。六份原summary/index/aggregate与三份完整归档的SHA-256、大小及相对标签见fixture；Linux每个平台的一个归档包含10和50两档，Windows归档也包含两档及原离线审计失败版本，不能把共享归档称作六个不同档案。
+
+唯一未达波的10请求、40个原发服务端阶段及raw/report哈希独立核对完整。只在服务端自身时钟内，以首received为0：首请求3.695799ms已response_completed，其余9条received都在之后；下一条received为4.813024ms，晚首completion 1.117225ms，最后一条为14.353793ms，故真实server峰值9。只在客户端自身时钟内：barrier释放跨度5.627401ms、发送包装start跨度5.621229ms、首/次发送包装start相隔4.758562ms；全部client starts早于首client complete，client峰值10同样正确。未做跨进程相减。
+
+10个reader-installed及recv_into包装start均早于服务端ACK，最近余量0.020293ms，不能据此把miss归为缺少reader准备。Python包装start不等于内核syscall entry；GIL/内核调度、实际到包等环节未观测，不能定因或推导容量上限。诊断JSON SHA-256为`eb091639f8f89441ea93e4214acaa80d3e18bc1ea7bae333a575e1f6ff0c38fd`，诊断Markdown为`0bc68247d6cb2c3d5b580a08fcb12c6695621e3ed36e5e8c2f96a2403f4cb320`；它们与原波raw/report各自哈希分列于fixture，不能混绑。当前记录未定位可据以继续修改的明确计数、准备或网络产品缺陷，A未盲目重构、加试刷绿或调整AND。
+
+资源下表包含前置。RSS/FD/handle为已观察采样最大下界，不是精确区间峰；CPU是单波进程CPU差值/该波时长的区间比率最大，按原机逻辑CPU容量归一，非瞬时CPU或全主机饱和度。每核口径、nullable字段、样本数及完整端点应用字节在fixture分列。
+
+| 平台/档 | client/server RSS采样最大（bytes） | client/server FD或handle | client/server CPU容量比最大 | client主波发送/接收HTTP应用字节 |
+|---|---|---|---|---|
+| Windows/10 | 189718528/166506496 | 693/360 open_handles | 7.3950%/12.0959% | 5368125/233964360 |
+| Windows/50 | 154890240/116559872 | 754/671 open_handles | 2.3663%/8.5654% | 5089885/222142200 |
+| Ubuntu/10 | 66723840/60682240 | 21/51 open_fds | 3.4095%/10.0250% | 1386875/60445560 |
+| Ubuntu/50 | 89661440/79413248 | 61/171 open_fds | 3.3010%/11.1166% | 1050960/45763200 |
+| RHEL/10 | 58646528/52289536 | 21/51 open_fds | 23.6495%/35.3307% | 3793125/165319560 |
+| RHEL/50 | 80773120/72704000 | 61/164 open_fds | 11.9049%/42.5954% | 2189500/95340000 |
+
+两端是同机不同进程的真实loopback HTTP；socket计HTTP头与正文，逐连接反向四元组及双向字节匹配。未把文件I/O、主机共享流量或SSH传输当作业务网络；不包含TCP/IP/链路头、重传或物理NIC容量。缓存未控制，不声称冷/热、稳态或资源整体充分。queued仍为null/application_queue=absent，listen_backlog未测；按interface §17.3/test_plan §11.9仅有条件N/A，须真实非作者复核及A明确裁定，不能推出排队0或该项通过。
+
+| 完整回归/来源 | 实际结果 |
+|---|---|
+| Windows11/AMD64，16逻辑CPU，pp03 Python3.12.15/SQLite3.53.4 | exact clean dba4dce9：1247 passed/15 skipped，222.63s，exit0；Black95、Pylint9.87、docrefs0。 |
+| Ubuntu24.04.5/x86_64，16 vCPU，独立pp03 Python3.12.16/SQLite3.54.1 | 全新clone exact dba4dce9、前后clean：1248 passed/14 skipped，166.39s，exit0；Black95、Pylint9.87、docrefs0；21锁包0差异、64源码hash前后0差异。 |
+| RHEL9.7/x86_64，4 vCPU，独立pp03 Python3.12.16/SQLite3.54.1 | 全新clone exact dba4dce9、前后clean：1248 passed/14 skipped，153.42s，exit0；Black95、Pylint9.87、docrefs0；21锁包0差异、64源码hash前后0差异。 |
+| [CI736/run43265771901](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43265771901) | 四job success；3.11/3.12各1248 passed/14 skipped，116.25/115.50s，Black95、Pylint9.87。checkout日志实际为`refs/pull/165/merge`的`c0594899f213d56ac71cfe7152ae3d759cd3827a`，将dba合入`a10cab2f56cdd109632135ee21645b5c3b9ac064`；此CI与上面本地exact dba检出分别归属。 |
+
+Linux多通过的1项来自Windows按平台跳过的POSIX SIGKILL恢复用例；不把两套skip总数拼成同一次结果。三平台CPU/虚拟化、Python/SQLite版本存在差别，不能把分位数差异解释为操作系统排名。回归与缓存/临时目录全部库外，未改旧环境editable或在观测期间重跑测试。
+
+失败来源继续保留：[CI731/run43261142715](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43261142715)关联候选`c6a2a06051ac72f67344f68b47ad30b6bc7ff450`，原job131332461859为1 failed/1138 passed/14 skipped、107.75s，consumer已return0而watcher未取得中间态kill点；该job实际checkout未另取得，不补造SHA。#157夹具修订已在本次父提交a10cab2f中。开发期旧editable导致streams HTTP400、请求context多余字段与严格schema不符、并行本地提交触发fixed_source失败均为非冻结检查，原失败库外留存，来源不清不编SHA。首版离线脚本误要求合法v1串行page100必须显式both，导致Windows10派生审核10项失败；原v1输出保留，修正后固定脚本`98aafe48b4233db4b7bc2140e9d94c7ca9571df24d12ee378aff441c82627ee3`对六档全部审核有效、0问题，未重测任何正式档。离线审核核hash/计数/时序/投影/资源字节，保存SQL oracle原结论，没有重新查询私有fixture数据库或生成新工作量。
+
+**下一步保持真实Review门禁。** A按当前AND不通过，不升档、不改性能SLO；同步窗口、负载端调度、所选在途阶段及资源/cache证据充分性须先交B1/C4真实Review，再决定后续。任何代码或重测均须另记新来源并保留当前六档；内部复核不计独立批准。本节证据完成不等于实现PR已接收或完整Gate0已通过。
+
+### 10.11 #162 selector客户端修订与新来源三平台复证（2026-11-13）
+
+本节记录A在#162/#136另行登记范围后的后续实现，§10.10及T177为保留的历史来源，不将其未达波追认为通过。本轮实现及全部正式量测固定全新检出的clean `3ddf12d00c913e02217b5ebced90fc70b9ac723d`，Git tree `23895053afe1d1a4b93a386c6ca61e09aa5c66ce`；本节与公开证据摘要随后以独立报告提交追加，不把报告head冒充量测source。D0、10/50个不同授权subject、每档至少60秒有效请求跨度、所有波次AND、原SQL oracle/coverage/ID/阶段/字节守恒均保持，未升档。
+
+修订针对负载端N线程唤醒后逐路发送的分散路径，不指定旧Ubuntu漏峰的GIL或内核原因：
+
+- 主波次改为`selectors.DefaultSelector`；准备TCP/内存headers及精确reader ACK之后才开共同launch gate。共同gate不冒充N次开始，每socket首次真实`send`尝试独立计时，含零进度EAGAIN；从未调用send的失败仅留`client_attempt`，不补latency或在途。
+- 每次有界write后重新处理read-ready；完整Content-Length正文和严格JSON解码后即记自身terminal，不等其他发送完成、所有响应、EOF或证据落盘。控制响应framer新增64KiB响应头、单响应及本波累计正文16MiB边界，原16MiB raw-wave证据限制仍保留，错误保留已知原始body；这是工具失败边界，不是放宽接受门槛。服务端业务、SQL、handler等待/队列未改，没有响应hold、sleep、线程优先级或GIL开关。
+- `completion_journal.py`以N有界单写者持久化已完成记录，终态时钟先于enqueue；失败不重试可能已部分写入的raw，另保全全部已知pair的hashed fallback并令quality失败。它不把落盘CPU/墙钟开销隐去，资源与波间空档仍包括这些成本；不可取消的底层文件I/O卡住不在有界退出保证内。
+- 既有5秒send总截止、5秒read无进展截止保留。正recv才延长read截止，EAGAIN不延长；最终send晚返回仍记实际已发送事实并判超时，不能切换预算绕过旧截止。仅非阻塞普通would-block记零字节进度；其他真实I/O/close错误仍失败，不补字节或EOF。
+
+确定性反例要求：A完整响应已read-ready时，B仍短写/EAGAIN且未发完，必须先read/decode/complete A；同一ready批中的C下一次write也必须见A已完成。另覆盖ACK/连接失败不计starts、超时前后边界、partial-send中断与close所有权。真实认证/授权/HTTP/只读SQLite及四种流投影继续走原独立oracle；整链路写盘异常保留10/10已知调用且quality=false。合并定向回归110 passed/23.93s，dispatcher独立45 passed/1.86s；这些是开发回归，不冒充正式一分钟观察。
+
+| 完整回归/来源 | 实际结果 |
+|---|---|
+| Windows11/AMD64，16逻辑CPU，pp03 Python3.12.15/SQLite3.53.4 | 新检出exact 3dd：1335 passed/15 skipped，225.79s，exit0；Black100、Pylint9.87、docrefs0、pipcheck0。原pp03四项dev/build依赖偏离锁，保留全局环境，以独立target overlay对齐后21/21核验通过再跑本行回归及正式观察。 |
+| Ubuntu24.04.5/x86_64，16 vCPU，独立pp03 Python3.12.16/SQLite3.54.1 | 新clone exact 3dd、前后clean：1336 passed/14 skipped，176.59s；Black100、Pylint9.87、docrefs0、pipcheck0，21锁包0差异。 |
+| RHEL9.7/x86_64，4 vCPU，独立pp03 Python3.12.16/SQLite3.54.1 | 新clone exact 3dd、前后clean：1336 passed/14 skipped，162.39s；Black100、Pylint9.87、docrefs0、pipcheck0，21锁包0差异。 |
+| [CI740/run43342529840](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43342529840) | 四job success；3.11.18/3.12.16各1336 passed/14 skipped，92.91/93.32s；Black81+19、Pylint9.87、docrefs0。实际checkout为PR合成merge `0b75fababee55ab6487e4345c50b40df69139f20`，合source 3dd进base a10cab2f，分列于本地exact head回归；名为锁核验的步骤实际仅pip check，未据此宣称CI逐包精确版本复核。 |
+
+Windows首次未对齐四项dev/build锁版本的回归同为1335 passed/15 skipped、227.70s，原记录保留为补充，不替代上表锁内最终回归。Linux多通过1项为POSIX SIGKILL恢复用例。两Linux69个源码文件及338个tracked原始字节前后均匹配，互相一致；Windows69个源码原始hash前后匹配，338项Git blob映射同一tree，未把CRLF字节与Linux LF冒称相同。`source_file_sha256`只指各机source.json文档字节，不是canonical代码hash；三机机器元数据不同，各自分列。
+
+**当前判定：完整Gate0仍不通过。** 本轮Ubuntu两档全部达标，未复现旧未全重叠；RHEL有3个真实未达波，必须保留exit1。六档各一次，固定顺序Windows10→50→Ubuntu10→50→RHEL10→50，没有同source择优重测。完整公开白名单见[selector证据摘要](../tests/fixtures/query/evidence_162_20261113_selector_gate0.json)。
+
+| 平台/档 | 达标/总波 | 主请求 | client/server峰范围 | executing独立范围 | quality/target/exit |
+|---|---|---|---|---|---|
+| windows-10 | 1242/1242 | 12420 | 10–10 / 10–10 | 10–10 | true/true/0 |
+| windows-50 | 235/235 | 11750 | 50–50 / 50–50 | 44–50 | true/true/0 |
+| ubuntu-10 | 388/388 | 3880 | 10–10 / 10–10 | 7–10 | true/true/0 |
+| ubuntu-50 | 55/55 | 2750 | 50–50 / 50–50 | 20–50 | true/true/0 |
+| rhel-10 | 859/861 | 8610 | 9–10 / 9–10 | 5–10 | true/false/1 |
+| rhel-50 | 121/122 | 6100 | 50–50 / 49–50 | 20–50 | true/false/1 |
+
+六档合计**2903波、45510主请求，HTTP错误0**，另120个前置请求。六档quality/时长/source/hash/逐连接字节检查均通过，2900/2903是达峰波数，不是HTTP成功率、新SLA或接受比例。接收→响应完成的服务端在途和所对应不同授权用户均按原阶段重算；executing不替代在途。
+
+| 平台/档 | 有效/墙钟/空档（秒） | 全局主请求p50/p95/p99（秒） |
+|---|---|---|
+| windows-10 | 60.023070 / 186.541292 / 126.518222 | 0.040295 / 0.051775 / 0.079195，n=12420 |
+| windows-50 | 60.119789 / 158.444145 / 98.324356 | 0.205411 / 0.292764 / 0.355990，n=11750 |
+| ubuntu-10 | 60.113592 / 87.523715 / 27.410123 | 0.137622 / 0.191237 / 0.210524，n=3880 |
+| ubuntu-50 | 60.345744 / 77.616405 / 17.270661 | 0.897131 / 1.257106 / 1.302503，n=2750 |
+| rhel-10 | 60.020437 / 124.767376 / 64.746939 | 0.058739 / 0.080868 / 0.087950，n=8610 |
+| rhel-50 | 60.414014 / 102.684960 / 42.270945 | 0.396189 / 0.619521 / 0.681203，n=6100 |
+
+分位数取每档全部主请求的原始样本，采用全局(n−1)p线性插值，含未达波、不平均逐波分位数。client开始是每次真实非阻塞send尝试，terminal是完整read/decode；准备、证据drain及波间空档不填入有效时间。selector为Windows真实SelectSelector、两Linux真实EpollSelector。新客户端发起和落盘工作负载有变化，不据时间差宣称产品性能提升或操作系统排名。
+
+Ubuntu10的388波first-send包装起点跨度p50/p95/最大为1.002159/1.493865/4.375909ms；首/次send间隔最大1.103749ms。这是新source客户端自身时钟的观察，不追认旧dba wave00024，不把包装起点当内核syscall entry。
+
+| RHEL未达波 | client/server峰 | 同机客户端事实 | 同机服务端事实 |
+|---|---|---|---|
+| 10/wave-00661 | 9/9 | 首client完成比末send开始早1.736813ms；send起点跨度7.167265ms | 末received晚首response_completed 14.330604ms |
+| 10/wave-00780 | 10/9 | send起点跨度0.827649ms；全部send完成早于首client完成14.082807ms | 末received晚首response_completed 1.457056ms |
+| 50/wave-00070 | 50/49 | 全部send完成早于首client完成11.293777ms；末received对应第9次send的actor008 | 末received晚首response_completed 9.027070ms |
+
+三波raw/report/index/hash、请求ID、网络双向字节、journal及原checks一致，无I/O错误或would-block。全部reader-installed及recv包装start均早于同serverACK；这不证明内核已阻塞。00661确有负载端仍未全发起即完成首响应；另两波客户端已全发完，不能一概归为发起不足。00780末请求recv包装返回至received间隔3.243036ms跨过首completion；50档末请求该间隔仅0.208864ms，较晚的是recv包装返回。当前证据不能指定GIL/内核/解析为根因，也不能推导产品只支持9/49用户。诊断白名单及原raw/report各自SHA在fixture分列。
+
+后续可独立评估每次write后丢弃的writable键构建（正常10/50波约45/1225项）等热路径，但这只是源码可见的优化候选，未实施或据此宣称三miss修复。须先定位负载端发起及服务端read/解析/调度剩余间隙，再决定最小改动；不得延后read/响应完成、提前计received、变动阶段、扩队列或加试择优。
+
+六份最终离线审核全部audit_valid=true/0问题，固定脚本SHA `a9df182c5e8ef17ce38b33d0d2872bc17707f42d0a07181a115cc2ddf2b59dfa`；13项离线变异自检通过，真实journal失败仍拒绝并保留部分审核边界。它重算hash/ID/峰值/准备/字节/投影/资源，不重查SQL或生成新负载。全局公开投影仍为990707d9…，前置实际page10 raw/consumed100窗及1告警、discard0；原v1重复流负例仍保留。全部归档每平台一个、各包含10与50两档，hash/大小/文件数在fixture；不是六个独立归档。
+
+资源完整值见fixture，CPU为单波进程区间比率最大，RSS/FD/handle是采样下界而非精确峰；同机loopback两进程socket字节仅覆盖HTTP应用流，不含TCP/IP、重传或物理NIC。缓存未控制、无冷/热或稳态声明。原summary的remaining_gates为保守模板，其中两Linuxexact-source证据本节已补；其他真实Review、queued条件N/A/所选阶段及资源/cache充分性仍待B1/C4复核和A裁定。内部交叉核对不算独立批准。
+
+旧T177的67未达、dba的Ubuntu1未达、新3dd的RHEL3未达及所有开发失败均保留；Windows selector初始空fd集合失败、发送截止绕过反例在冻结前修正，原日志不覆盖。本次不合并/关单、不升档，不以新Ubuntu通过冒称完整Gate0通过。
+
+
+### 10.12 Gate0 READ-only polling candidate (2026-11-13)
+
+Commit d4c5df3 removes a proven client cost: after each bounded write, a dedicated
+READ-only selector avoids enumerating writable-only events from the mixed
+selector (up to N(N-1)/2 unused events for N ready writers without readable data).
+The main selector retains write/deadline scheduling. Responses are still read,
+decoded and completed immediately. Both selectors close on registration errors,
+interruptions and constructor failure. Windows still scans read descriptors;
+this is not a capacity claim. Server code and acceptance thresholds are unchanged.
+
+Windows verification with this checkout's src explicitly on PYTHONPATH:
+49 dispatcher tests passed in 1.89s; query-tool regression 167 passed / 1 skipped
+in 29.33s; Black and diff checks passed; dispatcher Pylint 9.29/10.
+The first run imported the old installed checkout and returned 1 failed / 48
+passed (field coverage mismatch). Its log is retained. Binding the current src
+fixed that environment error; no test assertion or business schema was relaxed.
+
+No new formal capacity run, full-suite or Linux run was performed. Previous
+3ddf12d observations and all three RHEL misses remain failures. Two misses show
+server-side timing gaps which this client optimization does not establish or
+resolve. Full Gate0 remains unaccepted; 100k is unverified. Independent exact-head
+review remains required. This is a local candidate, not a merged delivery.
+
+
+### 10.13 Final bounded follow-up and honest stopping point (2026-11-13)
+
+After the user requested one further limited attempt, the published READ-only poll
+fix was checked at clean `7c5b160e931bda958a7971d0c1fb44f5504ebdce` without
+instrumenting product or observation code. Windows 10 and 50 each ran ONCE, exactly
+three waves: 180 main requests total. Both levels had quality=true and all three
+client/server peaks reached their requested level; effective durations were
+0.112581s and 0.629181s. Source stayed unchanged. The public summary and original
+summary/index hashes are in
+`tests/fixtures/query/evidence_162_20261113_read_poll_bounded.json`.
+This was a diagnostic API invocation with bounded waves, not the formal 60-second
+CLI test, and both original reports correctly retain Gate0=false. No repeat until
+pass, workload increase or new Linux capacity result is claimed. CI744 for the
+published implementation completed successfully.
+
+The earlier six-platform-level 3ddf12d evidence remains authoritative for its own
+source: 2903 waves, 45510 main requests, zero HTTP errors, all quality checks passed,
+but RHEL10 wave-00661/wave-00780 and RHEL50 wave-00070 missed full overlap. Their
+original failures remain; Windows diagnostics do not retroactively close them.
+The exact cause is unresolved. Client send spread explains part of wave-00661;
+the other two include server-side timing gaps. Existing wrapper clocks do not
+identify kernel scheduling/GIL/lock causes or establish insufficient hardware.
+
+A separate instrumented Windows diagnostic found measurable synchronous observer
+IPC lock waits (application max 2.138ms, transport max 1.601ms). This is a candidate
+source of measurement overhead, not proof of the historical RHEL cause. An
+asynchronous evidence prototype passed eight local contract tests, but was NOT
+connected or published: rejected frames, future in-flight events, resource samples,
+network-I/O evidence size and durable child teardown lack a complete bounded
+preservation proof. Shipping that change could trade a timing issue for lost
+evidence. The safer stopping point is to retain the verified client fix, document
+these limitations, and leave full Gate0 unaccepted pending independent review and
+any future properly controlled validation. Course-project presentation may explain
+this residual limitation; it must not label the unchanged AND threshold passed.
+100k simultaneous users remain unverified. No merge or grading claim is implied.

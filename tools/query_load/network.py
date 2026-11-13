@@ -10,12 +10,25 @@ from __future__ import annotations
 
 from copy import deepcopy
 from http.client import HTTPConnection
+import errno
 import socket
 import threading
 import time
 import os
 from typing import Any
 from urllib.request import HTTPHandler
+
+
+def is_would_block(exc: BaseException) -> bool:
+    """Recognize explicit would-block codes, only for nonblocking callers.
+
+    Socket mode must be checked separately. This does not make sendall safe:
+    sendall can have transferred an unknown prefix before it raises.
+    """
+    return isinstance(exc, BlockingIOError) and (
+        exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK, 10035)
+        or getattr(exc, "winerror", None) == 10035
+    )
 
 
 def _address(value: Any) -> dict[str, Any] | None:
@@ -134,6 +147,7 @@ class SocketNetworkMeter:
         *,
         error: BaseException | None = None,
         peek: bool = False,
+        would_block: bool = False,
     ) -> None:
         observed_completion = time.perf_counter_ns()
         with self._lock:
@@ -145,6 +159,7 @@ class SocketNetworkMeter:
                 "completed_monotonic_ns": observed_completion,
                 "returned_bytes": count,
                 "unknown_partial": unknown,
+                "would_block": would_block,
                 "peek": peek,
                 "error_type": type(error).__name__ if error is not None else None,
             }
@@ -157,7 +172,7 @@ class SocketNetworkMeter:
                 row["errors"].append(
                     {"operation": operation, "error_type": type(error).__name__}
                 )
-            elif not peek:
+            elif not peek and not would_block:
                 row["bytes_sent_known" if sending else "bytes_received_known"] += count
 
     def _closed(self, key: str, error: BaseException | None) -> None:
@@ -278,12 +293,24 @@ class MeteredSocket:
             raise NotImplementedError("operation is outside metered HTTP TCP scope")
         return getattr(self._sock, name)
 
+    def _io_error(self, operation: str, started: int, exc: BaseException) -> None:
+        # send/recv return progress explicitly; a nonblocking would-block means
+        # no progress. sendall is deliberately excluded: its prefix is unknown.
+        if (
+            operation in {"send", "recv", "recv_into"}
+            and is_would_block(exc)
+            and self._sock.gettimeout() == 0.0
+        ):
+            self._meter._io(self._key, operation, started, 0, would_block=True)
+        else:
+            self._meter._io(self._key, operation, started, None, error=exc)
+
     def send(self, data: Any, flags: int = 0) -> int:
         started = time.perf_counter_ns()
         try:
             count = self._sock.send(data, flags)
         except BaseException as exc:
-            self._meter._io(self._key, "send", started, None, error=exc)
+            self._io_error("send", started, exc)
             raise
         self._meter._io(self._key, "send", started, count)
         return count
@@ -303,7 +330,7 @@ class MeteredSocket:
         try:
             data = self._sock.recv(size, flags)
         except BaseException as exc:
-            self._meter._io(self._key, "recv", started, None, error=exc)
+            self._io_error("recv", started, exc)
             raise
         self._meter._io(
             self._key, "recv", started, len(data), peek=bool(flags & socket.MSG_PEEK)
@@ -315,7 +342,7 @@ class MeteredSocket:
         try:
             count = self._sock.recv_into(buffer, nbytes, flags)
         except BaseException as exc:
-            self._meter._io(self._key, "recv_into", started, None, error=exc)
+            self._io_error("recv_into", started, exc)
             raise
         self._meter._io(
             self._key, "recv_into", started, count, peek=bool(flags & socket.MSG_PEEK)
@@ -539,6 +566,7 @@ def validate_network_pair(client: dict[str, Any], server: dict[str, Any]) -> lis
                     problems.append(f"{prefix} I/O event malformed")
                     continue
                 operation, count = event.get("operation"), event.get("returned_bytes")
+                would_block = event.get("would_block", False)
                 start, end = event.get("started_monotonic_ns"), event.get(
                     "completed_monotonic_ns"
                 )
@@ -559,6 +587,13 @@ def validate_network_pair(client: dict[str, Any], server: dict[str, Any]) -> lis
                     or event.get("unknown_partial") is not False
                     or event.get("error_type") is not None
                     or type(event.get("peek")) is not bool
+                    or type(would_block) is not bool
+                    or (
+                        would_block
+                        and (
+                            operation not in {"send", "recv", "recv_into"} or count != 0
+                        )
+                    )
                 ):
                     problems.append(f"{prefix} I/O error/partial/type invalid")
                     continue

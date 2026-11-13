@@ -15,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from g15.service.http import QueryHTTPServer
+from g15.service.http import QueryHTTPServer, QueryRequestHandler
 
 from .driver import build_application
 from .evidence import resource_snapshot
@@ -281,6 +281,19 @@ def serve_endpoint(
     active_handlers = 0
     thread_context = threading.local()
     network_meter = SocketNetworkMeter("server")
+    from .preparation import ReaderReadiness
+
+    preparation = ReaderReadiness()
+
+    class ObservedQueryHandler(QueryRequestHandler):
+        """Install the ordinary reader and immediately continue normal handling."""
+
+        def setup(self):
+            super().setup()
+            reference = getattr(thread_context, "connection_ref", None)
+            if reference is None:
+                raise RuntimeError("prepared reader has no connection identity")
+            preparation.installed(reference)
 
     class ObservedQueryServer(QueryHTTPServer):
         """Observe actual worker return and accepted sockets without delays."""
@@ -312,6 +325,7 @@ def serve_endpoint(
                     stream_errors.append("accepted connection metadata unavailable")
                 super().process_request_thread(request, client_address)
             finally:
+                preparation.closed(getattr(thread_context, "connection_ref", None))
                 with condition:
                     active_handlers -= 1
                     condition.notify_all()
@@ -354,6 +368,7 @@ def serve_endpoint(
             event_sink=transport_event,
             max_workers=workers,
         )
+        server.RequestHandlerClass = ObservedQueryHandler
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         host, port = server.server_address
@@ -383,6 +398,7 @@ def serve_endpoint(
                         if active_handlers != 0:
                             raise RuntimeError("prior handler still active")
                     network_meter.reset_closed()
+                    preparation.clear()
                     events.clear()
                     application_events.clear()
                     stream_errors.clear()
@@ -407,6 +423,30 @@ def serve_endpoint(
                             "wave_started" if current_wave_id is not None else "begun"
                         ),
                         "wave_id": current_wave_id,
+                    }
+                )
+            elif command["kind"] == "await_prepared":
+                if (
+                    current_wave_id is None
+                    or command.get("wave_id") != current_wave_id
+                    or sampler is None
+                ):
+                    raise RuntimeError("prepared wave identity mismatch")
+                prepared = preparation.wait(command["connections"])
+                with condition:
+                    received_count = sum(
+                        row.get("stage") == "server_received" for row in events
+                    )
+                if received_count:
+                    raise RuntimeError("HTTP began before preparation confirmation")
+                control.send(
+                    {
+                        "kind": "prepared",
+                        "wave_id": current_wave_id,
+                        "process_id": os.getpid(),
+                        "confirmed_monotonic_ns": prepared["confirmed_monotonic_ns"],
+                        "http_started_count": received_count,
+                        "readers": prepared["readers"],
                     }
                 )
             elif command["kind"] in ("finish", "finish_wave"):

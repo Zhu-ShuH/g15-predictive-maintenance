@@ -53,6 +53,7 @@ class QueryClient:
         page_size: int = 50,
         windows_cursor: str | None = "",
         alarms_cursor: str | None = "",
+        streams: str | None = None,
     ) -> tuple[int, dict[str, object]]:
         """Issue a real query, retaining raw response bytes and safe error codes.
 
@@ -63,6 +64,8 @@ class QueryClient:
         """
         url = f"{self._base_url}/v1/runs/{run_id}/devices/{device_id}/health"
         params = []
+        if streams is not None:
+            params.append(f"streams={quote(streams)}")
         if page_size != 50:
             params.append(f"page_size={page_size}")
         if windows_cursor:
