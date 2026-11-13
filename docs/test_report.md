@@ -416,3 +416,28 @@ Windows 11（AMD64）、Python 3.12.15、NumPy 2.5.4、`os.cpu_count()=20`。
 - 高负载（100→500→1,000→…→100k）未授权未执行；
 - 双 Linux 低负载兼容留证归 C6，本节未做；
 - `server_queued / server_executing` 两层传输事件产品侧未发，见 `docs/test_plan.md` §11.3。
+
+
+## 11 #155 种子方法审查补正与收尾边界（2026-11-13）
+
+本节为文档核查增量，基于 #155 的 `9a6c15eecefd69795e08bfe044d5dafb19c318ff`；不把旧报告或其他分支的实测当作该提交的新测试结果。C4 最新复核指出历史日志中的 `20261023`、`20261024` 亦已暴露。已按 [测试计划 §9.4](test_plan.md) 补齐排除集 `{7, 42, 20261016, 20261023, 20261024, 20261025}`，并逐项登记文件、日志行与暴露事实。历史批次 exit 5 与失败记录继续保留；日志中的单条 passed 不能冒充独立验收通过。
+
+### 11.1 本次实际核查
+
+| 核查 | 范围与结果 |
+|---|---|
+| 全量来源文本静态扫描 | 对 `git ls-files configs docs/review_evidence` 的已跟踪文本（包括 .log）提取 seed 数值，并人工核对配置字段与完整日志；去重恰为上述六值。没有调用随机数、生成器或业务运行。 |
+| 文档引用 | `python tools/check_doc_references.py --root .`：0 issue(s)，exit 0；检查本地文件引用，不验证远端网页或 Markdown 标题锚点。 |
+| 基线保护 | `git diff --exit-code -- docs/adr/0006-independent-validation-baseline.json`：exit 0；按 Git 属性规范化的工作副本 blob 与 HEAD 同为 `a1e4d5346ca879f932cb31305a161d1f573e5622`。首次直接比较 Windows 工作副本与 Git 原始字节因 CRLF/LF 差异断言失败；未改文件，以 Git 规范化 blob 和 diff 复核，不冒称原始字节相同。 |
+| 变更检查 | `git diff --check`：exit 0。本轮只改测试计划和本报告；源码、配置、基线及历史证据未改。 |
+| 未执行 | 本轮未运行全量 pytest、Black/Pylint、性能/压力或双 Linux 测试；属于纯文档修正，不能把历史成绩或后续 CI 等同本地复测。 |
+
+基线仍为 `proposed_unfrozen`；`new_holdout_seed=null`、`integrated_validation_commit=null`、`new_holdout_generated=false`、`rules_frozen=false`。本轮没有选 seed、冻结、生成或运行保留集。方法修正仍须真实非作者复核；A 参与编辑不计独立批准，#56→#9 的执行顺序不变。
+
+### 11.2 与容量收尾报告的边界
+
+本分支 §10.1–§10.4 是早期低负载历史记录，不代表最新 Gate0；完整后续证据见 [版本固定的容量报告 §10.11–§10.13](https://github.com/Zhu-ShuH/g15-predictive-maintenance/blob/36f67fcc553c532233c9ab0b8f429cd09f629dee/docs/test_report.md)。链接报告与本轮 #155 文档检查分属不同源码来源，不覆盖、不拼接成一次测试。
+
+- 正式三平台容量观察源码为 `3ddf12d00c913e02217b5ebced90fc70b9ac723d`：2903 波、45510 个主请求，HTTP 错误 0；RHEL 的 10 档 2 波、50 档 1 波未达到既定重叠目标。**完整 Gate0 仍未通过**，不能把 HTTP 无错误或 2900/2903 达峰比例写成原 AND 判据通过。
+- 后续客户端 READ-only polling 修正和有界 Windows 验证不追认上述 3 个未达波，也不等同新的完整三平台一分钟验证。旧失败、失败来源和限制保留。
+- **十万用户同时查询仍未验证**；本轮不升档、不放宽门槛、不继续追加压测。容量实现与其他 PR 等待独立评审，本文不宣告合并、验收通过或项目全部完成。
