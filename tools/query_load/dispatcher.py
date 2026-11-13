@@ -195,6 +195,7 @@ class _Pending:
     read_deadline: float | None = None
     done: bool = False
     registered: bool = False
+    read_registered: bool = False
 
     def __post_init__(self) -> None:
         self.preparation = {
@@ -232,6 +233,11 @@ class _Dispatcher:
         self.accounting, self.meter = accounting, meter
         self.confirm, self.emit, self.timeout = confirm, emit, timeout
         self.selector = selectors.DefaultSelector()
+        try:
+            self.read_selector = selectors.DefaultSelector()
+        except BaseException:
+            self.selector.close()
+            raise
         for item in self.pending:
             item.preparation["selector_backend"] = type(self.selector).__name__
         self.results: list[tuple[int, dict[str, object], str]] = []
@@ -267,6 +273,8 @@ class _Dispatcher:
                 item.sock, selectors.EVENT_READ | selectors.EVENT_WRITE, item
             )
             item.registered = True
+            self.read_selector.register(item.sock, selectors.EVENT_READ, item)
+            item.read_registered = True
 
     def finish(self, item: _Pending, error: str = "") -> None:
         if item.done:
@@ -281,6 +289,14 @@ class _Dispatcher:
                 error = error or type(exc).__name__
                 cleanup_failure = exc
             item.registered = False
+        if item.read_registered:
+            try:
+                self.read_selector.unregister(item.sock)
+            except BaseException as exc:
+                error = error or type(exc).__name__
+                if cleanup_failure is None or not isinstance(exc, Exception):
+                    cleanup_failure = exc
+            item.read_registered = False
         if item.connection is not None:
             owned_socket = item.sock
             try:
@@ -439,8 +455,10 @@ class _Dispatcher:
 
     def _poll_reads(self) -> None:
         # Windows select rejects three empty fd sets after the final close.
-        if self.selector.get_map():
-            self._ready_reads(self.selector.select(0))
+        # A separate read-only poll avoids enumerating unsent writable sockets
+        # after every write. Ready responses still complete before the next write.
+        if self.read_selector.get_map():
+            self._ready_reads(self.read_selector.select(0))
 
     def _deadline(self, item: _Pending) -> float:
         if item.started is None:
@@ -520,5 +538,8 @@ def dispatch_wave(
                     pass
         raise
     finally:
-        dispatcher.selector.close()
+        try:
+            dispatcher.selector.close()
+        finally:
+            dispatcher.read_selector.close()
     return dispatcher.results

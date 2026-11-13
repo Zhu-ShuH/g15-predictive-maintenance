@@ -1084,3 +1084,84 @@ def test_expired_total_send_deadline_cannot_be_replaced_by_a_fresh_read_timeout(
             assert meter.snapshot()["bytes_sent_known"] > 1
         assert not meter.snapshot()["send_partial_unknown"]
         assert endpoint["drained"].wait(2)
+
+
+@pytest.mark.parametrize("failure", [None, "register", "interrupt"])
+def test_read_poll_is_read_only_and_both_selectors_are_closed(monkeypatch, failure):
+    original = dispatcher.selectors.DefaultSelector
+    instances = []
+
+    class TrackingSelector:
+        def __init__(self):
+            self.inner = original()
+            self.ordinal = len(instances)
+            self.closed = False
+            self.masks = []
+            self.polls = 0
+            instances.append(self)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def register(self, fileobj, events, data=None):
+            self.masks.append(events)
+            if self.ordinal == 1 and failure == "register":
+                raise OSError("read selector registration failed")
+            return self.inner.register(fileobj, events, data)
+
+        def select(self, timeout=None):
+            if self.ordinal == 1:
+                self.polls += 1
+                assert timeout == 0
+                assert all(
+                    key.events == dispatcher.selectors.EVENT_READ
+                    for key in self.inner.get_map().values()
+                )
+                if failure == "interrupt":
+                    raise KeyboardInterrupt("read poll interrupted")
+            return self.inner.select(timeout)
+
+        def close(self):
+            self.closed = True
+            self.inner.close()
+
+    monkeypatch.setattr(dispatcher.selectors, "DefaultSelector", TrackingSelector)
+    with _endpoint() as endpoint:
+        if failure:
+            with pytest.raises(OSError if failure == "register" else KeyboardInterrupt):
+                _run(endpoint)
+        else:
+            results, accounting, meter, retained = _run(endpoint)
+            assert results[0][0] == 200
+            assert len(accounting.client_records) == len(retained) == 1
+            assert meter.active_count == 0
+        assert endpoint["drained"].wait(2)
+    assert len(instances) == 2
+    assert all(item.closed for item in instances)
+    assert instances[1].masks == [dispatcher.selectors.EVENT_READ]
+    if failure != "register":
+        assert instances[1].polls > 0
+
+
+def test_second_selector_constructor_failure_closes_first(monkeypatch):
+    original = dispatcher.selectors.DefaultSelector
+    first = original()
+    calls = 0
+
+    def factory():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return first
+        raise OSError("selector unavailable")
+
+    monkeypatch.setattr(dispatcher.selectors, "DefaultSelector", factory)
+    with pytest.raises(OSError, match="selector unavailable"):
+        dispatch_wave(
+            [_spec("http://127.0.0.1:1")],
+            accounting=RunAccounting(),
+            meter=SocketNetworkMeter("client"),
+            confirm_preparation=lambda refs: None,
+            emit_completed=lambda record, mapping: None,
+        )
+    assert first.get_map() is None

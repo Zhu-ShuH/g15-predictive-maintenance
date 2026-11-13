@@ -694,3 +694,27 @@ Ubuntu10的388波first-send包装起点跨度p50/p95/最大为1.002159/1.493865/
 资源完整值见fixture，CPU为单波进程区间比率最大，RSS/FD/handle是采样下界而非精确峰；同机loopback两进程socket字节仅覆盖HTTP应用流，不含TCP/IP、重传或物理NIC。缓存未控制、无冷/热或稳态声明。原summary的remaining_gates为保守模板，其中两Linuxexact-source证据本节已补；其他真实Review、queued条件N/A/所选阶段及资源/cache充分性仍待B1/C4复核和A裁定。内部交叉核对不算独立批准。
 
 旧T177的67未达、dba的Ubuntu1未达、新3dd的RHEL3未达及所有开发失败均保留；Windows selector初始空fd集合失败、发送截止绕过反例在冻结前修正，原日志不覆盖。本次不合并/关单、不升档，不以新Ubuntu通过冒称完整Gate0通过。
+
+
+### 10.12 Gate0 READ-only polling candidate (2026-11-13)
+
+Commit d4c5df3 removes a proven client cost: after each bounded write, a dedicated
+READ-only selector avoids enumerating writable-only events from the mixed
+selector (up to N(N-1)/2 unused events for N ready writers without readable data).
+The main selector retains write/deadline scheduling. Responses are still read,
+decoded and completed immediately. Both selectors close on registration errors,
+interruptions and constructor failure. Windows still scans read descriptors;
+this is not a capacity claim. Server code and acceptance thresholds are unchanged.
+
+Windows verification with this checkout's src explicitly on PYTHONPATH:
+49 dispatcher tests passed in 1.89s; query-tool regression 167 passed / 1 skipped
+in 29.33s; Black and diff checks passed; dispatcher Pylint 9.29/10.
+The first run imported the old installed checkout and returned 1 failed / 48
+passed (field coverage mismatch). Its log is retained. Binding the current src
+fixed that environment error; no test assertion or business schema was relaxed.
+
+No new formal capacity run, full-suite or Linux run was performed. Previous
+3ddf12d observations and all three RHEL misses remain failures. Two misses show
+server-side timing gaps which this client optimization does not establish or
+resolve. Full Gate0 remains unaccepted; 100k is unverified. Independent exact-head
+review remains required. This is a local candidate, not a merged delivery.
