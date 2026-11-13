@@ -285,7 +285,8 @@ export function startFleetPage() {
     text("fleet-updated", state.lastRead ? `最近读取（北京时间）${timeText(state.lastRead)}` : "尚未成功读取");
     for (const [id, path, view] of [["nav-console", "/", "health"], ["nav-operations", "/operations", null],
       ["nav-screen", "/screen", null], ["nav-diagnosis", "/diagnosis", null],
-      ["trend-console-link", "/", "health"], ["advice-console-link", "/", "maintenance"]]) {
+      ["trend-console-link", "/", "health"], ["advice-console-link", "/", "maintenance"],
+      ["nav-notifications", "/", "notifications"]]) {
       updateLink(id, path, selected, view);
     }
     const liveState = state.liveMode === "available" || state.liveMode === "error" ? liveStatus(state) : null;

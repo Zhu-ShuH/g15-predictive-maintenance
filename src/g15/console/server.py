@@ -24,6 +24,8 @@ from typing import Any
 from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 _LOGGER = logging.getLogger(__name__)
+from .notifications import NotificationRequestError
+
 MAX_HEAD_BYTES = 32_768
 MAX_TARGET_BYTES = 8_192
 MAX_CATALOG_BYTES = 131_072
@@ -38,6 +40,8 @@ ASSETS = {
     "/diagnosis": ("diagnosis.html", "text/html; charset=utf-8"),
     "/assets/app.css": ("app.css", "text/css; charset=utf-8"),
     "/assets/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/assets/notifications.js": ("notifications.js", "text/javascript; charset=utf-8"),
+    "/assets/notifications.css": ("notifications.css", "text/css; charset=utf-8"),
     "/assets/state.js": ("state.js", "text/javascript; charset=utf-8"),
     "/assets/fleet.css": ("fleet.css", "text/css; charset=utf-8"),
     "/assets/fleet.js": ("fleet.js", "text/javascript; charset=utf-8"),
@@ -215,6 +219,7 @@ class ConsoleApplication:
             self.allowed.add((run_id, device_id))
         self.token_file, self.timeout = token_file, timeout
         self.asset_root = resources.files("g15.console").joinpath("static")
+        self.notifications = None
 
     def live_status(self) -> dict[str, Any]:
         """Project only bounded public capture counters from an embedded runtime."""
@@ -618,6 +623,68 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
         """Apply the same access checks while suppressing the response body."""
         self._handle()
 
+    def do_POST(self):  # noqa: N802  # pylint: disable=invalid-name
+        """Allow only same-origin explicit notification settings or test actions."""
+        if self.path not in ("/api/notifications/settings", "/api/notifications/test"):
+            self._not_allowed()
+            return
+        try:
+            self.close_connection = True
+            self._check_origin()
+            if len(self.headers.get_all("Origin", [])) != 1 or self.headers.get_all(
+                "X-G15-Console-Action", []
+            ) != ["notifications"]:
+                raise ConsoleError(403, "forbidden_origin")
+            lengths = self.headers.get_all("Content-Length", [])
+            content_types = self.headers.get_all("Content-Type", [])
+            if (
+                self.headers.get_all("Transfer-Encoding", [])
+                or self.headers.get_all("Expect", [])
+                or len(lengths) != 1
+                or not re.fullmatch(r"[0-9]{1,5}", lengths[0])
+                or not 0 < int(lengths[0]) <= 4096
+                or len(content_types) != 1
+                or content_types[0].lower()
+                not in ("application/json", "application/json; charset=utf-8")
+            ):
+                raise ConsoleError(400, "invalid_request")
+            raw = self.rfile.read(int(lengths[0]))
+            if len(raw) != int(lengths[0]):
+                raise ConsoleError(400, "invalid_request")
+
+            def unique(values):
+                result = {}
+                for key, value in values:
+                    if key in result:
+                        raise ValueError("duplicate notification field")
+                    result[key] = value
+                return result
+
+            payload = json.loads(
+                raw.decode("utf-8"),
+                object_pairs_hook=unique,
+                parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
+            )
+            if not isinstance(payload, dict):
+                raise ConsoleError(400, "invalid_request")
+            control = self.server.application.notifications
+            if control is None:
+                raise ConsoleError(503, "notifications_unavailable")
+            if self.path.endswith("/settings"):
+                result, status = control.configure(payload), 200
+            else:
+                if set(payload) != {"run_id", "device_id"}:
+                    raise ConsoleError(400, "invalid_request")
+                pair = self.server.application.resource(payload)
+                result, status = control.test(pair), 202
+            self._send(status, _json_bytes(result))
+        except (ConsoleError, NotificationRequestError) as exc:
+            self._send(exc.status, _json_bytes({"error": exc.code}))
+        except (ValueError, UnicodeError, RecursionError, TypeError):
+            self._send(400, _json_bytes({"error": "invalid_request"}))
+        except Exception:  # pylint: disable=broad-exception-caught
+            self._send(500, _json_bytes({"error": "internal"}))
+
     def __getattr__(self, name):
         if name.startswith("do_"):
             return self._not_allowed
@@ -724,7 +791,13 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             if path == "/":
                 if set(parameters) - {"device", "run", "view"} or parameters.get(
                     "view", "health"
-                ) not in ("health", "alarms", "maintenance", "reports"):
+                ) not in (
+                    "health",
+                    "alarms",
+                    "maintenance",
+                    "reports",
+                    "notifications",
+                ):
                     raise ConsoleError(400, "invalid_request")
             elif path in ("/screen", "/operations", "/diagnosis"):
                 if set(parameters) - {"device", "run"}:
@@ -749,6 +822,22 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             except OSError as exc:
                 raise ConsoleError(404, "not_found") from exc
             return 200, payload, content_type, extra
+        if path in ("/api/notifications", "/api/notifications/preview"):
+            control = application.notifications
+            if control is None:
+                raise ConsoleError(503, "notifications_unavailable")
+            try:
+                if path.endswith("/preview"):
+                    if set(parameters) != {"run_id", "device_id"}:
+                        raise ConsoleError(400, "invalid_request")
+                    result = control.preview(application.resource(parameters))
+                else:
+                    if parameters:
+                        raise ConsoleError(400, "invalid_request")
+                    result = control.status()
+            except NotificationRequestError as exc:
+                raise ConsoleError(exc.status, exc.code) from exc
+            return 200, _json_bytes(result), content_type, extra
         if path == "/api/live":
             if parameters:
                 raise ConsoleError(400, "invalid_request")

@@ -1,5 +1,5 @@
 /* State and same-origin data operations for the read-only G15 console. */
-export const VIEWS = ["health", "alarms", "maintenance", "reports"];
+export const VIEWS = ["health", "alarms", "maintenance", "reports", "notifications"];
 export const deviceKey = (device) => JSON.stringify([device.run_id, device.device_id]);
 export const finite = (value) => typeof value === "number" && Number.isFinite(value);
 export const latestWindow = (windows) => windows.reduce(
