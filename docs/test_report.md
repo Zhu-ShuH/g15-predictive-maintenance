@@ -630,3 +630,67 @@ Linux多通过的1项来自Windows按平台跳过的POSIX SIGKILL恢复用例；
 失败来源继续保留：[CI731/run43261142715](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43261142715)关联候选`c6a2a06051ac72f67344f68b47ad30b6bc7ff450`，原job131332461859为1 failed/1138 passed/14 skipped、107.75s，consumer已return0而watcher未取得中间态kill点；该job实际checkout未另取得，不补造SHA。#157夹具修订已在本次父提交a10cab2f中。开发期旧editable导致streams HTTP400、请求context多余字段与严格schema不符、并行本地提交触发fixed_source失败均为非冻结检查，原失败库外留存，来源不清不编SHA。首版离线脚本误要求合法v1串行page100必须显式both，导致Windows10派生审核10项失败；原v1输出保留，修正后固定脚本`98aafe48b4233db4b7bc2140e9d94c7ca9571df24d12ee378aff441c82627ee3`对六档全部审核有效、0问题，未重测任何正式档。离线审核核hash/计数/时序/投影/资源字节，保存SQL oracle原结论，没有重新查询私有fixture数据库或生成新工作量。
 
 **下一步保持真实Review门禁。** A按当前AND不通过，不升档、不改性能SLO；同步窗口、负载端调度、所选在途阶段及资源/cache证据充分性须先交B1/C4真实Review，再决定后续。任何代码或重测均须另记新来源并保留当前六档；内部复核不计独立批准。本节证据完成不等于实现PR已接收或完整Gate0已通过。
+
+### 10.11 #162 selector客户端修订与新来源三平台复证（2026-11-13）
+
+本节记录A在#162/#136另行登记范围后的后续实现，§10.10及T177为保留的历史来源，不将其未达波追认为通过。本轮实现及全部正式量测固定全新检出的clean `3ddf12d00c913e02217b5ebced90fc70b9ac723d`，Git tree `23895053afe1d1a4b93a386c6ca61e09aa5c66ce`；本节与公开证据摘要随后以独立报告提交追加，不把报告head冒充量测source。D0、10/50个不同授权subject、每档至少60秒有效请求跨度、所有波次AND、原SQL oracle/coverage/ID/阶段/字节守恒均保持，未升档。
+
+修订针对负载端N线程唤醒后逐路发送的分散路径，不指定旧Ubuntu漏峰的GIL或内核原因：
+
+- 主波次改为`selectors.DefaultSelector`；准备TCP/内存headers及精确reader ACK之后才开共同launch gate。共同gate不冒充N次开始，每socket首次真实`send`尝试独立计时，含零进度EAGAIN；从未调用send的失败仅留`client_attempt`，不补latency或在途。
+- 每次有界write后重新处理read-ready；完整Content-Length正文和严格JSON解码后即记自身terminal，不等其他发送完成、所有响应、EOF或证据落盘。控制响应framer新增64KiB响应头、单响应及本波累计正文16MiB边界，原16MiB raw-wave证据限制仍保留，错误保留已知原始body；这是工具失败边界，不是放宽接受门槛。服务端业务、SQL、handler等待/队列未改，没有响应hold、sleep、线程优先级或GIL开关。
+- `completion_journal.py`以N有界单写者持久化已完成记录，终态时钟先于enqueue；失败不重试可能已部分写入的raw，另保全全部已知pair的hashed fallback并令quality失败。它不把落盘CPU/墙钟开销隐去，资源与波间空档仍包括这些成本；不可取消的底层文件I/O卡住不在有界退出保证内。
+- 既有5秒send总截止、5秒read无进展截止保留。正recv才延长read截止，EAGAIN不延长；最终send晚返回仍记实际已发送事实并判超时，不能切换预算绕过旧截止。仅非阻塞普通would-block记零字节进度；其他真实I/O/close错误仍失败，不补字节或EOF。
+
+确定性反例要求：A完整响应已read-ready时，B仍短写/EAGAIN且未发完，必须先read/decode/complete A；同一ready批中的C下一次write也必须见A已完成。另覆盖ACK/连接失败不计starts、超时前后边界、partial-send中断与close所有权。真实认证/授权/HTTP/只读SQLite及四种流投影继续走原独立oracle；整链路写盘异常保留10/10已知调用且quality=false。合并定向回归110 passed/23.93s，dispatcher独立45 passed/1.86s；这些是开发回归，不冒充正式一分钟观察。
+
+| 完整回归/来源 | 实际结果 |
+|---|---|
+| Windows11/AMD64，16逻辑CPU，pp03 Python3.12.15/SQLite3.53.4 | 新检出exact 3dd：1335 passed/15 skipped，225.79s，exit0；Black100、Pylint9.87、docrefs0、pipcheck0。原pp03四项dev/build依赖偏离锁，保留全局环境，以独立target overlay对齐后21/21核验通过再跑本行回归及正式观察。 |
+| Ubuntu24.04.5/x86_64，16 vCPU，独立pp03 Python3.12.16/SQLite3.54.1 | 新clone exact 3dd、前后clean：1336 passed/14 skipped，176.59s；Black100、Pylint9.87、docrefs0、pipcheck0，21锁包0差异。 |
+| RHEL9.7/x86_64，4 vCPU，独立pp03 Python3.12.16/SQLite3.54.1 | 新clone exact 3dd、前后clean：1336 passed/14 skipped，162.39s；Black100、Pylint9.87、docrefs0、pipcheck0，21锁包0差异。 |
+| [CI740/run43342529840](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43342529840) | 四job success；3.11.18/3.12.16各1336 passed/14 skipped，92.91/93.32s；Black81+19、Pylint9.87、docrefs0。实际checkout为PR合成merge `0b75fababee55ab6487e4345c50b40df69139f20`，合source 3dd进base a10cab2f，分列于本地exact head回归；名为锁核验的步骤实际仅pip check，未据此宣称CI逐包精确版本复核。 |
+
+Windows首次未对齐四项dev/build锁版本的回归同为1335 passed/15 skipped、227.70s，原记录保留为补充，不替代上表锁内最终回归。Linux多通过1项为POSIX SIGKILL恢复用例。两Linux69个源码文件及338个tracked原始字节前后均匹配，互相一致；Windows69个源码原始hash前后匹配，338项Git blob映射同一tree，未把CRLF字节与Linux LF冒称相同。`source_file_sha256`只指各机source.json文档字节，不是canonical代码hash；三机机器元数据不同，各自分列。
+
+**当前判定：完整Gate0仍不通过。** 本轮Ubuntu两档全部达标，未复现旧未全重叠；RHEL有3个真实未达波，必须保留exit1。六档各一次，固定顺序Windows10→50→Ubuntu10→50→RHEL10→50，没有同source择优重测。完整公开白名单见[selector证据摘要](../tests/fixtures/query/evidence_162_20261113_selector_gate0.json)。
+
+| 平台/档 | 达标/总波 | 主请求 | client/server峰范围 | executing独立范围 | quality/target/exit |
+|---|---|---|---|---|---|
+| windows-10 | 1242/1242 | 12420 | 10–10 / 10–10 | 10–10 | true/true/0 |
+| windows-50 | 235/235 | 11750 | 50–50 / 50–50 | 44–50 | true/true/0 |
+| ubuntu-10 | 388/388 | 3880 | 10–10 / 10–10 | 7–10 | true/true/0 |
+| ubuntu-50 | 55/55 | 2750 | 50–50 / 50–50 | 20–50 | true/true/0 |
+| rhel-10 | 859/861 | 8610 | 9–10 / 9–10 | 5–10 | true/false/1 |
+| rhel-50 | 121/122 | 6100 | 50–50 / 49–50 | 20–50 | true/false/1 |
+
+六档合计**2903波、45510主请求，HTTP错误0**，另120个前置请求。六档quality/时长/source/hash/逐连接字节检查均通过，2900/2903是达峰波数，不是HTTP成功率、新SLA或接受比例。接收→响应完成的服务端在途和所对应不同授权用户均按原阶段重算；executing不替代在途。
+
+| 平台/档 | 有效/墙钟/空档（秒） | 全局主请求p50/p95/p99（秒） |
+|---|---|---|
+| windows-10 | 60.023070 / 186.541292 / 126.518222 | 0.040295 / 0.051775 / 0.079195，n=12420 |
+| windows-50 | 60.119789 / 158.444145 / 98.324356 | 0.205411 / 0.292764 / 0.355990，n=11750 |
+| ubuntu-10 | 60.113592 / 87.523715 / 27.410123 | 0.137622 / 0.191237 / 0.210524，n=3880 |
+| ubuntu-50 | 60.345744 / 77.616405 / 17.270661 | 0.897131 / 1.257106 / 1.302503，n=2750 |
+| rhel-10 | 60.020437 / 124.767376 / 64.746939 | 0.058739 / 0.080868 / 0.087950，n=8610 |
+| rhel-50 | 60.414014 / 102.684960 / 42.270945 | 0.396189 / 0.619521 / 0.681203，n=6100 |
+
+分位数取每档全部主请求的原始样本，采用全局(n−1)p线性插值，含未达波、不平均逐波分位数。client开始是每次真实非阻塞send尝试，terminal是完整read/decode；准备、证据drain及波间空档不填入有效时间。selector为Windows真实SelectSelector、两Linux真实EpollSelector。新客户端发起和落盘工作负载有变化，不据时间差宣称产品性能提升或操作系统排名。
+
+Ubuntu10的388波first-send包装起点跨度p50/p95/最大为1.002159/1.493865/4.375909ms；首/次send间隔最大1.103749ms。这是新source客户端自身时钟的观察，不追认旧dba wave00024，不把包装起点当内核syscall entry。
+
+| RHEL未达波 | client/server峰 | 同机客户端事实 | 同机服务端事实 |
+|---|---|---|---|
+| 10/wave-00661 | 9/9 | 首client完成比末send开始早1.736813ms；send起点跨度7.167265ms | 末received晚首response_completed 14.330604ms |
+| 10/wave-00780 | 10/9 | send起点跨度0.827649ms；全部send完成早于首client完成14.082807ms | 末received晚首response_completed 1.457056ms |
+| 50/wave-00070 | 50/49 | 全部send完成早于首client完成11.293777ms；末received对应第9次send的actor008 | 末received晚首response_completed 9.027070ms |
+
+三波raw/report/index/hash、请求ID、网络双向字节、journal及原checks一致，无I/O错误或would-block。全部reader-installed及recv包装start均早于同serverACK；这不证明内核已阻塞。00661确有负载端仍未全发起即完成首响应；另两波客户端已全发完，不能一概归为发起不足。00780末请求recv包装返回至received间隔3.243036ms跨过首completion；50档末请求该间隔仅0.208864ms，较晚的是recv包装返回。当前证据不能指定GIL/内核/解析为根因，也不能推导产品只支持9/49用户。诊断白名单及原raw/report各自SHA在fixture分列。
+
+后续可独立评估每次write后丢弃的writable键构建（正常10/50波约45/1225项）等热路径，但这只是源码可见的优化候选，未实施或据此宣称三miss修复。须先定位负载端发起及服务端read/解析/调度剩余间隙，再决定最小改动；不得延后read/响应完成、提前计received、变动阶段、扩队列或加试择优。
+
+六份最终离线审核全部audit_valid=true/0问题，固定脚本SHA `a9df182c5e8ef17ce38b33d0d2872bc17707f42d0a07181a115cc2ddf2b59dfa`；13项离线变异自检通过，真实journal失败仍拒绝并保留部分审核边界。它重算hash/ID/峰值/准备/字节/投影/资源，不重查SQL或生成新负载。全局公开投影仍为990707d9…，前置实际page10 raw/consumed100窗及1告警、discard0；原v1重复流负例仍保留。全部归档每平台一个、各包含10与50两档，hash/大小/文件数在fixture；不是六个独立归档。
+
+资源完整值见fixture，CPU为单波进程区间比率最大，RSS/FD/handle是采样下界而非精确峰；同机loopback两进程socket字节仅覆盖HTTP应用流，不含TCP/IP、重传或物理NIC。缓存未控制、无冷/热或稳态声明。原summary的remaining_gates为保守模板，其中两Linuxexact-source证据本节已补；其他真实Review、queued条件N/A/所选阶段及资源/cache充分性仍待B1/C4复核和A裁定。内部交叉核对不算独立批准。
+
+旧T177的67未达、dba的Ubuntu1未达、新3dd的RHEL3未达及所有开发失败均保留；Windows selector初始空fd集合失败、发送截止绕过反例在冻结前修正，原日志不覆盖。本次不合并/关单、不升档，不以新Ubuntu通过冒称完整Gate0通过。
