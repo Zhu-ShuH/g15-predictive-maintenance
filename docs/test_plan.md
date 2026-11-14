@@ -237,28 +237,66 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 ### 9.3 记录结构建议（两 seed 方案）
 
-现有 baseline JSON 只有单数 `new_holdout_seed`。若保留两 seed 方案，建议改为可审查的数组结构（本 PR 只提建议，不改 JSON）：
+现有 baseline JSON 只有单数 `new_holdout_seed`。若保留两 seed 方案，建议改为以下可审查结构（本 PR 只提建议，不改 JSON）：
 
-- `new_holdout_seeds`：数组，每项含 `seed`、`selection_method`、`selected_at`、`entropy_source`、`contact_declarations`（B2/C1/执行方对具体值的本人披露）、`configs`（该 seed 下 5 份配置路径与 git blob / raw SHA-256）；
-- `rules_frozen`、`integrated_validation_commit` 仅在 A 记录真实冻结后写入，不静默填值、不倒填历史附件。
+- `new_holdout_seeds`：保存经本人接触声明确认的候选记录，每项含 `slot_id`、`attempt_no`、`seed`、`selection_method`、`selected_at`、`entropy_source`、`contact_declarations`（B2/C1/执行方对具体值的本人披露）、`configs`（该 seed 下 5 份配置路径与 git blob / raw SHA-256）及确认事件的 `event_seq`。以后撤销时保留原记录，并关联撤销事件；是否仍有效由事件日志推导，不能把历史确认当成当前有效候选。
+- `selection_attempts`：与确认候选数组分开的**追加式事件日志**。每条含全局连续递增的 `event_seq`、固定 `slot_id`、槽内 `attempt_no`、`event_type`、UTC 时间、seed 字段（调用意图尚无值时为 null，取得返回后为规范 int）、方法版本、结果/原因、本人声明和 A 判定链接；尚未取得的声明/判定明确记为待确认，后续追加关联事件，不覆盖旧记录。`event_type` 区分调用意图（`draw_intent`）、外部抽取返回（`draw_returned`）、声明补充、接纳、否决、撤销；同次尝试的后续事件始终引用同一 `slot_id + attempt_no`。
+- 两个槽位的已用预算分别等于日志中该槽位的 `draw_returned` 条数；每个 `slot_id + attempt_no` 只能有一条该事件，槽内编号从 1 连续至最多 3。声明、否决或撤销有各自的全局事件序号，但不产生新的抽取编号或预算消耗。全局事件顺序、槽内编号和返回事件数须能相互对账；日志缺失、重复或状态不明时暂停，不能猜测余额后续抽。
+- `rules_frozen`、`integrated_validation_commit` 仅在 A 记录真实冻结后写入，不静默填值、不倒填历史附件。全部事件、旧确认项及作废记录持久保留，换轮、换进程或重启批次均不清零预算、不覆盖历史。
+
+冻结记录的其余字段见 §9.5 第 6 步。
 
 ### 9.4 seed 选择方法与接触声明（未执行）
 
-- 选择方法经评审后，只产生候选**值**，仍不生成数据；
-- 候选值产生后，B2、C1、执行方 B1 及任何生成者/保管者须对具体候选值作本人接触声明；任一候选有接触记录，即在首次数据生成前作废并另选；
-- A 不代任何角色签署「未接触」。
+本节登记**方法层面**的选择算法与记录格式，不产生任何候选值、不含任何示例或默认 seed 值，也不生成、读取或运行任何新保留数据。
+
+- **选择算法**：方法获 A 批准后，由执行方按下面的槽位与预算规则，逐次用操作系统密码学安全伪随机数生成器（CSPRNG）抽取候选 seed 值，不作人工选值、不作递增/时间戳/固定序列。
+- **熵源**：操作系统熵源（`os.urandom` / `secrets` 模块），不使用 `numpy.random` 默认 PRNG、进程时钟或哈希派生值作为熵源。
+- **取值范围与规范化**：候选值一律是**规范十进制 `int`**，生成、比较、记录三处同一类型，不作任何进制/零填充/字符串字面量解析；正整数，落于闭区间 `[1, 2^32 - 1]`，排除 `0`（避免与缺省/未设置产生解释歧义）；候选值必须通过 `src/g15/config.py` 的 `scenario.seed` 校验（`_check_non_negative_int` → `_as_int`，后者拒绝 `bool` 与任意字符串/浮点）。
+- **无偏闭区间抽样**：在 `[1, 2^32 - 1]` 上以 `secrets.randbelow(2**32 - 1) + 1` 抽取（内部拒绝采样，无模偏差）。接口向执行方返回一个候选值才算一次**外部候选抽取**；内部为实现均匀分布而丢弃的随机位不算候选、不记入预算。越界或命中排除集时否决该次尝试，不做区间重映射；是否允许下一次抽取只按下述余额与停止规则决定。
+- **排除集与占位**：在规范 int 域按数值相等检查，排除集合为已暴露值 `{1, 3, 5, 7, 9, 11, 42, 43, 144, 20261016, 20261023, 20261024, 20261025}`（来源见下段）、当前暂留/有效接纳的值及历次因排除、重复或接触冲突被否决/撤销的值的并集。不作字符串转换。通过范围与排除检查的返回值立即暂留并占用其槽位；抽取、登记和占位串行完成。重复只否决这次新尝试，不撤销被重复的原暂留/接纳记录；后者仍占位，不能用一次重复抽取使它失效。
+- **固定槽位与唯一计数**：固定两个候选槽位 `slot_id=1`、`slot_id=2`，各最多 3 次外部候选抽取（含首次），总数最多 6 次；额度不能在槽位之间转移。先处理空槽位中编号较小者。每次调用前先持久记录该槽位与下一个 `attempt_no` 的 `draw_intent`；返回后用同一编号追加一条 `draw_returned`，该槽位已用预算仅此增加 1；首次、重抽及立即被排除的返回值都只计这 1 次。同一次尝试命中多个否决原因，或随后补充声明、被接纳、被披露接触、被撤销，都只追加其结果事件，**绝不再次计数**。返回值与计数成功持久登记后才继续判断；调用异常或存在未闭合的意图时，视为结果未知并暂停核对，不能当作未抽取、余额可用或自动重试。
+- **声明待齐与接纳**：候选暂留后，B2、C1、执行方 B1 及任何生成者/保管者须分别对该具体值作本人接触声明。存在待声明或待 A 判定的候选时，全部槽位等待，不再抽取；第三次返回的候选待确认也不提前判预算失败。全部声明齐备且确认无接触后，追加接纳事件，并登记 §9.3 的确认候选记录；A 不代任何角色签署「未接触」。
+- **否决、撤销与补位**：任何本人披露接触或撤回未接触声明，立即阻止该候选继续进入配置/冻结/生成步骤，等待 A 记录判定；确定冲突时，暂留项追加否决事件，已接纳项追加撤销事件，原确认与声明历史全部保留。该值进入排除集合；原槽位变空，只能用该槽位尚余的抽取次数补位，不因先前接纳成功而重新获得 3 次。若已进入冻结或运行步骤，须同时暂停后续流程，按 §9.5 重新 Review 与冻结，不能补值后追认原冻结/结果仍有效。
+- **第三次与暂停**：槽位第三次抽取被否决，或该次暂留/接纳候选后来因接触冲突被否决/撤销时，立即暂停整个选择及后续流程并交 A 裁定，不得发起第四次抽取或借用另一槽位余额。第三次候选待确认则继续等待；确认有效则可以接纳。暂停不妨碍追加已经发生的披露/判定记录，但不授权改名重开批次、清零计数或自动续抽。
+- **数量与矩阵**：只有两个槽位各有一个当前有效接纳值且数值互异，才满足最终恰好 2 个候选的条件；被撤销的历史项不计入数量。矩阵沿用 §9.2（每 seed 各含 normal / degradation / spike / step / burst，合计 10 配置、6 故障事件），不为本方法新增门槛。
+- **记录与后续边界**：全部抽取和后续结果按 §9.3 追加留痕，并以事件日志复算余额与当前有效候选。候选确认不等于冻结或获准生成数据；精确配置/测试仍须按 §9.5 再次 Review 并进入同一集成提交，A 真实冻结后才可进入首次数据生成/运行。
+
+已暴露值来源范围统一为**指定提交的全仓已跟踪文本**（`git ls-files -z`），包括 `configs/**`、`tests/**`、`src/**`、`tools/**`、全部文档及历史 `.log`，不设扩展名白名单。先按 seed 赋值/键值检索，再按实际函数签名核对位置参数、默认值、参数化及表达式；不能把正则命中集合冒充完整语义清单。无法读取、无法静态判明的来源须登记并暂停交 A，不能静默跳过；未提交/仓外接触仍须本人声明。冻结前须在拟集成提交重算并记录精确来源版本。
+
+当前来源为 #155 的 `4c3a108cff5410153e847965bf3c3f6584ef71b5` 与已合并 #157 的 main `46daeca2f7adf94ac591d7c20e650dd41c72ded8` 整合候选树（最终提交 SHA 见本次 PR 复评记录；核查过程见测试报告 §11.4）。340 个已跟踪文件均可读为 UTF-8，无跳过；100 个 Python 文件均通过静态 AST 解析。键值/赋值初筛仍得到九个域内值，函数签名和调用复核另覆盖噪声函数位置参数中的四个值，下表十三个域内排除值不变。先前 `ea5b25c` 的 310 文件结果仅作历史，不冒充本次整合树核查。它们是已公开的测试/配置/历史使用值，不是新候选；静态测试源码可证明值已公开和预期用途，不能单独证明某次测试实际执行成功。本轮不运行这些测试或随机源。
+
+| 已暴露值 | 可核对来源 | 暴露事实 |
+|---|---|---|
+| 1 | [test_config.py](../tests/unit/test_config.py)，第 270 行；[test_simulation_noise.py](../tests/unit/test_simulation_noise.py)，第 75 行 | 前者是预期被拒绝的冻结对象赋值，不能据此称生成成功；后者 `standard_normal` 首参数确为 seed，定义 100 点噪声测试，保守排除公开使用值 |
+| 3 | 同一 `test_simulation_noise.py`，第 138–139 行 | `standard_normal` 首参数，定义分块随机访问测试 |
+| 5 | 同一 `test_simulation_noise.py`，第 146–147 行 | `standard_normal` / `gaussian_noise` 首参数，定义缩放对比测试 |
+| 9 | 同一 `test_simulation_noise.py`，第 154 行 | `gaussian_noise` 首参数，定义噪声矩测试 |
+| 11 | 同一 `test_simulation_noise.py`，第 62–65 行 | `standard_normal` 首参数，定义分块一致性测试 |
+| 43 | [test_simulation_engine.py](../tests/unit/test_simulation_engine.py)，第 103–105 行；`test_simulation_noise.py` 第 35 行 | 仿真器 4096 点对比和噪声位置参数测试中的公开 seed |
+| 144 | [test_offline_operation.py](../tests/fault_injection/test_offline_operation.py)，第 27 行及 `test_small_cli_chain_completes_with_python_network_denied` | 公开 `offline_acceptance_small` 配置，测试定义 1024 点 validate→simulate→consume→report 链 |
+| 7 | [healthy.yaml](../configs/healthy.yaml)，`scenario.seed` | 已提交公开配置 |
+| 42 | [default.yaml](../configs/default.yaml)，`scenario.seed` | 已提交公开配置；其他演示/验收配置亦使用 |
+| 20261016 | [acceptance_spike_seed20261016.yaml](../configs/acceptance_spike_seed20261016.yaml)，`scenario.seed` | 已提交受控验收配置 |
+| 20261023 | [functional_acceptance.log](review_evidence/history-2026-10-18-to-28/20261023-local-prototype/functional_acceptance.log)，第 1–2 行及第 7 行 runs | faults/normal 均已生成并运行 |
+| 20261024 | 同一 `functional_acceptance.log`，第 3–4 行及第 7 行 runs | faults/normal 均已生成并运行 |
+| 20261025 | 同一 `functional_acceptance.log`，第 5–6 行及第 7 行 runs；[verification.json](review_evidence/history-2026-10-18-to-28/20261023-local-prototype/verification.json) | normal 的 `run_id=331ff6e3-ea8c-418f-a078-2fa3a2881316` 与配置摘要亦有留档 |
+
+`test_simulation_noise.py` 第 96 行的负值及第 180 行的 `2**40 + 7` 是边界测试输入，不在本方法 `[1, 2^32 - 1]` 域内，由范围门禁拒绝，不混入域内排除表；`0` 仍由本节范围规则单独排除。
+
+该历史 `functional_acceptance` 批次退出码为 5，不作为独立验收通过；单条 capture/passed 文本不覆盖整批失败。归档或整批失败不豁免已暴露值排除，摘要只保留尾部也不能据此漏掉完整日志中的先前 seed。清单只代表上述版本和来源的核对结果，不代替未来全员接触声明与冻结前重算。
 
 ### 9.5 Review 与冻结顺序（A-T151 七步）
 
-1. B1 提交本计划 PR（未执行）；2. C4 复核真值隔离、匹配口径、seed 选择方法、负向/边界测试，并取得至少一位非作者 Review；3. A 只批准 seed 选择方法，不批准尚不存在的值或结果；4. 按已批准方法产生候选值（不生成数据），各角色对具体值作接触声明；5. 获确认候选值对应的精确配置/测试差异补入 PR，再次 Review；6. 全部进入同一集成提交后 A 记录真实冻结（含 `integrated_validation_commit`、配置 blob/SHA、规则摘要、环境、匹配参数、接触声明与 Review 链接）；7. A 记录 `rules_frozen=true` 后才首次生成并运行保留数据。
+1. B1 提交本计划 PR（未执行）；2. C4 复核真值隔离、匹配口径、seed 选择方法、负向/边界测试，并取得 C4 之外至少一位进一步的非作者对该具体方法的 Review；3. A 只批准 seed 选择方法，不批准尚不存在的值或结果；4. 按已批准方法产生候选值（不生成数据），各角色对具体值作接触声明；5. 获确认候选值对应的精确配置/测试差异补入 PR，再次 Review；6. 全部进入同一集成提交后 A 记录真实冻结（含 `integrated_validation_commit`、配置 blob/SHA、规则摘要、环境、匹配参数、接触声明与 Review 链接）；7. A 记录 `rules_frozen=true` 后才首次生成并运行保留数据。
 
 首次运行须保留命令、退出码、环境、固定 SHA、完整原始输出、逐事件映射与所有失败；看到结果后修改规则、阈值、配置、验证器语义或测试期望，该保留集即转已暴露开发数据，须重新 Review、重新冻结、换新 seed。
-### 9.6 测试轮廓（待 seed 选定后实现，未生成数据）
+### 9.6 测试轮廓（待 seed 选定后编写，未生成数据）
 
-- 位置：`tests/integration/test_holdout_validation.py`（本 PR 不建文件、不写测试代码，仅登记轮廓）；
+- 位置：`tests/integration/test_holdout_validation.py`（本节只登记轮廓，不建文件、不写测试代码）；
 - 复用 §3 匹配判据：TP=6 / FN=0、normal 零告警且 `detection_rate=null`、degradation 单独报告不并入 normal 误报、FP / redundant / unmatched 分开；
 - 负向/边界（C4 复核点）：真值隔离（§6.4）、非自报匹配（§4）、窗口右开 + 2 窗宽限、一对一最大匹配；
-- 数据仅在 §9.5 完成 A 冻结后，才由新 seed 经同一受控轮廓（单设备、100 Hz、`window_points=256`、`chunk_points=10240`、`total_points=65536`）首次生成并运行。选择方法获批、候选 seed 选定且本人接触声明齐备后，可以先编写未执行的精确配置与测试，须经再次 Review 并进入同一集成 SHA，再由 A 冻结；冻结前不得生成、读取或运行新保留数据。
+- 数据仅在 §9.5 第 7 步 A 记录 `rules_frozen=true` 后，才由新 seed 经同一受控轮廓（单设备、100 Hz、`window_points=256`、`chunk_points=10240`、`total_points=65536`）首次生成并运行。选择方法获批、候选 seed 选定且本人接触声明齐备后，可以先编写未执行的精确配置与测试，须经再次 Review 并进入同一集成 SHA，再由 A 冻结；冻结前不得生成、读取或运行新保留数据。
 
 ## 10 期末 100 分标准的现场验收增量（Issue #142）
 
