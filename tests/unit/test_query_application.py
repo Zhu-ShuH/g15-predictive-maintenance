@@ -12,6 +12,7 @@ import pytest
 from g15.query.application import (
     AuthenticationError,
     HealthQueryApplication,
+    InvalidQueryError,
     ResourceNotFoundError,
 )
 from g15.query.auth import AuthorizationPolicy, TokenVerifier, issue_token
@@ -494,3 +495,130 @@ def test_logs_use_actor_ref_and_never_record_sensitive_inputs(tmp_path: Path) ->
         "private_truth",
     ):
         assert forbidden not in log_text
+
+
+def test_explicit_both_adds_v2_markers_without_changing_legacy_page(
+    tmp_path: Path,
+) -> None:
+    """The opt-in version preserves all legacy page values and cursor bytes."""
+    application, token, _events, _database = _runtime(tmp_path)
+    arguments = dict(
+        authorization=f"Bearer {token('subject-a')}",
+        run_id=RUN_ID,
+        device_id=DEVICE_ID,
+        request_id="selection-legacy",
+        page_size=2,
+    )
+    legacy = application.query(**arguments).body
+    explicit = dict(application.query(**arguments, streams="both").body)
+    assert legacy["query_contract_version"] == "1"
+    assert "omitted" not in legacy["windows"] and "omitted" not in legacy["alarms"]
+    assert explicit["query_contract_version"] == "2"
+    explicit["query_contract_version"] = "1"
+    for stream in ("windows", "alarms"):
+        explicit[stream] = dict(explicit[stream])
+        assert explicit[stream].pop("omitted") is False
+    assert explicit == legacy
+
+
+@pytest.mark.parametrize("selected", ["windows", "alarms"])
+def test_unselected_stream_is_not_queried_and_is_explicitly_omitted(
+    tmp_path: Path, monkeypatch, selected: str
+) -> None:
+    """Trace actual read-only SQLite while retaining real state reads."""
+    import re
+    from g15.query import application as application_module
+
+    application, token, _events, _database = _runtime(tmp_path)
+    original = application_module.connect_readonly
+    statements = []
+
+    def traced_connection(path):
+        connection = original(path)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(application_module, "connect_readonly", traced_connection)
+    body = application.query(
+        authorization=f"Bearer {token('subject-a')}",
+        run_id=RUN_ID,
+        device_id=DEVICE_ID,
+        request_id="selection-trace",
+        page_size=2,
+        streams=selected,
+    ).body
+    omitted = "alarms" if selected == "windows" else "windows"
+    table = "alarms" if omitted == "alarms" else "feature_windows"
+    assert not any(
+        re.search(r"\bFROM\s+" + table + r"\b", sql, re.I) for sql in statements
+    )
+    assert any("FROM alarm_states" in sql for sql in statements)
+    assert body[selected]["omitted"] is False
+    assert len(body[selected]["items"]) == 2
+    assert body[omitted]["omitted"] is True
+    assert body[omitted]["items"] == [] and body[omitted]["next_cursor"] is None
+    section_high = "high_water" if omitted == "alarms" else "high_water_start_seq"
+    overall_high = "alarm" if omitted == "alarms" else "window_start_seq"
+    assert body[omitted][section_high] is None
+    assert body["committed_high_water"][overall_high] is None
+    assert body["states"] and body["versions"]["state_schema_versions"] == ["1"]
+    if selected == "alarms":
+        assert body["versions"]["features_versions"] == []
+
+
+@pytest.mark.parametrize("streams", [True, 1, [], {}, "", "Both", "windows,alarms"])
+def test_invalid_stream_selection_is_rejected_after_authentication(
+    tmp_path: Path, streams
+) -> None:
+    """Malformed selection values never become an implicit both request."""
+    application, token, _events, _database = _runtime(tmp_path)
+    with pytest.raises(InvalidQueryError):
+        application.query(
+            authorization=f"Bearer {token('subject-a')}",
+            run_id=RUN_ID,
+            device_id=DEVICE_ID,
+            request_id="selection-invalid",
+            streams=streams,
+        )
+
+
+@pytest.mark.parametrize("selected", ["windows", "alarms"])
+@pytest.mark.parametrize("cursor", ["", "not-a-valid-cursor"])
+def test_an_unselected_stream_cannot_carry_even_an_ignored_cursor(
+    tmp_path: Path, selected: str, cursor: str
+) -> None:
+    """Unselected cursor arguments are errors, not hidden unchecked input."""
+    application, token, _events, _database = _runtime(tmp_path)
+    omitted = "alarms" if selected == "windows" else "windows"
+    with pytest.raises(InvalidQueryError):
+        application.query(
+            authorization=f"Bearer {token('subject-a')}",
+            run_id=RUN_ID,
+            device_id=DEVICE_ID,
+            request_id="selection-extra-cursor",
+            streams=selected,
+            **{omitted + "_cursor": cursor},
+        )
+
+
+def test_invalid_selection_does_not_precede_authentication_or_resource_hiding(
+    tmp_path: Path,
+) -> None:
+    """The new parser cannot expose validation details before authorization."""
+    application, token, _events, _database = _runtime(tmp_path)
+    with pytest.raises(AuthenticationError):
+        application.query(
+            authorization=None,
+            run_id=RUN_ID,
+            device_id=DEVICE_ID,
+            request_id="selection-anonymous",
+            streams=[],
+        )
+    with pytest.raises(ResourceNotFoundError):
+        application.query(
+            authorization=f"Bearer {token('subject-other')}",
+            run_id=RUN_ID,
+            device_id=DEVICE_ID,
+            request_id="selection-ungranted",
+            streams=[],
+        )
