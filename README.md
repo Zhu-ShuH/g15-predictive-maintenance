@@ -2,7 +2,7 @@
 
 本项目用可复现的 NumPy 仿真生成振动/温度数据，经 NPZ + Manifest 文件接口交给独立消费者，完成特征、健康评分、告警、SQLite 持久化和 JSON/Markdown 报告。它是教学沙盘，不是已在真实设备上验证的诊断或自动控制系统。
 
-> **收尾基线（2026-11-15，`main@457c2612`）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms`、实时仿真、设备风险注入、控制台与通知功能均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。#56 的候选选择方法已批准，独立验收仍须真实证据；#135 只读授权查询已交付。#136 Gate 0 已执行但未通过，已停止修复并关闭留档，100k 未验证。
+> **收尾范围（2026-11-15）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms`、实时仿真、设备风险注入、控制台与通知功能均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。#56→#9 原独立流程按 [A 的范围决定](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6881950509)停止，原独立验收条件未满足；工程验证单独留证。#135 只读授权查询已交付。#136 Gate 0 已执行但未通过，已停止修复并关闭留档，100k 未验证。
 
 ## 从全新克隆开始
 
@@ -68,12 +68,13 @@ G15_ACCEPTANCE_EVIDENCE_ROOT="$HOME/g15-evidence" bash scripts/acceptance.sh
 | 百万点 | Ubuntu/RHEL 已有 1,000,000 点、10 分片、3 轮/系统的真实基准证据 | 只证明冻结配置和对应 SHA；不证明工业准确率 |
 | 双 Linux 闭环 | `545a598c` 已在两机公开克隆执行 setup→clean→demo→verify→benchmark，均退出 0 | 不能替代 #56/#9 的独立保留集检出率 |
 | 故障恢复 | 坏分片/SHA 拒收、Linux `kill -9` 重放与五表对账已有测试和双机记录 | 不宣称断电零丢失，也不宣称 soak 已完成 |
-| 独立验收 | #56、#9 的方法决定与最终执行证据分列 | 方法批准不等于本人声明、冻结或独立验收完成 |
+| 独立验收 | #56→#9 原独立范围按决定停止，旧基线与三事件 pending 账本保留 | 原独立条件未满足；不补签本人声明，不把事项处置记作通过 |
+| 工程验证 | 4065886415 与公开开发对照 42，各五种固定轮廓；单独授权、先冻结再执行 | 原始结果见[本轮工程验证](docs/engineering_validation_20261115.md)；`independent_acceptance=false`，不替代双 Linux 或独立验收 |
 | 容量与评分材料 | #142 材料已交付；#136 Gate 0 已执行、未通过并停止修复 | 原失败、AND=false 保留；100k 未验证，不把低负载结果外推为容量达标 |
 
 实测数字、环境和原始边界见 [测试报告](docs/test_report.md)，计划与现场用例见 [测试计划](docs/test_plan.md)。
 
-项目交付入口、#56 工具实施与保留边界集中见[收尾状态](docs/final_closeout.md)。
+项目交付入口、#56 工具实施与保留边界集中见[收尾状态](docs/final_closeout.md)；本轮范围、冻结记录与实际结果见[工程验证记录](docs/engineering_validation_20261115.md)。
 
 ## 安全边界
 

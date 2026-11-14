@@ -1,0 +1,497 @@
+[
+  {
+    "path": "slot1-normal/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-normal/consume.stdout.log",
+    "sha256": "2d5c1dc6fb8cef1da32e1c9bbfec7977e34b631fe13500d47171caa3b70f747b",
+    "bytes": 369,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-normal/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-normal/report.stdout.log",
+    "sha256": "a838b6b45fb2b6429c7304792ba7349819ecda07b333a19e40e3d4bf7eac9ff2",
+    "bytes": 376,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-normal/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-normal/simulate.stdout.log",
+    "sha256": "b4488e0173805988174e156f716838418f275b1c0ae9465bf06be62ed78dff5c",
+    "bytes": 162,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-normal/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-normal/validate.stdout.log",
+    "sha256": "92d9e1d816f38a4d03e3dcd0fce4ac66ac40f2f7c654ca92f7c9c78aaf31784c",
+    "bytes": 215,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/consume.stdout.log",
+    "sha256": "87aa1d0dc9ae715afb1bdee73a72f0d713b99d3b4cb7ad301366e68c3a38106a",
+    "bytes": 384,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/report.stdout.log",
+    "sha256": "1fb215d50f157cb945b9cf9a356bfe7db5633c3ada092727069d7cc8e8ce8575",
+    "bytes": 396,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/simulate.stdout.log",
+    "sha256": "48e1d9dcd31f3b05d3bf7f42d1b9cff14e8cc9bbc06383e6d3bef1f3858ef2ba",
+    "bytes": 172,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-degradation/validate.stdout.log",
+    "sha256": "4bb255038c82c26946681f6cae31eb8ed87f02aba341eb647c3cb5eac836c181",
+    "bytes": 225,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/consume.stdout.log",
+    "sha256": "164f531c39c2403087f1427341f25d57fed890e8f22ef2992bf6586ac6181bdc",
+    "bytes": 366,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/report.stdout.log",
+    "sha256": "b8dfb69218e8024539997ef8bc32c04dc54c432cede8e28aa80bac60bb9276e1",
+    "bytes": 372,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/simulate.stdout.log",
+    "sha256": "0230239cff379e24ddc84778a8d92ac29a8a0317c85b832cd1ffb6af2b33f6ba",
+    "bytes": 160,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-spike/validate.stdout.log",
+    "sha256": "d8eca13948bfd2f9aa790404c89c4194604f7d5e42f60f6053d712d935840c95",
+    "bytes": 213,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/consume.stdout.log",
+    "sha256": "7bca0f06cfac73019ff4aa94803032b802c5d5b45a2d99d8f8728ae2c9335e77",
+    "bytes": 363,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/report.stdout.log",
+    "sha256": "2dab06b058846235282ff622eb6b0f75b282f7d87107b8223519acdce42a2d2e",
+    "bytes": 368,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/simulate.stdout.log",
+    "sha256": "203905bb0751b87ffee4a3056ef13ec3c179d0d45393113e9be9ee02a85eb395",
+    "bytes": 158,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-step/validate.stdout.log",
+    "sha256": "2551ea7aed3f9f4907101c1e2efc9fb19170a0b433f5050bf13d760c30dc912b",
+    "bytes": 211,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/consume.stdout.log",
+    "sha256": "27c7134310b35cbd927ff05cc0a8862abd2afdca0cd7713d5a69ee242d7c671a",
+    "bytes": 366,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/report.stdout.log",
+    "sha256": "6cfeba2f68b32f12a3424bc889dde4fcfbab18dc1dac00e18255d2ac1a2ce681",
+    "bytes": 372,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/simulate.stdout.log",
+    "sha256": "6b18af4c3e78f9b5c057f2e1a8baa52e2802b4f2939922fe15c2266dc15a6293",
+    "bytes": 160,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot1-burst/validate.stdout.log",
+    "sha256": "641874e64b3ad70ad6866b3c4e2e405b7e4877133e330bd5048be18405bb6506",
+    "bytes": 213,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/consume.stdout.log",
+    "sha256": "222a5e2b5fc351a28664206c9dd7cc7aac21ae8de75fbf20658e8c3565c360a2",
+    "bytes": 369,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/report.stdout.log",
+    "sha256": "67d67b9a1a6de336614c125b36269bf8439dc763262b5bc7a9782a4b9f71ca4c",
+    "bytes": 376,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/simulate.stdout.log",
+    "sha256": "bf754525f601ea3658fb742680f1b0de3d5a1ab5fa90fb6086eddce75b90d79d",
+    "bytes": 162,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-normal/validate.stdout.log",
+    "sha256": "3b3b1607d9a89ece654aaea58222d32a3e388909f50c9ce82334893a5dfe0815",
+    "bytes": 215,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/consume.stdout.log",
+    "sha256": "804f7fd5ab8c5eb82fab8dc2044c1e0b4037a94a3a410baf44e4a3c29e60232a",
+    "bytes": 384,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/report.stdout.log",
+    "sha256": "f429eedfa2b72d0c012d97ca798909f1a287947f206d497114644cc05bdf9b64",
+    "bytes": 396,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/simulate.stdout.log",
+    "sha256": "1173e7d63406c8bada4bb07aa6d3a5a9e1a1f780d1b3c5217ef3f8b7f22be4ea",
+    "bytes": 172,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-degradation/validate.stdout.log",
+    "sha256": "c1ef05b49b0c3f143dabaa72f192c25eaaeb3f631886fb58bf8e9a45ffa34ac3",
+    "bytes": 225,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/consume.stdout.log",
+    "sha256": "cd97809ad56db7dde7598e88e67b24fef38d2abe7f2c0b7685535a82421c87f4",
+    "bytes": 366,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/report.stdout.log",
+    "sha256": "06766478f72b9842e626728d2b6a68a3ec70b1a40b50f183b5db00df3b6e457a",
+    "bytes": 372,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/simulate.stdout.log",
+    "sha256": "4bd652cf8be2ccda355de7409ecaf4c3d302ae7f6087ca0d1ec5751ea659c972",
+    "bytes": 160,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-spike/validate.stdout.log",
+    "sha256": "ef96303504e2ffaf2f3c45c464123b2ed6cbcbf07ce3f71c7a15d31c995bd58f",
+    "bytes": 213,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/consume.stdout.log",
+    "sha256": "4f2d81bd1d8ff114237be91863ee1d15b147c13b85c372dc9a3031197e139167",
+    "bytes": 363,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/report.stdout.log",
+    "sha256": "56f8091adfe35486a6f151a08f650c419121450dddbbe901e092598e3dc57c5d",
+    "bytes": 368,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/simulate.stdout.log",
+    "sha256": "f33380482b0bb5d374d78510c438bc20715702cbc0c3727716ccf02d16dd4a4f",
+    "bytes": 158,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-step/validate.stdout.log",
+    "sha256": "c2316161a8a1128d831f49ca8ba0ddb4bf56c14db1d0efb0b002bbbb4b89488a",
+    "bytes": 211,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/consume.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/consume.stdout.log",
+    "sha256": "d4328ed9f9f13ee9d9b853f6a699f0edeb01fbfd0b076c94b118768d03e885a3",
+    "bytes": 366,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/report.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/report.stdout.log",
+    "sha256": "09c4578bad7feaa835eacfeb46b7e44a84cc155dc370014aed2e9795ce304450",
+    "bytes": 372,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/simulate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/simulate.stdout.log",
+    "sha256": "2d7696c51a338ac8ed6405c2db97042b4717cdd98a5b12bbf766ac275e933d6e",
+    "bytes": 160,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/validate.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "slot2-burst/validate.stdout.log",
+    "sha256": "e720b8b13f841eb629eb0559f07623487ead1fb3facf3b6d491406f47bf21a6f",
+    "bytes": 213,
+    "retention": "original local execution evidence; not included in public bundle"
+  },
+  {
+    "path": "started.json",
+    "sha256": "5ea1226812eafb57bc203725b6045ca0aa725810c6e8c58d1db26c0ea50d6dd0",
+    "retention": "original local execution evidence"
+  },
+  {
+    "path": "result.json",
+    "sha256": "f04fe0056805525c2d1bc6a295bf632f6d7645b033d4b21c3aecf26384bba1d5",
+    "retention": "original local execution evidence"
+  },
+  {
+    "path": "frozen-input.json",
+    "sha256": "0596e3d66bed62501b5c9c92b859054f8eebf3199e84e78f83d48341d89ad6be",
+    "retention": "original local execution evidence"
+  }
+]

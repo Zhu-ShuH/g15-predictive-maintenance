@@ -1,0 +1,27 @@
+schema_version: '1.0'
+scenario:
+  id: engineering_20261115_slot1_normal
+  description: 'A engineering closeout: slot 1, normal; independent acceptance not
+    claimed'
+  seed: 4065886415
+  start_time_utc: '2026-10-14T00:00:00Z'
+  device_id: DEV-001
+  sample_rate_hz: 100
+  total_points: 65536
+  chunk_points: 10240
+  kind: normal
+signals:
+  vibration:
+    baseline: 0.5
+    degradation_rate_per_sample: 0.0
+    noise_std: 0.05
+    unit: g
+  temperature:
+    baseline: 35.0
+    degradation_rate_per_sample: 0.0
+    noise_std: 0.15
+    unit: degC
+fault_generation:
+  mode: manual
+  stochastic_probability_per_window: 0.0
+  events: []
