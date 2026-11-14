@@ -1,0 +1,737 @@
+"""Read-only loopback console: catalog, authenticated HTTP proxy and reports."""
+
+from __future__ import annotations
+
+import argparse
+import http.client
+import io
+import ipaddress
+import json
+import logging
+import os
+from pathlib import Path
+import re
+from importlib import resources
+import socket
+import stat
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
+
+_LOGGER = logging.getLogger(__name__)
+MAX_HEAD_BYTES = 32_768
+MAX_TARGET_BYTES = 8_192
+MAX_CATALOG_BYTES = 131_072
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_TOKEN_BYTES = 8_192
+IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+TOKEN = re.compile(r"[A-Za-z0-9._~+/-]+=*\Z")
+ASSETS = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/assets/app.css": ("app.css", "text/css; charset=utf-8"),
+    "/assets/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/assets/state.js": ("state.js", "text/javascript; charset=utf-8"),
+}
+SECURITY_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; "
+        "img-src 'self'; connect-src 'self'; object-src 'none'; "
+        "base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+    ),
+}
+
+
+class ConsoleError(Exception):
+    """A fixed public error code, never an exception message or private path."""
+
+    def __init__(self, status: int, code: str) -> None:
+        super().__init__(code)
+        self.status, self.code = status, code
+
+
+def _json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value, ensure_ascii=True, allow_nan=False, separators=(",", ":")
+    ).encode("ascii")
+
+
+def _json_object(payload: bytes) -> dict:
+    value = json.loads(
+        payload.decode("utf-8"),
+        parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
+    )
+    if not isinstance(value, dict):
+        raise ValueError("expected JSON object")
+    return value
+
+
+def _read_bounded(path: Path, limit: int) -> bytes:
+    with path.open("rb") as stream:
+        value = stream.read(limit + 1)
+    if len(value) > limit:
+        raise ValueError("response exceeds configured limit")
+    return value
+
+
+def _upstream_address(value: str) -> tuple[str, int]:
+    try:
+        parsed = urlsplit(value)
+        address = ipaddress.ip_address(parsed.hostname or "")
+        port = 80 if parsed.port is None else parsed.port
+    except ValueError as exc:
+        raise ValueError("upstream must be a numeric loopback HTTP origin") from exc
+    if (
+        parsed.scheme != "http"
+        or not address.is_loopback
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or not 1 <= port <= 65535
+    ):
+        raise ValueError("upstream must be a numeric loopback HTTP origin")
+    return str(address), port
+
+
+def _identifier(value: Any) -> str:
+    if (
+        not isinstance(value, str)
+        or not IDENTIFIER.fullmatch(value)
+        or value.endswith(".")
+    ):
+        raise ValueError("invalid catalog identifier")
+    return value
+
+
+def _reparse(path: Path) -> bool:
+    info = path.lstat()
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & 0x400
+    )
+
+
+class ConsoleApplication:
+    """Keep browser-selected resources within an explicit public catalog."""
+
+    def __init__(
+        self,
+        catalog: Path,
+        runs_root: Path,
+        query_base_url: str,
+        token_file: Path,
+        *,
+        timeout: float = 3.0,
+    ) -> None:
+        self.upstream = _upstream_address(query_base_url)
+        self.runs_root = runs_root.resolve(strict=True)
+        if not self.runs_root.is_dir():
+            raise ValueError("runs root must be a directory")
+        rows = json.loads(_read_bounded(catalog, MAX_CATALOG_BYTES).decode("utf-8"))
+        if not isinstance(rows, list) or len(rows) > 1000:
+            raise ValueError("catalog must be a bounded list")
+        self.devices: list[dict] = []
+        self.allowed: set[tuple[str, str]] = set()
+        used_runs: set[str] = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("invalid catalog entry")
+            run_id, device_id = _identifier(row.get("run_id")), _identifier(
+                row.get("device_id")
+            )
+            if run_id in used_runs:
+                raise ValueError("each catalog run must identify one device")
+            used_runs.add(run_id)
+            public = {"run_id": run_id, "device_id": device_id}
+            for key in (
+                "scenario",
+                "scenario_id",
+                "total_points",
+                "sample_rate_hz",
+                "start_time_utc",
+            ):
+                if key not in row:
+                    continue
+                item = row[key]
+                if key in ("total_points", "sample_rate_hz"):
+                    if isinstance(item, bool) or not isinstance(item, int) or item < 0:
+                        raise ValueError("invalid public catalog number")
+                elif (
+                    not isinstance(item, str)
+                    or len(item) > 256
+                    or any(ord(c) < 32 for c in item)
+                ):
+                    raise ValueError("invalid public catalog text")
+                public[key] = item
+            self.devices.append(public)
+            self.allowed.add((run_id, device_id))
+        self.token_file, self.timeout = token_file, timeout
+        self.asset_root = resources.files("g15.console").joinpath("static")
+
+    def resource(self, parameters: dict[str, str]) -> tuple[str, str]:
+        """Resolve an exact run/device pair without accepting a path or URL."""
+        pair = parameters.get("run_id", ""), parameters.get("device_id", "")
+        if pair not in self.allowed:
+            raise ConsoleError(404, "not_found")
+        return pair
+
+    def upstream_get(
+        self, pair: tuple[str, str], parameters: dict[str, str]
+    ) -> tuple[int, bytes]:
+        """Read the rotating server-side token and make one nonredirecting GET."""
+        try:
+            token = (
+                _read_bounded(self.token_file, MAX_TOKEN_BYTES).decode("ascii").strip()
+            )
+            if not TOKEN.fullmatch(token):
+                raise ValueError("invalid credential")
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise ConsoleError(503, "upstream_unavailable") from exc
+        target = f"/v1/runs/{quote(pair[0], safe='')}/devices/{quote(pair[1], safe='')}/health"
+        target += "?" + urlencode(parameters)
+        connection = http.client.HTTPConnection(*self.upstream, timeout=self.timeout)
+        deadline = time.monotonic() + self.timeout
+        expired = threading.Event()
+        timer = None
+        try:
+            connection.connect()
+            upstream_socket = connection.sock
+
+            def expire() -> None:
+                expired.set()
+                try:
+                    upstream_socket.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ConsoleError(503, "upstream_unavailable")
+            timer = threading.Timer(remaining, expire)
+            timer.daemon = True
+            timer.start()
+            connection.request(
+                "GET",
+                target,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json",
+                    "Connection": "close",
+                },
+            )
+            response = connection.getresponse()
+            if response.status < 200 or 300 <= response.status < 400:
+                raise ConsoleError(502, "invalid_upstream_response")
+            payload = response.read(MAX_RESPONSE_BYTES + 1)
+            if expired.is_set():
+                raise ConsoleError(503, "upstream_unavailable")
+            if len(payload) > MAX_RESPONSE_BYTES:
+                raise ConsoleError(502, "invalid_upstream_response")
+            try:
+                body = _json_object(payload)
+                if token in json.dumps(body, ensure_ascii=True):
+                    raise ValueError("credential reflected by upstream")
+                if response.status == 200:
+                    if (
+                        body.get("run_id") != pair[0]
+                        or body.get("device_id") != pair[1]
+                    ):
+                        raise ValueError("upstream resource mismatch")
+                else:
+                    public_errors = {
+                        "unauthorized",
+                        "not_found",
+                        "invalid_request",
+                        "internal",
+                        "method_not_allowed",
+                        "overloaded",
+                    }
+                    if (
+                        not 400 <= response.status <= 599
+                        or set(body) - {"error", "request_id", "trace_id"}
+                        or body.get("error") not in public_errors
+                    ):
+                        raise ValueError("unexpected upstream error envelope")
+                    for key in ("request_id", "trace_id"):
+                        if key in body and (
+                            not isinstance(body[key], str)
+                            or not re.fullmatch(r"[A-Za-z0-9._~-]{1,128}", body[key])
+                        ):
+                            raise ValueError("invalid public request identifier")
+            except (UnicodeError, ValueError, RecursionError, TypeError) as exc:
+                raise ConsoleError(502, "invalid_upstream_response") from exc
+            return response.status, payload
+        except (OSError, http.client.HTTPException) as exc:
+            raise ConsoleError(503, "upstream_unavailable") from exc
+        finally:
+            if timer is not None:
+                timer.cancel()
+            connection.close()
+
+    def report(self, pair: tuple[str, str], extension: str) -> tuple[int, bytes]:
+        """Authorize before reading only the selected run's fixed public report."""
+        status, payload = self.upstream_get(pair, {"page_size": "1"})
+        if status != 200:
+            return status, payload
+        body = _json_object(payload)
+        if body.get("run_id") != pair[0] or body.get("device_id") != pair[1]:
+            raise ConsoleError(502, "invalid_upstream_response")
+        candidate = self.runs_root / pair[0] / "reports" / f"summary.{extension}"
+        try:
+            for component in (candidate.parent.parent, candidate.parent, candidate):
+                if _reparse(component):
+                    raise ConsoleError(404, "not_found")
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_relative_to(self.runs_root) or not resolved.is_file():
+                raise ConsoleError(404, "not_found")
+            before = resolved.stat()
+            descriptor = os.open(
+                resolved,
+                os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0),
+            )
+            with os.fdopen(descriptor, "rb") as stream:
+                opened = os.fstat(stream.fileno())
+                if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                    raise ConsoleError(404, "not_found")
+                if (
+                    any(
+                        _reparse(p)
+                        for p in (candidate.parent.parent, candidate.parent, candidate)
+                    )
+                    or candidate.resolve(strict=True) != resolved
+                ):
+                    raise ConsoleError(404, "not_found")
+                result = stream.read(MAX_RESPONSE_BYTES + 1)
+            if len(result) > MAX_RESPONSE_BYTES:
+                raise ConsoleError(502, "invalid_report")
+            try:
+                if extension == "json":
+                    report = _json_object(result)
+                    if (
+                        report.get("run_id") != pair[0]
+                        or report.get("device_id") != pair[1]
+                    ):
+                        raise ValueError("report resource mismatch")
+                else:
+                    lines = result.decode("utf-8").splitlines()
+                    if (
+                        f"| run_id | `{pair[0]}` |" not in lines
+                        or f"| device_id | `{pair[1]}` |" not in lines
+                    ):
+                        raise ValueError("report resource mismatch")
+            except (UnicodeError, ValueError, RecursionError) as exc:
+                raise ConsoleError(502, "invalid_report") from exc
+            return 200, result
+        except ConsoleError:
+            raise
+        except (OSError, UnicodeError, ValueError, RecursionError) as exc:
+            raise ConsoleError(404, "not_found") from exc
+
+
+class _HeadReader(io.RawIOBase):
+    def __init__(self, connection: socket.socket, timeout: float) -> None:
+        super().__init__()
+        self.connection, self.deadline = connection, time.monotonic() + timeout
+        self.remaining = MAX_HEAD_BYTES
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Any) -> int:
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0 or self.remaining <= 0:
+            raise TimeoutError("request head unavailable")
+        self.connection.settimeout(remaining)
+        count = self.connection.recv_into(memoryview(buffer)[: self.remaining])
+        self.remaining -= count
+        return count
+
+
+class ConsoleHTTPServer(ThreadingHTTPServer):
+    """Loopback listener with bounded workers, head sizes and socket deadlines."""
+
+    daemon_threads = True
+    allow_reuse_address = True
+    request_queue_size = 32
+
+    def __init__(
+        self,
+        application: ConsoleApplication,
+        host: str,
+        port: int,
+        *,
+        max_workers: int = 16,
+        request_timeout: float = 3.0,
+    ) -> None:
+        address = ipaddress.ip_address(host)
+        if (
+            isinstance(port, bool)
+            or not isinstance(port, int)
+            or not address.is_loopback
+            or not 0 <= port <= 65535
+        ):
+            raise ValueError("console must bind a loopback address")
+        if (
+            isinstance(max_workers, bool)
+            or not isinstance(max_workers, int)
+            or not 1 <= max_workers <= 64
+            or isinstance(request_timeout, bool)
+            or not isinstance(request_timeout, (int, float))
+            or not 0 < request_timeout <= 10
+        ):
+            raise ValueError("invalid console limits")
+        self.application, self.request_timeout = application, request_timeout
+        self.worker_slots = threading.BoundedSemaphore(max_workers)
+        self.address_family = (
+            socket.AF_INET6 if address.version == 6 else socket.AF_INET
+        )
+        super().__init__((host, port), ConsoleRequestHandler)
+        self.allowed_hosts = {str(address), "localhost"}
+
+    def get_request(self):
+        connection, address = super().get_request()
+        connection.settimeout(self.request_timeout)
+        return connection, address
+
+    def process_request(self, request, client_address):
+        if not self.worker_slots.acquire(blocking=False):
+            try:
+                request.settimeout(min(self.request_timeout, 0.1))
+                deadline, head = time.monotonic() + 0.1, bytearray()
+                while (
+                    b"\r\n\r\n" not in head
+                    and len(head) < MAX_HEAD_BYTES
+                    and time.monotonic() < deadline
+                ):
+                    part = request.recv(min(4096, MAX_HEAD_BYTES - len(head)))
+                    if not part:
+                        break
+                    head.extend(part)
+                payload = _json_bytes({"error": "unavailable"})
+                request.sendall(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Length: "
+                    + str(len(payload)).encode("ascii")
+                    + b"\r\n\r\n"
+                    + payload
+                )
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.worker_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.worker_slots.release()
+
+    def handle_error(self, _request, _client_address):
+        _LOGGER.error("console connection failed")
+
+
+class ConsoleRequestHandler(BaseHTTPRequestHandler):
+    """Expose only the catalog, health proxy, fixed reports and fixed assets."""
+
+    protocol_version = "HTTP/1.1"
+    server_version = "G15Console/1"
+    sys_version = ""
+
+    def setup(self):
+        super().setup()
+        self.rfile.close()
+        self.rfile = io.BufferedReader(
+            _HeadReader(self.connection, self.server.request_timeout)
+        )
+
+    def log_message(self, _format, *args):
+        del args
+
+    def send_error(self, code, message=None, explain=None):
+        del message, explain
+        self._send(code, _json_bytes({"error": "invalid_request"}))
+
+    def handle_expect_100(self):
+        self._send(400, _json_bytes({"error": "invalid_request"}))
+        return False
+
+    def do_GET(self):  # noqa: N802  # pylint: disable=invalid-name
+        """Read an allowlisted resource without exposing server credentials."""
+        self._handle()
+
+    def do_HEAD(self):  # noqa: N802  # pylint: disable=invalid-name
+        """Apply the same access checks while suppressing the response body."""
+        self._handle()
+
+    def __getattr__(self, name):
+        if name.startswith("do_"):
+            return self._not_allowed
+        raise AttributeError(name)
+
+    def _not_allowed(self):
+        try:
+            self._check_origin()
+        except ConsoleError as exc:
+            self._send(exc.status, _json_bytes({"error": exc.code}))
+            return
+        self._send(
+            405,
+            _json_bytes({"error": "method_not_allowed"}),
+            extra={"Allow": "GET, HEAD"},
+        )
+
+    def _check_origin(self):
+        hosts = self.headers.get_all("Host", [])
+        origins = self.headers.get_all("Origin", [])
+        sites = self.headers.get_all("Sec-Fetch-Site", [])
+        if (
+            len(hosts) != 1
+            or len(origins) > 1
+            or len(sites) > 1
+            or (sites and sites[0] not in ("same-origin", "none"))
+        ):
+            raise ConsoleError(403, "forbidden_origin")
+        try:
+            host = urlsplit("http://" + hosts[0])
+            if (
+                host.hostname not in self.server.allowed_hosts
+                or (host.port or 80) != self.server.server_port
+                or host.username is not None
+                or host.password is not None
+                or host.path
+                or host.query
+                or host.fragment
+            ):
+                raise ValueError()
+            if origins:
+                origin = urlsplit(origins[0])
+                if (
+                    origin.scheme != "http"
+                    or origin.hostname != host.hostname
+                    or (origin.port or 80) != self.server.server_port
+                    or origin.username is not None
+                    or origin.password is not None
+                    or origin.path
+                    or origin.query
+                    or origin.fragment
+                ):
+                    raise ValueError()
+        except ValueError as exc:
+            raise ConsoleError(403, "forbidden_origin") from exc
+
+    def _handle(self):
+        try:
+            self.close_connection = True
+            self.connection.settimeout(self.server.request_timeout)
+            self._check_origin()
+            lengths = self.headers.get_all("Content-Length", [])
+            if (
+                self.headers.get_all("Transfer-Encoding", [])
+                or self.headers.get_all("Expect", [])
+                or len(lengths) > 1
+                or (lengths and lengths[0].strip() != "0")
+            ):
+                raise ConsoleError(400, "invalid_request")
+            if len(self.path.encode("utf-8")) > MAX_TARGET_BYTES:
+                raise ConsoleError(414, "invalid_request")
+            target = urlsplit(self.path)
+            if (
+                target.scheme
+                or target.netloc
+                or target.fragment
+                or not target.path.startswith("/")
+            ):
+                raise ConsoleError(400, "invalid_request")
+            values = parse_qs(
+                target.query,
+                keep_blank_values=True,
+                strict_parsing=True,
+                max_num_fields=5,
+            )
+            if any(len(v) != 1 or not v[0] for v in values.values()):
+                raise ConsoleError(400, "invalid_request")
+            parameters = {k: v[0] for k, v in values.items()}
+            status, payload, content_type, extra = self._dispatch(
+                target.path, parameters
+            )
+            self._send(status, payload, content_type, extra)
+        except ConsoleError as exc:
+            self._send(exc.status, _json_bytes({"error": exc.code}))
+        except (ValueError, UnicodeError):
+            self._send(400, _json_bytes({"error": "invalid_request"}))
+        except Exception:  # pylint: disable=broad-exception-caught
+            self._send(500, _json_bytes({"error": "internal"}))
+
+    def _dispatch(self, path, parameters):
+        application = self.server.application
+        content_type, extra = "application/json; charset=utf-8", {}
+        if path in ASSETS:
+            if path == "/":
+                if set(parameters) - {"device", "run", "view"} or parameters.get(
+                    "view", "health"
+                ) not in ("health", "alarms", "reports"):
+                    raise ConsoleError(400, "invalid_request")
+            elif parameters:
+                raise ConsoleError(400, "invalid_request")
+            name, content_type = ASSETS[path]
+            item = application.asset_root.joinpath(name)
+            try:
+                if isinstance(item, Path) and (
+                    _reparse(application.asset_root)
+                    or _reparse(item)
+                    or not item.resolve(strict=True).is_relative_to(
+                        application.asset_root.resolve(strict=True)
+                    )
+                ):
+                    raise OSError()
+                with item.open("rb") as stream:
+                    payload = stream.read(MAX_RESPONSE_BYTES + 1)
+                if len(payload) > MAX_RESPONSE_BYTES:
+                    raise OSError()
+            except OSError as exc:
+                raise ConsoleError(404, "not_found") from exc
+            return 200, payload, content_type, extra
+        if path == "/api/catalog":
+            if parameters:
+                raise ConsoleError(400, "invalid_request")
+            return (
+                200,
+                _json_bytes({"devices": application.devices, "readonly": True}),
+                content_type,
+                extra,
+            )
+        allowed = {"run_id", "device_id"}
+        if path == "/api/health":
+            allowed |= {"page_size", "windows_cursor", "alarms_cursor"}
+        elif path == "/api/report/download":
+            allowed.add("format")
+        elif path != "/api/report":
+            raise ConsoleError(404, "not_found")
+        if set(parameters) - allowed:
+            raise ConsoleError(400, "invalid_request")
+        pair = application.resource(parameters)
+        if path == "/api/health":
+            forwarded = {
+                k: v for k, v in parameters.items() if k not in ("run_id", "device_id")
+            }
+            forwarded.setdefault("page_size", "100")
+            status, payload = application.upstream_get(pair, forwarded)
+        else:
+            file_format = (
+                parameters.get("format", "json")
+                if path.endswith("/download")
+                else "json"
+            )
+            if file_format not in ("json", "markdown"):
+                raise ConsoleError(400, "invalid_request")
+            extension = "md" if file_format == "markdown" else "json"
+            status, payload = application.report(pair, extension)
+            if status == 200 and path.endswith("/download"):
+                content_type = (
+                    "text/markdown; charset=utf-8"
+                    if extension == "md"
+                    else content_type
+                )
+                extra["Content-Disposition"] = (
+                    f'attachment; filename="summary.{extension}"'
+                )
+        if status == 401:
+            extra["WWW-Authenticate"] = "Bearer"
+        return status, payload, content_type, extra
+
+    def _send(
+        self,
+        status,
+        payload,
+        content_type="application/json; charset=utf-8",
+        extra=None,
+    ):
+        self.close_connection = True
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Connection", "close")
+            for key, value in SECURITY_HEADERS.items():
+                self.send_header(key, value)
+            for key, value in (extra or {}).items():
+                self.send_header(key, value)
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(payload)
+        except OSError:
+            pass
+
+
+def create_console_server(
+    catalog: Path | str,
+    runs_root: Path | str,
+    query_base_url: str,
+    token_file: Path | str,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 0,
+    max_workers: int = 16,
+    request_timeout: float = 3.0,
+) -> ConsoleHTTPServer:
+    """Create, but do not start, a read-only console on numeric loopback only."""
+    application = ConsoleApplication(
+        Path(catalog),
+        Path(runs_root),
+        query_base_url,
+        Path(token_file),
+        timeout=request_timeout,
+    )
+    return ConsoleHTTPServer(
+        application,
+        host,
+        port,
+        max_workers=max_workers,
+        request_timeout=request_timeout,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Start a separate loopback console without changing the existing CLI/API."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--catalog", type=Path, required=True)
+    parser.add_argument("--runs-root", type=Path, required=True)
+    parser.add_argument("--query-base-url", required=True)
+    parser.add_argument("--token-file", type=Path, required=True)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=18467)
+    arguments = parser.parse_args(argv)
+    try:
+        server = create_console_server(
+            arguments.catalog,
+            arguments.runs_root,
+            arguments.query_base_url,
+            arguments.token_file,
+            host=arguments.host,
+            port=arguments.port,
+        )
+    except (OSError, ValueError, UnicodeError):
+        parser.error("invalid console configuration")
+    try:
+        print(
+            f"Read-only console: http://{arguments.host}:{server.server_port}",
+            flush=True,
+        )
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0

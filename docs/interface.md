@@ -753,3 +753,23 @@ A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次H
 最重要的可证伪反例：A的响应已read-ready，B仍短写/EAGAIN，A必须先完成read、JSON解码及complete，再发生B的发送完成。“先发完全部再读”或“等writer落盘再complete”必须被负例击穿；完整body不能等EOF。fragment、cutoff、HTTP错误、timeout、reset、中断、journal失败及跨两波守恒见test_plan §11.10。
 
 本候选独立于clean`dba4dce9`的线程发起实现/工作负载，须固定新SHA后另作同SHA三平台回归和逐档观察。原dba六档、Ubuntu10 wave-00024真实server9/exit1及T17767个未达波全部保留。AND、10/50、累计有效60秒、received→response_completed候选和executing单列不变；queued仍null/absent且仅有条件N/A，backlog未测、cache uncontrolled和非物理网络边界不变。本节不产生新成绩或批准，精确新head仍须B1/C4真实Review及A门禁裁定。
+
+## 18. 本机只读网页控制台（#158 候选）
+
+本节为用户要求新增控制台后的实现候选，未替代#157/Gate0的独立评审和统计门槛。原查询响应、认证授权、分页、评分和SQLite写入契约不变。
+
+独立入口 `python -m g15.console --catalog <受控目录JSON> --runs-root <已完成运行根> --query-base-url http://127.0.0.1:<查询端口> --token-file <服务端短期token文件> --host 127.0.0.1 --port 18467`。目录是明确登记的run/device数组，页面只能选择其中资源。本机网关读取当前token，通过真实HTTP/Bearer请求现有health接口；不向页面、URL、错误或日志输出凭据，不跟随上游重定向。它不签发HTTP登录凭据，也不构成多用户生产认证。
+
+| GET/HEAD路径 | 语义 |
+|---|---|
+| `/`与显式静态资源 | 设备健康、告警与报告的原生HTML/CSS/JS；根路径可接device/run/view选择参数，不反射成HTML |
+| `/api/catalog` | 明确登记的公开资源元数据与readonly=true；不是扫描或暴露任意运行根 |
+| `/api/health?run_id=...&device_id=...&page_size=...` | 向真实查询服务发起认证GET，保持成功响应；可转发独立windows_cursor/alarms_cursor，无任意URL/路径 |
+| `/api/report?run_id=...&device_id=...` | 先用同资源真实page_size=1查询验证权限，再读固定已生成summary.json，核对run/device归属 |
+| `/api/report/download?...&format=json或markdown` | 同样授权并核归属，仅下载summary.json或summary.md；没有任意文件下载 |
+
+未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
+
+页面最新健康分取最新已存窗口；活动告警取states，历史告警单列。趋势按真实序号/采样率绘制，只展示已读取范围，全程必须沿cursor读至耗尽才标完整。窗口翻页不消费告警伴随重放，告警翻页同理；切设备与刷新丢弃旧异步响应。报告passed=null、verifiable=false、detection_rate=null保留不可判定含义，不能显示0或通过；受控事件检出通过也必须保留误报计数。显示时间使用明确的Asia/Shanghai时区，原始报告下载不改写时间。
+
+本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。远程暴露、账户登录、设备控制和完整容量需另有实现与评审，当前界面不据此宣称。

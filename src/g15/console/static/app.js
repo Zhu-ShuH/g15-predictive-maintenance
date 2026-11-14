@@ -1,0 +1,374 @@
+import { createConsoleStore, deviceKey, latestWindow, chronological, activeStatus,
+  reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout } from "./state.js";
+
+const $ = (id) => document.getElementById(id);
+const text = (id, value) => { const element = $(id); if (element) element.textContent = value; };
+const number = (value, digits = 0) => finite(value)
+  ? value.toLocaleString("zh-CN", { maximumFractionDigits: digits }) : "—";
+const scenarios = { healthy: "正常工况", degradation: "缓慢退化", sudden_fault: "突发故障" };
+const scenario = (device) => scenarios[device?.scenario] || device?.scenario || "场景未标明";
+const timeFormat = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai",
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit",
+  minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+const timeText = (value) => {
+  if (value === null || value === undefined || value === "") return "未知";
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(parsed.getTime()) ? timeFormat.format(parsed) : "未知";
+};
+function node(tag, content = "", className = "") {
+  const element = document.createElement(tag);
+  element.textContent = content;
+  if (className) element.className = className;
+  return element;
+}
+function badge(level, label) {
+  const element = node("span", label, "status-badge");
+  element.dataset.level = level; return element;
+}
+function levelLabel(level) { return level === "red" ? "红色告警" : level === "yellow" ? "黄色告警" : "级别未知"; }
+function svgNode(tag, attributes = {}, content) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
+  if (content !== undefined) element.textContent = content;
+  return element;
+}
+function positionText(row, rate) {
+  return finite(rate) && rate > 0 ? `${number(row.start_seq / rate, 2)} s · seq ${row.start_seq}`
+    : `seq ${row.start_seq}`;
+}
+
+export function startConsole() {
+  const store = createConsoleStore({ selection: locationSelection(location.search) });
+  let previousLocation = null, restoring = false, chartPoints = [];
+  let chartLayout = plotLayout(280, 180), lastChartSize = "", resizeFrame = 0;
+  let revealedRosterKey = null, lastRosterSize = "";
+  function syncLocation(state) {
+    if (!state.selected) return;
+    const next = `${deviceKey(state.selected)}|${state.view}`;
+    if (next === previousLocation) return;
+    const query = new URLSearchParams(location.search);
+    query.set("device", state.selected.device_id); query.set("run", state.selected.run_id);
+    query.set("view", state.view);
+    const url = `${location.pathname}?${query}`;
+    history[previousLocation === null || restoring ? "replaceState" : "pushState"]({}, "", url);
+    previousLocation = next;
+  }
+  function ensureSelectedInRoster(force = false) {
+    const container = $("device-list");
+    const overflow = container.scrollWidth > container.clientWidth;
+    const hint = $("roster-scroll-hint");
+    if (hint) hint.hidden = !overflow;
+    const selected = container.querySelector('[data-device-key][data-selected="true"]');
+    if (!selected) { revealedRosterKey = null; return; }
+    const key = selected.dataset.deviceKey;
+    // Selection/resize reveals the current item. Ordinary chart inspection or
+    // data re-rendering must not undo the user's deliberate horizontal pan.
+    const reveal = force || key !== revealedRosterKey;
+    revealedRosterKey = key;
+    if (!overflow || !reveal || container.clientWidth <= 0) return;
+    const bounds = container.getBoundingClientRect(), item = selected.getBoundingClientRect();
+    const left = bounds.left + container.clientLeft, right = left + container.clientWidth;
+    const delta = item.left < left ? item.left - left : item.right > right ? item.right - right : 0;
+    if (delta) container.scrollLeft = Math.max(0, Math.min(
+      container.scrollWidth - container.clientWidth, container.scrollLeft + delta
+    ));
+  }
+  function renderDevices(state) {
+    const container = $("device-list");
+    const focused = document.activeElement?.closest("[data-device-key]")?.dataset.deviceKey;
+    const search = state.deviceSearch.trim().toLocaleLowerCase();
+    const devices = state.devices.filter((device) =>
+      [device.device_id, device.run_id, device.scenario, scenario(device), device.label]
+        .some((value) => String(value || "").toLocaleLowerCase().includes(search)));
+    text("catalog-count", state.catalogStatus === "loading" ? "正在读取" : `${devices.length} / ${state.devices.length} 台设备`);
+    const rows = devices.map((device) => {
+      const key = deviceKey(device), preview = state.previews[key];
+      const selected = state.selected && deviceKey(state.selected) === key;
+      const button = node("button", "", "device-row");
+      button.type = "button"; button.dataset.deviceKey = key;
+      button.dataset.selected = String(Boolean(selected));
+      button.setAttribute("aria-pressed", String(Boolean(selected)));
+      const main = node("span", "", "device-main");
+      main.append(node("strong", device.device_id, "device-label"), node("span", scenario(device), "muted"));
+      const score = node("span", preview?.latest ? number(preview.latest.health_score, 1) : "—", "device-score");
+      const scoreLabel = preview?.latest ? `最新窗口健康分：${number(preview.latest.health_score, 2)} / 100` : "最新窗口健康分尚不可用";
+      score.title = scoreLabel; score.setAttribute("aria-label", scoreLabel);
+      const status = preview?.active || { level: "unknown", label: "等待读取" };
+      const detail = node("span", "", "device-state"); detail.append(badge(status.level, status.label));
+      button.append(main, score, detail);
+      button.addEventListener("click", () => { void store.selectDevice(key); });
+      const item = node("li"); item.append(button); return item;
+    });
+    container.replaceChildren(...rows);
+    if (!rows.length) container.append(node("li", state.devices.length ? "没有匹配的设备。请调整搜索内容。" :
+      state.catalogStatus === "loading" ? "正在读取设备目录…" :
+      state.catalogStatus === "error" ? state.catalogError : "设备目录暂无记录。", "empty-state"));
+    if (focused) [...container.querySelectorAll("[data-device-key]")].find((item) =>
+      item.dataset.deviceKey === focused)?.focus({ preventScroll: true });
+    ensureSelectedInRoster();
+  }
+  function renderChart(state) {
+    const container = $("health-chart");
+    if ($("health-view").hidden) return;
+    const width = container.clientWidth, height = container.clientHeight;
+    if (width <= 0 || height <= 0) return;
+    chartLayout = plotLayout(width, height);
+    lastChartSize = `${width}:${height}`;
+    const layout = chartLayout, points = chronological(state.windows);
+    chartPoints = points;
+    container.setAttribute("aria-busy", String(state.healthStatus === "loading" || state.windowLoading || state.fullLoading));
+    const slider = $("health-window-slider");
+    slider.disabled = !points.length;
+    slider.min = "0"; slider.max = String(Math.max(0, points.length - 1));
+    const chosen = points.find((row) => row.start_seq === state.inspectedSeq) || points.at(-1);
+    const chosenIndex = chosen ? points.indexOf(chosen) : 0;
+    slider.value = String(chosenIndex);
+    if (!points.length) {
+      $("chart-legend").hidden = true;
+      container.replaceChildren(node("p", !state.selected ? "选择设备后读取真实窗口。" : state.healthStatus === "loading" ? "正在读取真实健康窗口…" :
+        state.healthStatus === "error" ? state.healthError : "当前运行暂无已提交的健康窗口。", "empty-state"));
+      text("chart-range", "—"); text("chart-inspector", "读取后可用滑块检查实际窗口。");
+      text("chart-description", "曲线只展示已成功读取的真实窗口，不补造缺失数据。");
+      return;
+    }
+    const rate = points[0].sample_rate_hz;
+    const seconds = finite(rate) && rate > 0 && points.every((row) => row.sample_rate_hz === rate);
+    const rawX = (row) => seconds ? row.start_seq / rate : row.start_seq;
+    const first = rawX(points[0]), last = rawX(points.at(-1)), span = Math.max(last - first, 1);
+    const x = (row) => layout.left + (rawX(row) - first) / span * layout.plotWidth;
+    const y = (score) => layout.bottom - score / 100 * layout.plotHeight;
+    const svg = svgNode("svg", { viewBox: `0 0 ${layout.width} ${layout.height}`, role: "img",
+      "aria-labelledby": "plot-title plot-description", preserveAspectRatio: "xMidYMid meet" });
+    svg.dataset.level = activeStatus(state.states).level;
+    svg.append(svgNode("title", { id: "plot-title" }, `${state.selected?.device_id || ""}的真实健康窗口`));
+    svg.append(svgNode("desc", { id: "plot-description" }, `已读取${points.length}个窗口，健康分范围${number(Math.min(...points.map((row) => row.health_score)), 2)}至${number(Math.max(...points.map((row) => row.health_score)), 2)}。`));
+    for (const tick of [0, 50, 100]) {
+      svg.append(svgNode("line", { x1: layout.left, x2: layout.right, y1: y(tick), y2: y(tick), class: "chart-grid" }));
+      svg.append(svgNode("text", { x: layout.left - 10, y: y(tick) + 4, "text-anchor": "end", "font-size": 10, class: "chart-label" }, tick));
+    }
+    svg.append(svgNode("line", { x1: layout.left, x2: layout.right, y1: layout.bottom, y2: layout.bottom, class: "chart-axis" }));
+    for (const [ratio, value] of [[0, first], [0.5, (first + last) / 2], [1, last]]) {
+      svg.append(svgNode("text", { x: layout.left + layout.plotWidth * ratio, y: layout.height - 11,
+        "text-anchor": ratio === 0 ? "start" : ratio === 1 ? "end" : "middle", "font-size": 10, class: "chart-label" },
+      `${number(value, seconds ? 1 : 0)}${seconds ? " s" : ""}`));
+    }
+    const path = points.map((row, index) => `${index ? "L" : "M"}${x(row).toFixed(2)},${y(row.health_score).toFixed(2)}`).join(" ");
+    svg.append(svgNode("path", { d: path, class: "chart-line", fill: "none" }));
+    if (points.length === 1) svg.append(svgNode("circle", { cx: x(points[0]), cy: y(points[0].health_score), r: 4, class: "chart-point" }));
+    for (const alarm of state.alarms) {
+      const alarmX = seconds ? alarm.start_seq / rate : alarm.start_seq;
+      if (alarmX < first || alarmX > last) continue;
+      svg.append(svgNode("line", { x1: layout.left + (alarmX - first) / span * layout.plotWidth,
+        x2: layout.left + (alarmX - first) / span * layout.plotWidth,
+        y1: layout.top, y2: layout.bottom, class: "chart-alarm",
+        "data-level": alarm.level }));
+    }
+    svg.append(svgNode("line", { x1: x(chosen), x2: x(chosen), y1: layout.top - 5, y2: layout.bottom + 4, class: "chart-focus" }));
+    svg.append(svgNode("circle", { cx: x(chosen), cy: y(chosen.health_score), r: 5, class: "chart-point" }));
+    container.replaceChildren(svg);
+    text("chart-range", `已加载 ${points.length} 窗 · ${number(first, 1)}–${number(last, 1)} ${seconds ? "s" : "seq"} · ${state.windowCursor ? "部分范围" : "全部已提交窗口"}`);
+    const scopeText = state.windowCursor ? "当前仅显示已加载范围，可继续读取更早窗口。" : "已读取该运行的全部已提交窗口；未成窗的采样点不在曲线内。";
+    text("chart-description", (seconds ? "横轴为按真实采样率换算的仿真相对秒数。" : "横轴为实际窗口起始采样点。") + scopeText + "竖线标记范围内已读取的历史告警。");
+    const visibleLevel = level => state.alarms.some(row => row.level === level && rawX(row) >= first && rawX(row) <= last);
+    const hasRed = visibleLevel("red"), hasYellow = visibleLevel("yellow");
+    $("chart-legend").hidden = !hasRed && !hasYellow;
+    $("legend-red").hidden = !hasRed; $("legend-yellow").hidden = !hasYellow;
+    const inspector = `选中窗口 [${chosen.start_seq}, ${chosen.end_seq_exclusive}) · 健康分 ${number(chosen.health_score, 2)} · ${positionText(chosen, seconds ? rate : null)}`;
+    text("chart-inspector", inspector); slider.setAttribute("aria-valuetext", inspector);
+  }
+  function labelledAlarmCell(label, value, valueClass = "") {
+    const cell = node("td");
+    const caption = node("span", label, "mobile-cell-label");
+    caption.setAttribute("aria-hidden", "true");
+    cell.append(caption, node("span", value, `cell-value ${valueClass}`.trim()));
+    return cell;
+  }
+  function renderAlarms(state) {
+    const filtered = filterAlarms(state.alarms, state.alarmLevel, state.alarmSearch);
+    const rate = latestWindow(state.windows)?.sample_rate_hz;
+    text("alarm-count", `${filtered.length} 条匹配 / 已加载 ${state.alarms.length} 条${state.alarmCursor ? "（仍有更早记录）" : ""}`);
+    $("alarm-table-body").replaceChildren(...filtered.map((alarm) => {
+      const row = node("tr"); const level = node("td"); level.append(badge(alarm.level, levelLabel(alarm.level)));
+      const reason = node("td"), details = node("details", "", "alarm-reason");
+      details.append(node("summary", "查看原因"), node("p", alarm.reason ?? "来源未提供原因"));
+      reason.append(details);
+      row.append(level,
+        labelledAlarmCell("仿真位置", positionText(alarm, rate), "mono"),
+        labelledAlarmCell("规则", alarm.rule_id || "未知", "mono"),
+        labelledAlarmCell("记录时间（北京时间）", timeText(alarm.created_at)), reason);
+      return row;
+    }));
+    $("alarm-empty").hidden = filtered.length > 0;
+    text("alarm-empty", state.healthStatus === "loading" ? "正在读取告警…" :
+      state.healthStatus === "error" ? "暂时无法读取告警。请刷新重试。" :
+      state.alarms.length ? "当前已加载记录没有符合筛选的告警。可修改条件或继续加载更早记录。" : "该运行暂无已读取的告警记录。");
+    const recent = state.alarms.slice(0, 3).map((alarm) => {
+      const item = node("article", "", "recent-alarm");
+      item.append(badge(alarm.level, levelLabel(alarm.level)), node("span", positionText(alarm, rate), "mono"),
+        node("p", alarm.reason || "来源未提供原因", "muted"));
+      return item;
+    });
+    $("recent-alarms").replaceChildren(...(recent.length ? recent : [node("p",
+      state.healthStatus === "loading" ? "正在读取告警…" : state.healthStatus === "error" ? "告警暂不可读取。" :
+        "暂无已读取的历史告警；活动状态与历史记录分别呈现。", "empty-state")]));
+    const button = $("load-more-alarms");
+    button.disabled = !state.alarmCursor || state.alarmLoading || state.healthStatus !== "ready";
+    button.textContent = state.alarmLoading ? "正在读取…" : state.alarmCursor ? "加载更早告警" : "已加载全部告警";
+  }
+  function renderReport(state) {
+    const ready = state.reportStatus === "ready", report = state.report;
+    const verdict = reportVerdict(report);
+    const status = $("report-state");
+    status.dataset.result = verdict.result;
+    status.textContent = ready ? verdict.label : state.reportStatus === "loading" ? "正在读取报告…" : state.reportStatus === "error" ? "报告读取失败" : "报告未读取";
+    text("report-scope", "来自当前运行已生成报告的真值对照；不代表独立保留集验收或真实工业诊断能力。未判定、误报与未匹配记录均按来源保留。");
+    text("report-error", state.reportError);
+    $("report-error").hidden = !state.reportError;
+    $("retry-report-button").hidden = state.reportStatus !== "error";
+    const metrics = ready ? [
+      ["受控故障事件", number(report.fault_events)], ["已检出事件", number(report.detected_events)],
+      ["未检出事件", number(report.missed_events)], ["检出率", detectionText(report)],
+      ["误报告警", number(report.false_alarm_count)], ["冗余告警", number(report.redundant_alarm_count)],
+      ["未匹配告警", number(report.unmatched_alarm_count)], ["告警总数", number(report.alarm_count)],
+      ["健康分最小值（全程）", number(report.health_score_min, 2)],
+      ["健康分最大值（全程）", number(report.health_score_max, 2)],
+      ["已分析窗口", number(report.feature_windows)], ["片内未成窗采样点", number(report.dropped_points)],
+    ] : [];
+    $("report-metrics").replaceChildren(...metrics.map(([label, value]) => {
+      const pair = node("div"); pair.append(node("dt", label), node("dd", value)); return pair;
+    }));
+    $("report-reasons").replaceChildren(...(ready && Array.isArray(report.verdict_reasons)
+      ? report.verdict_reasons.map((reason) => node("li", reason)) : []));
+    const events = ready && Array.isArray(report.events) ? report.events : [];
+    $("report-events-body").replaceChildren(...events.map((event) => {
+      const row = node("tr");
+      row.append(node("td", event.event_id ?? "未知", "mono"), node("td", event.type ?? "未知"),
+        node("td", `[${event.start_seq ?? "?"}, ${event.end_seq_exclusive ?? "?"})`, "mono"),
+        node("td", event.detected === true ? "已检出" : event.detected === false ? "未检出" : "未知"),
+        node("td", number(event.lag_samples), "mono")); return row;
+    }));
+    if (ready && !events.length) {
+      const row = node("tr"), cell = node("td", report.fault_events === 0 ? "本报告无受控故障事件，检出率不适用。" : "暂无逐事件记录。", "muted");
+      cell.colSpan = 5; row.append(cell); $("report-events-body").append(row);
+    }
+    $("report-events-section").hidden = !ready;
+    for (const format of ["json", "markdown"]) {
+      const link = $(`report-download-${format}`);
+      if (state.selected && ready) {
+        link.href = apiUrl("/api/report/download", state.selected, { format });
+        link.removeAttribute("aria-disabled"); link.removeAttribute("tabindex");
+      } else { link.removeAttribute("href"); link.setAttribute("aria-disabled", "true"); link.tabIndex = -1; }
+    }
+  }
+  function render(state) {
+    syncLocation(state);
+    const descriptions = {
+      health: ["设备健康", "查看最新已存窗口、活动告警与可追溯的健康趋势。"],
+      alarms: ["告警记录", "按级别和关键词检查当前运行已读取的历史告警。"],
+      reports: ["运行报告", "读取真实生成报告，保留未判定、误报与逐事件结果。"],
+    };
+    text("view-title", descriptions[state.view][0]); text("view-description", descriptions[state.view][1]);
+    for (const view of ["health", "alarms", "reports"]) {
+      $(`${view}-view`).hidden = state.view !== view;
+      const button = $(`nav-${view}`);
+      if (state.view === view) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+    }
+    const error = state.catalogError || state.healthError || state.windowError || state.alarmError || state.fullError;
+    text("global-message", error || (state.catalogStatus === "loading" ? "正在连接本机只读服务…" :
+      state.healthStatus === "loading" ? "正在读取所选设备…" :
+      state.fullLoading ? `正在读取全程趋势，已读取${state.windows.length}个真实窗口…` :
+      state.windowLoading ? "正在读取更早窗口…" : state.alarmLoading ? "正在读取更早告警…" : ""));
+    $("global-message").hidden = !error && state.catalogStatus !== "loading" && state.healthStatus !== "loading" && !state.windowLoading && !state.alarmLoading && !state.fullLoading;
+    text("connection-status", state.catalogStatus === "error" || state.healthStatus === "error" ? "读取失败" :
+      error ? "部分读取失败" : state.healthStatus === "ready" ? "只读连接已就绪" : "正在读取");
+    $("connection-status").dataset.level = error ? "error" : state.healthStatus === "ready" ? "healthy" : "unknown";
+    $("refresh-button").disabled = state.catalogStatus === "loading" || state.healthStatus === "loading";
+    text("last-updated", state.lastRead ? `最近读取（北京时间）${timeText(state.lastRead)}` : "尚未成功读取");
+    text("selected-title", state.selected?.device_id || "选择设备");
+    text("selected-scenario", state.selected ? scenario(state.selected) : "从设备目录选择一项");
+    text("selected-run", state.selected?.run_id || "—");
+    const active = state.healthStatus === "ready" ? activeStatus(state.states)
+      : { level: state.healthStatus === "error" ? "error" : "unknown", label: state.healthStatus === "error" ? "读取失败" : "等待读取" };
+    text("selected-status", active.label); $("selected-status").dataset.level = active.level;
+    const latest = latestWindow(state.windows);
+    text("health-score", latest ? number(latest.health_score, 2) : "—");
+    text("health-window", latest ? `最新已存窗口 [${latest.start_seq}, ${latest.end_seq_exclusive})` : "暂无可用窗口");
+    $("health-view").setAttribute("aria-busy", String(state.healthStatus === "loading"));
+    const older = $("load-older-button");
+    older.disabled = !state.windowCursor || state.windowLoading || state.fullLoading || state.healthStatus !== "ready";
+    older.textContent = state.windowLoading ? "正在读取…" : state.windowCursor ? "加载更早窗口" : "已加载全部窗口";
+    const allWindows = $("load-all-windows-button");
+    allWindows.disabled = !state.windowCursor || state.fullLoading || state.windowLoading || state.healthStatus !== "ready";
+    allWindows.textContent = state.fullLoading ? `读取全程…${state.windows.length}窗` : state.windowCursor ? "全程趋势" : "全程已读取";
+    $("reset-chart-button").disabled = state.windows.length === state.initialWindows.length && state.inspectedSeq === null;
+    renderDevices(state); renderChart(state); renderAlarms(state); renderReport(state);
+  }
+  $("device-search").addEventListener("input", (event) => store.setDeviceSearch(event.target.value));
+  $("alarm-search").addEventListener("input", (event) => store.setAlarmFilter(store.getState().alarmLevel, event.target.value));
+  $("alarm-level-filter").addEventListener("change", (event) => store.setAlarmFilter(event.target.value));
+  $("refresh-button").addEventListener("click", () => { void store.refresh(); });
+  $("load-older-button").addEventListener("click", () => { void store.loadWindows(); });
+  $("load-all-windows-button").addEventListener("click", () => { void store.loadAllWindows(); });
+  $("reset-chart-button").addEventListener("click", () => store.resetWindows());
+  $("load-more-alarms").addEventListener("click", () => { void store.loadAlarms(); });
+  $("retry-report-button").addEventListener("click", () => { void store.retryReport(); });
+  $("health-window-slider").addEventListener("input", (event) => store.inspect(chartPoints[Number(event.target.value)]?.start_seq ?? null));
+  $("show-all-alarms").addEventListener("click", () => store.setView("alarms"));
+  for (const view of ["health", "alarms", "reports"]) $(`nav-${view}`).addEventListener("click", () => store.setView(view));
+  $("health-chart").addEventListener("pointermove", (event) => {
+    const svg = $("health-chart").querySelector("svg");
+    if (!svg || !chartPoints.length) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = ((event.clientX - rect.left) / rect.width * chartLayout.width - chartLayout.left) / chartLayout.plotWidth;
+    const first = chartPoints[0].start_seq, last = chartPoints.at(-1).start_seq;
+    const target = first + Math.max(0, Math.min(1, ratio)) * (last - first);
+    const nearest = chartPoints.reduce((best, row) => Math.abs(row.start_seq - target) < Math.abs(best.start_seq - target) ? row : best);
+    if (nearest.start_seq !== store.getState().inspectedSeq) store.inspect(nearest.start_seq);
+  });
+  window.addEventListener("popstate", () => {
+    restoring = true;
+    const desired = locationSelection(location.search), state = store.getState();
+    const device = state.devices.find((item) => item.device_id === desired.device && (!desired.run || item.run_id === desired.run));
+    store.setView(desired.view);
+    if (device && (!state.selected || deviceKey(device) !== deviceKey(state.selected))) void store.selectDevice(deviceKey(device));
+    restoring = false;
+  });
+  function scheduleChartResize() {
+    const container = $("health-chart");
+    if ($("health-view").hidden || container.clientWidth <= 0 || container.clientHeight <= 0) return;
+    const size = `${container.clientWidth}:${container.clientHeight}`;
+    if (size === lastChartSize || resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      if (!$("health-view").hidden &&
+          `${container.clientWidth}:${container.clientHeight}` !== lastChartSize) renderChart(store.getState());
+    });
+  }
+  function scheduleLayoutResize() {
+    const roster = $("device-list");
+    const size = `${roster.clientWidth}:${roster.clientHeight}`;
+    if (size !== lastRosterSize) {
+      lastRosterSize = size;
+      ensureSelectedInRoster(true);
+    }
+    // Roster visibility is independent of the selected health/alarms/report view.
+    scheduleChartResize();
+  }
+  const observer = typeof ResizeObserver === "function" ? new ResizeObserver(scheduleLayoutResize) : null;
+  if (observer) {
+    observer.observe($("health-chart"));
+    observer.observe($("device-list"));
+  } else window.addEventListener("resize", scheduleLayoutResize);
+  const destroy = store.destroy.bind(store);
+  store.destroy = () => {
+    observer?.disconnect();
+    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    window.removeEventListener("resize", scheduleLayoutResize);
+    destroy();
+  };
+  store.subscribe(render);
+  void store.init();
+  return store;
+}
+if (typeof document !== "undefined") startConsole();

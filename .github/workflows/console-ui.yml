@@ -1,0 +1,24 @@
+name: Console frontend state
+
+on:
+  push:
+    paths:
+      - 'src/g15/console/static/**'
+      - 'tests/frontend/**'
+      - '.github/workflows/console-ui.yml'
+  pull_request:
+    paths:
+      - 'src/g15/console/static/**'
+      - 'tests/frontend/**'
+      - '.github/workflows/console-ui.yml'
+
+jobs:
+  console-state-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test real-data semantics, pagination and asynchronous cancellation
+        run: node --test tests/frontend/*.test.mjs
