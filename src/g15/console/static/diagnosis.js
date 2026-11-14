@@ -48,10 +48,12 @@ function updateLink(id, path, selected, view = null) {
 function renderRadar(dimensions, latest) {
   const container = $("diagnosis-radar");
   if (!latest || latest.risk_dimensions === null || latest.risk_dimensions === undefined) {
-    container.replaceChildren(node("p", "该窗口的旧版数据没有保存五维风险，无法重建。", "fleet-empty")); return;
+    container.replaceChildren(node("p", "该窗口无已存五维风险", "fleet-empty"));
+    text("diagnosis-radar-scope", "暂无已存五维窗口"); return;
   }
   if (dimensions.some((row) => row.risk === null)) {
-    container.replaceChildren(node("p", "存在未知风险维度，不绘制完整五维雷达；请逐项查看右侧状态。", "fleet-empty")); return;
+    container.replaceChildren(node("p", "五维风险数据不完整", "fleet-empty"));
+    text("diagnosis-radar-scope", `最新已存窗口 seq ${latest.start_seq}`); return;
   }
   const width = 360, height = 280, cx = 180, cy = 132, radius = 78, count = dimensions.length;
   const point = (index, scale = 1) => {
@@ -73,19 +75,19 @@ function renderRadar(dimensions, latest) {
   });
   svg.append(svgNode("polygon", { points: dimensions.map((row, index) => point(index, row.risk).join(",")).join(" "), class: "radar-value" }));
   container.replaceChildren(svg);
-  text("diagnosis-radar-scope", `最新已存窗口 seq ${latest.start_seq} · 五维未加权风险；不参与健康总分重算。`);
+  text("diagnosis-radar-scope", `最新已存窗口 seq ${latest.start_seq} · 未加权风险`);
 }
 function renderMeasurements(model) {
   const latest = model.latest;
   text("diagnosis-source-meta", latest?.risk_dimensions ?
-    `最新已存窗口 seq ${latest.start_seq} · 信封版本 ${latest.features_version}；五个风险分组只用于解释，不改变健康总分。` :
-    "该窗口没有可用五维字段；旧版数据不会按当前规则重算或伪造。");
+    `最新已存窗口 seq ${latest.start_seq} · 信封版本 ${latest.features_version}` :
+    "该窗口无已存五维字段");
   $("diagnosis-measurements").replaceChildren(...model.dimensions.map((row) => {
     const card = node("div", "", "measurement");
     const heading = node("div", "", "measurement-heading");
     heading.append(node("span", `${row.label} · ${row.name}`),
       node("span", row.risk === null ? "风险未知" : `风险 ${number(row.risk * 100, 1)}%`));
-    const detail = node("p", `包含 ${row.members.join(" / ")}${row.members.length > 1 ? "；取组内最大风险" : ""}`, "measurement-detail");
+    const detail = node("p", row.members.join(" / "), "measurement-detail");
     const progress = node("progress", "", "measurement-track"); progress.max = 1;
     if (row.risk !== null) progress.value = row.risk;
     progress.setAttribute("aria-label", `${row.label} ${row.risk === null ? "风险未知" : `风险 ${number(row.risk * 100, 1)}%`}`);

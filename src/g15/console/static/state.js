@@ -199,6 +199,12 @@ export function liveStatus(state) {
   if (state.live.status === "limit_reached") return { level: "yellow", label: "已到采集上限" };
   if (state.live.status === "stopping") return { level: "yellow", label: "正在停止仿真采集" };
   if (state.live.status === "starting") return { level: "unknown", label: "正在启动仿真采集" };
+  const paused = state.live.devices.filter((row) => row.capture_paused === true).length;
+  if (paused && paused === state.live.devices.length) return {
+    level: "unknown", label: state.live.devices.some((row) => row.queue_depth > 0)
+      ? "采集已暂停 · 正在处理已有批次" : "全部采集已暂停",
+  };
+  if (paused) return { level: "yellow", label: `${paused} 台暂停 · 其余仿真采集中` };
   if (state.live.devices.some((row) => row.queue_depth > 0)) return { level: "yellow", label: "仿真采集中 · 分析有积压" };
   return { level: "healthy", label: "仿真采集中" };
 }
@@ -216,6 +222,9 @@ export function deviceStatus(state, device, preview = state.previews[deviceKey(d
   if (overall.level === "error") return { level: "error", label: "持续状态异常" };
   if (state.pollPaused) return { level: "unknown", label: "暂停更新 · 已存数据" };
   if (state.live.status !== "running") return { level: "unknown", label: overall.label };
+  if (current.capture_paused === true && state.clock - timestamp(state.live.updated_at_utc) <= LIVE_STALE_MS) {
+    return { level: "unknown", label: current.queue_depth > 0 ? "采集已暂停 · 正在分析" : "采集已暂停 · 已存数据" };
+  }
   if (overall.level === "unknown" || !finite(preview.readAt) || state.clock - preview.readAt > LIVE_STALE_MS ||
       (current.windows_written > 0 && (!Number.isFinite(timestamp(current.last_commit_at_utc)) ||
         state.clock - timestamp(current.last_commit_at_utc) > LIVE_STALE_MS))) {

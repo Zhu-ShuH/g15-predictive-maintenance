@@ -30,4 +30,4 @@ source-roots = ["src"]
 max-line-length = 88
 
 [tool.setuptools.package-data]
-"g15.console" = ["static/*.html", "static/*.css", "static/*.js", "static/*.svg"]
+"g15.console" = ["static/*.html", "static/*.css", "static/*.js", "static/*.svg", "static/*.png", "static/fonts/*"]

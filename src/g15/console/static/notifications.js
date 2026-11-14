@@ -277,9 +277,6 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     const destructive = state.deleting || state.cancelling, busy = state.saving || state.testing || destructive;
     if (state.settings && !dirty[channel]) fill(state.settings);
     $("notification-title").textContent = email ? "红色告警 · 邮件提醒" : "红色告警 · 微信提醒";
-    $("notification-rule-help").textContent = email
-      ? "每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；按最短间隔逐封排队发送。"
-      : "每台设备在本次运行中累计的红色告警事件数 ≥ 阈值时触发。同一告警不会因刷新重复计数；间隔内新红色事件合并提醒。";
     $("notification-channel-choice").value = channel;
     $("notification-channel-choice").disabled = busy;
     $("notification-channel-name").textContent = email ? "163 邮箱" : "PushPlus · 微信";
@@ -295,8 +292,8 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     $("notification-status").textContent = status;
     $("notification-status").dataset.level = state.status?.state === "monitoring" ? "healthy" : state.status?.state === "error" ? "error" : "unknown";
     $("notification-channel-status").textContent = email
-      ? state.configured ? "授权码已配置 · 内容不会回显" : "尚未配置邮件授权码"
-      : state.configured ? "Token 已配置 · 内容不会回显" : "尚未配置 Token";
+      ? state.configured ? "授权码已配置" : "尚未配置邮件授权码"
+      : state.configured ? "Token 已配置" : "尚未配置 Token";
     $("notification-checked").textContent = `最近检查（北京时间）${timestamp(state.status?.last_checked_at)}`;
     const errorText = email ? emailNotificationErrorText : notificationErrorText;
     const error = state.error || (state.status?.last_error_code ? errorText(state.status.last_error_code) : "");
@@ -310,18 +307,11 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     $("notification-preview-button").textContent = state.previewLoading ? "正在生成预览…" : "预览建议与报告";
     $("notification-test").disabled = !state.configured || !selected || pending || busy || dirty[channel];
     $("notification-test").textContent = state.testing ? "正在提交…" : email ? "发送测试邮件" : "发送测试到微信";
-    $("notification-test-scope").textContent = dirty[channel] ? "先保存更改，再预览或发送测试消息。" : pending
-      ? "测试仍在发送或接收结果待确认，请先查看通知记录与接收渠道，避免重复发送。"
-      : state.configured ? email ? "将向当前收件邮箱发送一封真实测试邮件，请在手机邮箱核对。" : "点击会向已配置渠道发送一条真实测试消息。"
-      : email ? "先保存邮箱与授权码，才能发送测试邮件。" : "先保存 Token，才能发送真实测试消息。";
     $("notification-delete-settings").disabled = !state.settings || busy || state.loading;
     $("notification-delete-settings").ariaExpanded = String(confirmation?.action === "delete");
     $("notification-cancel-pending").hidden = !email;
     $("notification-cancel-pending").disabled = !state.settings || state.settings.enabled || busy || state.loading;
     $("notification-cancel-pending").ariaExpanded = String(confirmation?.action === "cancel");
-    $("notification-maintenance-note").textContent = email
-      ? "取消待发邮件前，请先关闭并保存自动提醒。取消会保留邮箱配置；删除设置会清除本渠道配置与凭据。"
-      : "删除只影响当前微信渠道，其他渠道和历史发送记录保留。";
     $("notification-confirmation").hidden = !confirmation;
     if (confirmation) {
       const deleting = confirmation.action === "delete";
@@ -335,7 +325,7 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
     }
     $("notification-preview").hidden = !state.preview;
     $("notification-preview-empty").hidden = Boolean(state.preview);
-    $("notification-preview-empty").textContent = state.previewLoading ? "正在从所选设备生成消息预览…" : "选择设备并生成预览，核对维护建议与报告内容。预览不会发送消息。";
+    $("notification-preview-empty").textContent = state.previewLoading ? "正在生成消息预览…" : "暂无预览";
     $("notification-attachments").hidden = !email || !state.preview;
     if (state.preview) {
       $("notification-preview-title").textContent = state.preview.title;
@@ -343,14 +333,13 @@ export function mountNotifications({ document: doc = globalThis.document, onSele
       $("notification-preview-body").textContent = state.preview.markdown;
       if (email) $("notification-attachments").textContent = `完整报告附件：${state.preview.attachments.map((item) => item.filename).join(" · ")}`;
     }
-    $("notification-delivery-note").textContent = email ? "SMTP 已接收 ≠ 邮箱已收到" : "渠道已接收 ≠ 手机已送达";
     const history = state.history.map((row) => {
       const item = element("tr"), detail = element("td", row.device_id || "设备未知");
       detail.append(element("small", row.run_id || "运行未知", "notification-run"));
       const statusCell = element("td", notificationHistoryState(row.state, channel, row.error_code));
       statusCell.dataset.state = row.error_code === "notification_cancelled" ? "cancelled" : row.state;
       if (row.error_code) statusCell.append(element("small", errorText(row.error_code), "notification-history-error"));
-      if (row.uncertain === true) statusCell.append(element("small", "接收结果待确认，请先核对接收渠道", "notification-history-error"));
+      if (row.uncertain === true) statusCell.append(element("small", "接收结果待确认", "notification-history-error"));
       item.append(detail, element("td", Number.isSafeInteger(row.red_count) ? row.red_count : "未知"),
         statusCell, element("td", Number.isSafeInteger(row.attempts) ? row.attempts : "未知"), element("td", timestamp(row.created_at)));
       return item;

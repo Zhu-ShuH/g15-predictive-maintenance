@@ -717,12 +717,13 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 | `/screen` | 深色大屏驾驶舱：真实健康分布、设备矩阵、趋势、维护建议和采集状态；仅接device/run选择参数 |
 | `/operations` | 浅色运营看板：真实状态指标卡、所选设备趋势与可搜索设备表；仅接device/run选择参数 |
 | `/diagnosis` | 单设备诊断工作台：已存健康分、真实告警驱动特征与证据链；仅接device/run选择参数 |
+| `/simulation` | 仿真采集控制与数据流看板：仅读取真实持续状态和计数增量；仅接device/run选择参数 |
 | `/api/catalog` | 明确登记的公开资源元数据与readonly=true；不是扫描或暴露任意运行根 |
 | `/api/health?run_id=...&device_id=...&page_size=...` | 向真实查询服务发起认证GET，保持成功响应；可转发独立windows_cursor/alarms_cursor，无任意URL/路径 |
 | `/api/report?run_id=...&device_id=...` | 先用同资源真实page_size=1查询验证权限，再读固定已生成summary.json，核对run/device归属 |
 | `/api/report/download?...&format=json或markdown` | 同样授权并核归属，仅下载summary.json或summary.md；没有任意文件下载 |
 
-除§19两条本机通知设置/测试POST外，未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、其他写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
+除§18本机仿真采集控制及§19/§20本机通知操作POST外，未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、其他写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
 
 页面最新健康分取最新已存窗口；活动告警取states，历史告警单列。趋势按真实序号/采样率绘制，只展示已读取范围，全程必须沿cursor读至耗尽才标完整。窗口翻页不消费告警伴随重放，告警翻页同理；切设备与刷新丢弃旧异步响应。报告passed=null、verifiable=false、detection_rate=null保留不可判定含义，不能显示0或通过；受控事件检出通过也必须保留误报计数。显示时间使用明确的Asia/Shanghai时区，原始报告下载不改写时间。
 
@@ -732,7 +733,7 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 
 诊断工作台复用已存窗口、活动状态和已加载告警。窗口新增只读 `risk_dimensions`：五个固定键 `level_offset/vibration_strength/variability/impact/spectral`，分别对应 mean、rms、std、冲击三项和频谱两项；多特征组取最大未加权风险，组内缺特征则该维度为null。此分解不参与或重算健康总分，不改变告警阈值。版本2写入并投影五维，版本1返回null且不拿当前规则重算历史。五维均有效时才绘制雷达，否则逐项显示风险/未知。证据链最多展示最近五条已加载记录并保留分页边界，可跳回报告和维护建议，不触发在线诊断、SLA、会诊或设备动作。
 
-本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。远程暴露、账户登录、设备控制和完整容量需另有实现与评审，当前界面不据此宣称。
+本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。§18仅控制本机仿真采集；远程暴露、账户登录、物理设备控制和完整容量需另有实现与评审，当前界面不据此宣称。
 
 
 ## 18. 持续仿真会话增量（#160，候选）
@@ -742,6 +743,12 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 `HealthQueryApplication(allow_live_runs=True)`是显式opt-in，默认False隐藏持续资源。原认证授权、精确run/device、只读事务与各分页流高水位保持；live描述与数据库schema/status/scenario/start身份逐项一致。主服务不增加远程登录、多租户或写控制HTTP接口。
 
 控制台可选GET/HEAD `/api/live`，无运行时为404；公开schema_version、session_id、status、started_at_utc/updated_at_utc、sample_rate_hz/window_points/interval_seconds与每设备采集/处理样本、窗口/告警、待分析批次、最近采集/提交和固定安全错误。路径/凭据及任意运行时字段不投影。浏览器无Bearer，内嵌服务在内存按请求签发短期凭据。
+
+用户直接要求的本机仿真启停候选增加 `POST /api/live/control`：JSON 严格为 `{"session_id":"当前会话","action":"pause或resume"}`，单设备操作另加成对 `run_id/device_id`，省略 pair 表示全体。要求精确同源 Origin、`X-G15-Console-Action: live-control`、JSON Content-Type，正文不超过4096字节；不接受重复字段、未知字段、Transfer-Encoding或Expect。成功200返回完整公开状态；400参数错误、403来源不符、404未注册pair、409 `live_session_changed`/`live_not_running`、503 `live_control_unavailable`。未显式配置控制提供者的独立控制台不能控制采集。
+
+启用控制时 `/api/live` 增加 `controls_available=true`；具备本增量的运行时每设备增加严格布尔 `capture_paused`。服务整体 `status=running` 表示会话仍运行，不能据此忽略单设备暂停。暂停确认后不再新增该设备样本；已接受批次继续分析排空。恢复沿原run、样本序号、评分状态继续，不清空历史、重置统计或补生成暂停期间样本；时长/磁盘保护仍生效，终态不可恢复。本增量不改变严格 `live-session.json` 字段、查询主服务或物理设备接口。
+
+数据流看板另投影运行时已有的真实观测：设备 `pending_samples` 必须等于采集减提交样本数；会话 `backpressure_events/late_cycles` 为非负整数，`limit_reason` 仅为null、duration_limit或disk_limit。`latency` 只公开 `recent_count`（0–2048）与 `recent_p95_seconds`；无提交时二者为0/null，有观测时延迟必须有限非负，表示样本生成开始到SQLite提交返回的近2048条P95，不是硬件延迟。缺失的旧提供者字段保持缺失，不补零；自由文本、路径与资源进程信息不投影。
 
 持续报告只描述实际提交的运行统计，verifiable=false，passed/detection_rate及无真值支持的指标为null；不计独立检出率。原离线报告路径与身份校验继续保留。详细生命周期、停止、资源保护与首次实测口径见[持续采集说明](live.md)。该候选需真实非作者Review，不改变#136 Gate0。
 
@@ -780,3 +787,28 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 - 传输主机/端口固定、TLS校验不可关闭，正文/MIME/响应/队列/重试/worker均有界。绝对期限覆盖DNS、TLS、认证和DATA阶段；迟返DNS不能继续发送，至多一个在途请求worker，未闭合不能声称停机完成。DATA后断线或确认丢失须标记uncertain；默认至多3次有界退避重试，不承诺严格仅一次或手机送达。报告超限整封失败，不截断或只发本机链接。
 
 配置、实测确认与故障边界见[163邮箱通知](smtp_notifications.md)。假SMTP和内部复核不能代替真实邮箱/手机收件及独立故障或容量验收。
+
+## 本机波形与独立实验扩展（2026-11-14）
+
+用户授权本机控制台新增 `/laboratory`，沿用 loopback 与现有资源身份边界；本地实现与验证不代替正式接口 Review 或项目验收。
+
+- `GET /api/waveform`：精确 `run_id/device_id` 必须在控制台已登记目录中；可选十进制 `start_seq` 和 `count`，单次 2–4096 点。只读已提交、SHA 校验通过的原始四数组，不读取真值。纳秒时间戳为字符串，相对秒数为图表时间轴。
+- `GET /api/laboratory`：公开实验预设、服务限额和本机历史。
+- `POST /api/laboratory/experiments`：接受 profile、seed、total_points、noise_std、degradation_rate_per_sample、fault_amplitude 六项；故障场景可同时增加 fault_type、fault_start_seq、fault_duration_points 三项，复用 spike／step／burst。旧六项请求与历史保持兼容。唯一同源 Origin、`X-G15-Console-Action: laboratory` 和严格至多 4096 字节 JSON，202 表示接收而非完成。实验服务须通过 `--laboratory-root` 显式启用。
+- `GET /api/laboratory/experiment?id=...`：公开实验状态、参数及真实分析结果；`GET /api/laboratory/waveform?id=...`：服务拥有的独立实验样本，支持相同有界区间参数。浏览器不提交路径，实验资源不加入持续设备目录。
+- 采样率 256 Hz、窗口 256 点、8192–65536 点／实验、单并发、最多 20 条实验、128 MiB 独立预算；达到上限拒绝，不自动删记录。真值仅由原有报告层读取；温度和显示频谱不改变现有评分公式。
+
+更完整语义、错误边界和运行说明见 [波形与实验台](laboratory.md)。
+
+## 本机回放、比较及告警处置扩展（2026-11-14）
+
+用户直接授权新增 `/workbench`，共用当前精确授权资源、明确配置的本地结束会话目录及独立实验目录；现有业务查询协议、分析表结构、评分公式和告警状态机不变。新增写入仅限独立处置库，不将确认状态写回分析库。
+
+- `OperationsController(root, *, runs_root, catalog_provider, authorize, laboratory=None, live_status_provider=None, history_provider=None)`；公开方法 `overview/detail/compare/dispositions/record_disposition/resolve_waveform/close`。当前数据每次读写前验证真实上游授权；历史来源由服务端明确注册，不能通过请求提交路径。
+- GET `/api/workbench`、`/api/workbench/run?id=...`、`/api/workbench/compare?ids=...`、`/api/workbench/dispositions?id=...`、`/api/workbench/waveform?id=...&start_seq=...&count=...`。ID 为服务端目录内的 `live:<run_id>` 或 `experiment:<lab_id>`，比较最多四项。样本读取复用完整 SHA、身份、有界数组及共享并发检查。
+- 回放详情读取真实已提交窗口、历史告警及沿用既有映射的事件建议。完整快照上限8192窗、4096告警，超限413，不静默裁切。比较按相对样本秒对齐；延迟对象以kind区分capture_to_commit、experiment_elapsed和unavailable，未知值为null。
+- POST `/api/workbench/dispositions` 严格字段为 id、alarm_key、action、operator、note、request_id。action仅acknowledge/note，记录绑定实际告警的run/device/rule/start复合身份；当前资源先认证再读原始数据及写独立记录。唯一同源Origin、`X-G15-Console-Action: workbench`、JSON正文至多16384字节；其他既有POST上限不变。处理人≤80字符，备注≤2000字符，拒绝重复字段、非有限值和未知字段。
+- 处置记录只追加，保存UTC时间、序号与摘要链，重启验证并保留；同request_id和同正文重试返回同记录，正文冲突409，同告警重复确认409。确认不清除真实告警，不宣称执行维修；本机自填处理人不是认证账户。
+- 新增live CLI可选 `--operations-root`，缺省 `<output-root>/workbench`；启动时注册有界、已结束的本机历史会话。服务停止关闭处置写入锁，异常不跳过其他清理。
+
+具体字段、限额、导出与验收边界见[回放与运行对比](workbench.md)。本地自动复核不代替正式接口Review、用户整体体验验收或项目Gate0结论。

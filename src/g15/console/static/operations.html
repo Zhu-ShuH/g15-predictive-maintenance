@@ -8,39 +8,41 @@
   <link rel="stylesheet" href="/assets/fleet.css">
   <link rel="stylesheet" href="/assets/cyber-wafuu.css">
   <script type="module" src="/assets/fleet.js"></script>
+  <link rel="stylesheet" href="/assets/industrial.css">
+  <script type="module" src="/assets/shell.js"></script>
 </head>
 <body data-fleet-mode="operations">
 <a class="skip-link" href="#fleet-main">跳到主要内容</a>
 <div class="fleet-shell">
   <header class="fleet-header">
-    <a class="fleet-brand" href="/" aria-label="返回 G15 控制台"><span class="fleet-brand-mark">G</span><span><strong>G15 · 运营看板</strong><small>设备健康总览与只读分析</small></span></a>
-    <div class="fleet-header-tools"><span id="fleet-status" class="fleet-status" data-level="unknown">正在连接</span><nav class="fleet-links" aria-label="页面切换"><a id="nav-console" href="/">设备控制台</a><a id="nav-diagnosis" href="/diagnosis">诊断工作台</a><a id="nav-screen" href="/screen">进入大屏</a><a id="nav-notifications" href="/?view=notifications">手机通知</a><button id="fleet-refresh" class="fleet-button" type="button">刷新</button></nav></div>
+    <a class="fleet-brand" href="/" aria-label="返回 G15 控制台"><span class="fleet-brand-mark">G</span><span><strong>G15 · 运营看板</strong></span></a>
+    <div class="fleet-header-tools"><span id="fleet-status" class="fleet-status" data-level="unknown">正在连接</span><nav class="fleet-links" aria-label="页面切换"><a id="nav-console" href="/">设备控制台</a><a href="/simulation">仿真控制</a><a id="nav-diagnosis" href="/diagnosis">诊断工作台</a><a id="nav-screen" href="/screen">进入大屏</a><a id="nav-notifications" href="/?view=notifications">手机通知</a><button id="fleet-refresh" class="fleet-button" type="button">刷新</button></nav></div>
   </header>
   <main id="fleet-main" class="fleet-main" tabindex="-1">
-    <div class="operations-heading"><div><h1>设备健康总览</h1><p>汇总当前登记设备的真实查询结果，保留未知与读取失败。</p></div><span id="fleet-updated">尚未更新</span></div>
+    <div class="operations-heading"><div><h1>设备健康总览</h1></div><span id="fleet-updated">尚未更新</span></div>
     <div id="fleet-message" class="fleet-message" role="status" hidden></div>
     <section class="operations-kpis" aria-label="设备状态统计">
       <article class="metric-card" data-kind="total"><span>登记设备</span><strong id="kpi-total">—</strong><small id="fleet-total-caption">正在读取目录</small></article>
-      <article class="metric-card" data-kind="red"><span>红色活动告警</span><strong id="kpi-red">—</strong><small>按当前有效状态统计</small></article>
-      <article class="metric-card" data-kind="yellow"><span>黄色活动告警</span><strong id="kpi-yellow">—</strong><small>需要关注与复核</small></article>
-      <article class="metric-card" data-kind="healthy"><span>无活动告警</span><strong id="kpi-healthy">—</strong><small>仅代表当前已查询状态</small></article>
-      <article class="metric-card" data-kind="unknown"><span>未知 / 已过期</span><strong id="kpi-unknown">—</strong><small>不计入健康设备</small></article>
-      <article class="metric-card" data-kind="error"><span>读取失败</span><strong id="kpi-error">—</strong><small>需恢复查询后再判断</small></article>
+      <article class="metric-card" data-kind="red"><span>红色活动告警</span><strong id="kpi-red">—</strong></article>
+      <article class="metric-card" data-kind="yellow"><span>黄色活动告警</span><strong id="kpi-yellow">—</strong></article>
+      <article class="metric-card" data-kind="healthy"><span>无活动告警</span><strong id="kpi-healthy">—</strong></article>
+      <article class="metric-card" data-kind="unknown"><span>未知 / 已过期</span><strong id="kpi-unknown">—</strong></article>
+      <article class="metric-card" data-kind="error"><span>读取失败</span><strong id="kpi-error">—</strong></article>
     </section>
     <section class="fleet-panel operations-trend" aria-labelledby="fleet-trend-title">
       <div class="fleet-panel-heading"><div><h2 id="fleet-trend-title">健康指数趋势</h2><p id="fleet-trend-meta" class="fleet-subtitle">等待真实窗口</p></div><div class="trend-selection"><strong id="fleet-selection">正在选择设备</strong><a id="trend-console-link" href="/">详细分析</a></div></div>
       <div id="fleet-trend" class="fleet-trend" aria-busy="true"></div>
-      <p class="fleet-note">趋势来自所选设备当前已加载的真实窗口；全程统计请进入控制台读取报告。</p>
+
     </section>
     <section class="fleet-panel operations-devices" aria-labelledby="operations-devices-title">
-      <div class="fleet-panel-heading"><div><h2 id="operations-devices-title">设备状态</h2><p id="fleet-matrix-caption" class="fleet-subtitle">按异常级别与健康分排序</p></div><label class="fleet-search"><span>搜索设备</span><input id="fleet-search" type="search" placeholder="设备或运行标识" autocomplete="off"></label></div>
+      <div class="fleet-panel-heading"><div><h2 id="operations-devices-title">设备状态</h2><p id="fleet-matrix-caption" class="fleet-subtitle">正在读取设备</p></div><label class="fleet-search"><span>搜索设备</span><input id="fleet-search" type="search" placeholder="设备或运行标识" autocomplete="off"></label></div>
       <div class="fleet-table-scroll" role="region" aria-label="设备健康查询结果"><table class="fleet-table"><caption class="sr-only">当前登记设备的真实健康状态</caption><thead><tr><th scope="col">设备</th><th scope="col">最新健康分</th><th scope="col">当前状态</th><th scope="col">已采集 / 已提交窗口</th><th scope="col">最近提交（北京时间）</th><th scope="col">只读操作</th></tr></thead><tbody id="fleet-device-table"></tbody></table></div>
       <p id="fleet-table-empty" class="fleet-empty" hidden>没有匹配的设备。</p>
-      <p class="fleet-note">不提供租户切换、登录、会诊或工单写入；这些能力不属于当前本机只读交付。</p>
+
     </section>
   </main>
   <footer class="fleet-footer"><span>G15 预测性维护场景沙盘</span><span><a id="nav-operations" href="/operations">运营看板</a> · <a href="/screen">大屏驾驶舱</a></span></footer>
 </div>
-<noscript><p class="fleet-noscript">页面需要 JavaScript 读取真实查询结果。</p></noscript>
+<noscript><p class="fleet-noscript">JavaScript 未启用</p></noscript>
 </body>
 </html>

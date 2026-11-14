@@ -62,8 +62,6 @@ export function startConsole() {
     const container = $("device-list");
     const overflow = container.scrollWidth > container.clientWidth;
     const verticalOverflow = container.scrollHeight > container.clientHeight;
-    const hint = $("roster-scroll-hint");
-    if (hint) hint.hidden = !overflow;
     const selected = container.querySelector('[data-device-key][data-selected="true"]');
     if (!selected) { revealedRosterKey = null; return; }
     const key = selected.dataset.deviceKey;
@@ -118,7 +116,7 @@ export function startConsole() {
       const item = node("li"); item.append(button); return item;
     });
     container.replaceChildren(...rows);
-    if (!rows.length) container.append(node("li", state.devices.length ? "没有匹配的设备。请调整搜索内容。" :
+    if (!rows.length) container.append(node("li", state.devices.length ? "没有匹配的设备" :
       state.catalogStatus === "loading" ? "正在读取设备目录…" :
       state.catalogStatus === "error" ? state.catalogError : "设备目录暂无记录。", "empty-state"));
     if (focused) [...container.querySelectorAll("[data-device-key]")].find((item) =>
@@ -145,8 +143,7 @@ export function startConsole() {
       $("chart-legend").hidden = true;
       container.replaceChildren(node("p", !state.selected ? "选择设备后读取真实窗口。" : state.healthStatus === "loading" ? "正在读取真实健康窗口…" :
         state.healthStatus === "error" ? state.healthError : "当前运行暂无已提交的健康窗口。", "empty-state"));
-      text("chart-range", "—"); text("chart-inspector", "读取后可用滑块检查实际窗口。");
-      text("chart-description", "曲线只展示已成功读取的真实窗口，不补造缺失数据。");
+      text("chart-range", "—"); text("chart-inspector", "暂无窗口");
       return;
     }
     const rate = points[0].sample_rate_hz;
@@ -185,8 +182,6 @@ export function startConsole() {
     svg.append(svgNode("circle", { cx: x(chosen), cy: y(chosen.health_score), r: 5, class: "chart-point" }));
     container.replaceChildren(svg);
     text("chart-range", `已加载 ${points.length} 窗 · ${number(first, 1)}–${number(last, 1)} ${seconds ? "s" : "seq"} · ${state.windowCursor ? "部分范围" : "全部已提交窗口"}`);
-    const scopeText = state.windowCursor ? "当前仅显示已加载范围，可继续读取更早窗口。" : "已读取该运行的全部已提交窗口；未成窗的采样点不在曲线内。";
-    text("chart-description", (seconds ? "横轴为按真实采样率换算的仿真相对秒数。" : "横轴为实际窗口起始采样点。") + scopeText + "竖线标记范围内已读取的历史告警。");
     const visibleLevel = level => state.alarms.some(row => row.level === level && rawX(row) >= first && rawX(row) <= last);
     const hasRed = visibleLevel("red"), hasYellow = visibleLevel("yellow");
     $("chart-legend").hidden = !hasRed && !hasYellow;
@@ -219,7 +214,7 @@ export function startConsole() {
     $("alarm-empty").hidden = filtered.length > 0;
     text("alarm-empty", state.healthStatus === "loading" ? "正在读取告警…" :
       state.healthStatus === "error" ? "暂时无法读取告警。请刷新重试。" :
-      state.alarms.length ? "当前已加载记录没有符合筛选的告警。可修改条件或继续加载更早记录。" : "该运行暂无已读取的告警记录。");
+      state.alarms.length ? "没有符合筛选的已加载告警" : "该运行暂无已读取的告警记录");
     const recent = state.alarms.slice(0, 3).map((alarm) => {
       const item = node("article", "", "recent-alarm");
       item.append(badge(alarm.level, levelLabel(alarm.level)), node("span", positionText(alarm, rate), "mono"),
@@ -228,7 +223,7 @@ export function startConsole() {
     });
     $("recent-alarms").replaceChildren(...(recent.length ? recent : [node("p",
       state.healthStatus === "loading" ? "正在读取告警…" : state.healthStatus === "error" ? "告警暂不可读取。" :
-        "暂无已读取的历史告警；活动状态与历史记录分别呈现。", "empty-state")]));
+        "暂无已读取的历史告警", "empty-state")]));
     const button = $("load-more-alarms");
     button.disabled = !state.alarmCursor || state.alarmLoading || state.healthStatus !== "ready";
     button.textContent = state.alarmLoading ? "正在读取…" : state.alarmCursor ? "加载更早告警" : "已加载全部告警";
@@ -243,10 +238,10 @@ export function startConsole() {
     if (advice.missingActiveRules.length) {
       warnings.push(`以下活动规则尚未加载对应级别的来源告警：${advice.missingActiveRules.join("、")}。`);
     }
-    if (advice.partial) warnings.push("仍有更早告警未加载；本页只覆盖当前已读取记录。");
+    if (advice.partial) warnings.push("仍有更早告警未加载。");
     text("maintenance-warning", warnings.join(""));
     $("maintenance-warning").hidden = !warnings.length;
-    text("maintenance-scope", `基于已加载的 ${advice.loadedAlarmCount} 条真实告警；每个规则选用对应当前活动级别的告警，否则选用最新历史记录。`);
+    text("maintenance-scope", `已加载 ${advice.loadedAlarmCount} 条告警`);
     const rate = latestWindow(state.windows)?.sample_rate_hz;
     const cards = advice.items.map((item) => {
       const card = node("article", "", "maintenance-card");
@@ -258,11 +253,10 @@ export function startConsole() {
       heading.append(labels, node("strong", item.urgency, "maintenance-urgency"));
       const source = node("p", `${item.ruleId} · ${positionText({ start_seq: item.startSeq }, rate)}`, "maintenance-source mono");
       const basis = node("p", item.basis, "maintenance-basis");
-      const drivers = node("p", item.drivers.length ? `扣分特征：${item.drivers.join("、")}` : "扣分特征未从来源原因中识别，使用通用复核建议。", "maintenance-drivers");
+      const drivers = node("p", item.drivers.length ? `扣分特征：${item.drivers.join("、")}` : "扣分特征未知", "maintenance-drivers");
       const actions = node("ul", "", "maintenance-actions");
       actions.append(...item.actions.map((action) => node("li", action)));
       const footer = node("div", "", "maintenance-card-footer");
-      footer.append(node("span", "需人工确认 · 未执行任何操作", "maintenance-confirmation"));
       const sourceButton = node("button", "查看来源告警", "text-button");
       sourceButton.type = "button";
       sourceButton.addEventListener("click", () => {
@@ -280,13 +274,10 @@ export function startConsole() {
     const ready = state.reportStatus === "ready", report = state.report;
     const continuous = Boolean(liveDevice(state, state.selected));
     text("report-title", continuous ? "持续运行摘要" : "运行分析报告");
-    text("report-description", continuous ? "按读取时已提交数据生成；持续采集不作受控故障验收。" : "由报告模块从同一运行的数据与分析结果生成。");
     const verdict = reportVerdict(report);
     const status = $("report-state");
     status.dataset.result = verdict.result;
     status.textContent = ready ? (continuous && verdict.result === "unverifiable" ? "持续运行摘要 · 未判定" : verdict.label) : state.reportStatus === "loading" ? "正在读取报告…" : state.reportStatus === "error" ? "报告读取失败" : "报告未读取";
-    text("report-scope", continuous ? "这是持续仿真的已提交数据摘要；没有受控真值对照，不推导检出率或验收通过。自动采集不会打断当前报告，刷新可读取新摘要。"
-      : "来自当前运行已生成报告的真值对照；不代表独立保留集验收或真实工业诊断能力。未判定、误报与未匹配记录均按来源保留。");
     text("report-error", state.reportError);
     $("report-error").hidden = !state.reportError;
     $("retry-report-button").hidden = state.reportStatus !== "error";
@@ -335,26 +326,23 @@ export function startConsole() {
     const devices = state.live?.devices || [];
     const sum = (field) => devices.reduce((total, device) => total + device[field], 0);
     text("live-source", state.live ? `${devices.length} 台仿真设备 · ${number(state.live.sample_rate_hz)} Hz · ${number(state.live.window_points)} 点 / 窗`
-      : "持续状态暂不可读取；已存数据仍可查看。");
+      : "持续状态暂不可读取");
     const totals = state.live ? [["已采集样本", number(sum("captured_samples"))], ["已处理样本", number(sum("processed_samples"))],
       ["已写入窗口", number(sum("windows_written"))], ["待分析批次", number(sum("queue_depth"))]] : [];
     if (!renderedState || state.live !== renderedState.live) $("live-totals").replaceChildren(...totals.map(([label, value]) => {
       const pair = node("div"); pair.append(node("dt", label), node("dd", value)); return pair;
     }));
     text("live-note", state.liveError || state.live?.error || (state.pollPaused
-      ? "页面在后台时暂停自动读取；返回后重新读取状态与概览。"
-      : `状态更新（北京时间）${timeText(state.live?.updated_at_utc)}；每轮完成约 2 秒后继续读取。超过 10 秒未更新会标记过期。`));
+      ? "自动读取已暂停"
+      : `状态更新（北京时间）${timeText(state.live?.updated_at_utc)}`));
   }
   function render(state) {
     syncLocation(state);
-    const descriptions = {
-      health: ["设备健康", "查看最新已存窗口、活动告警与可追溯的健康趋势。"],
-      alarms: ["告警记录", "按级别和关键词检查当前运行已读取的历史告警。"],
-      maintenance: ["维护建议", "把真实告警转为可核查的检查建议，所有处置均需人工确认。"],
-      reports: ["运行报告", "读取真实生成报告，保留未判定、误报与逐事件结果。"],
-      notifications: ["手机通知", "配置红色告警阈值，将维护建议与报告发送到微信。"],
+    const titles = {
+      health: "设备健康", alarms: "告警记录", maintenance: "维护建议",
+      reports: "运行报告", notifications: "手机通知",
     };
-    text("view-title", descriptions[state.view][0]); text("view-description", descriptions[state.view][1]);
+    text("view-title", titles[state.view]);
     for (const view of VIEWS) {
       $(`${view}-view`).hidden = state.view !== view;
       const button = $(`nav-${view}`);
@@ -375,7 +363,7 @@ export function startConsole() {
     $("refresh-button").disabled = state.catalogStatus === "loading" || state.healthStatus === "loading";
     text("last-updated", state.lastRead ? `最近读取（北京时间）${timeText(state.lastRead)}` : "尚未成功读取");
     text("selected-title", state.selected?.device_id || "选择设备");
-    text("selected-scenario", state.selected ? scenario(state.selected) : "从设备目录选择一项");
+    text("selected-scenario", state.selected ? scenario(state.selected) : "尚未选择设备");
     text("selected-run", state.selected?.run_id || "—");
     const active = selectedDeviceStatus(state);
     text("selected-status", active.label); $("selected-status").dataset.level = active.level;

@@ -9,16 +9,18 @@
   <link rel="stylesheet" href="/assets/diagnosis.css">
   <link rel="stylesheet" href="/assets/cyber-wafuu.css">
   <script type="module" src="/assets/diagnosis.js"></script>
+  <link rel="stylesheet" href="/assets/industrial.css">
+  <script type="module" src="/assets/shell.js"></script>
 </head>
 <body data-fleet-mode="diagnosis">
 <a class="skip-link" href="#diagnosis-main">跳到主要内容</a>
 <div class="fleet-shell">
   <header class="fleet-header">
-    <a class="fleet-brand" href="/" aria-label="返回 G15 控制台"><span class="fleet-brand-mark">G</span><span><strong>G15 · 诊断工作台</strong><small>单设备已存分析结果</small></span></a>
-    <div class="fleet-header-tools"><span id="fleet-status" class="fleet-status" data-level="unknown">正在读取</span><nav class="fleet-links" aria-label="页面切换"><a id="nav-console" href="/">设备控制台</a><a id="nav-operations" href="/operations">运营看板</a><a id="nav-screen" href="/screen">大屏</a><button id="fleet-refresh" class="fleet-button" type="button">刷新</button></nav></div>
+    <a class="fleet-brand" href="/" aria-label="返回 G15 控制台"><span class="fleet-brand-mark">G</span><span><strong>G15 · 诊断工作台</strong></span></a>
+    <div class="fleet-header-tools"><span id="fleet-status" class="fleet-status" data-level="unknown">正在读取</span><nav class="fleet-links" aria-label="页面切换"><a id="nav-console" href="/">设备控制台</a><a href="/simulation">仿真控制</a><a id="nav-operations" href="/operations">运营看板</a><a id="nav-screen" href="/screen">大屏</a><button id="fleet-refresh" class="fleet-button" type="button">刷新</button></nav></div>
   </header>
   <main id="diagnosis-main" class="fleet-main" tabindex="-1">
-    <div class="operations-heading"><div><h1>诊断工作台</h1><p>读取所选设备的真实健康窗口与告警依据，不执行在线诊断或设备控制。</p></div><span id="fleet-updated">尚未更新</span></div>
+    <div class="operations-heading"><div><h1>诊断工作台</h1></div><span id="fleet-updated">尚未更新</span></div>
     <div id="fleet-message" class="fleet-message" role="status" hidden></div>
     <div class="diagnosis-layout">
       <div class="diagnosis-left">
@@ -28,38 +30,38 @@
           <p id="diagnosis-run" class="diagnosis-run">运行标识：—</p>
           <div class="diagnosis-recommendations"><span>异常设备快捷选择</span><div id="diagnosis-recommended">暂无可推荐设备</div></div>
           <button id="diagnosis-read" class="diagnosis-primary" type="button" disabled>读取最新已存结果</button>
-          <p class="fleet-note">“读取”只刷新现有分析，不触发新仿真、模型推理或维修操作。</p>
+
         </section>
         <section class="fleet-panel" aria-labelledby="diagnosis-radar-title">
           <div class="fleet-panel-heading"><div><h2 id="diagnosis-radar-title">五维风险分解</h2><p class="fleet-subtitle">电平 / 强度 / 波动 / 冲击 / 频谱</p></div></div>
           <div id="diagnosis-radar" class="diagnosis-radar"><p class="fleet-empty">等待已存五维数据…</p></div>
-          <p id="diagnosis-radar-scope" class="fleet-note">五维来自最新已存窗口；旧版或未知维度不按 0 处理，也不补造温度、电流数据。</p>
+          <p id="diagnosis-radar-scope" class="fleet-note">暂无已存窗口</p>
         </section>
       </div>
       <div class="diagnosis-right">
         <section class="fleet-panel" aria-labelledby="diagnosis-result-title">
           <div class="fleet-panel-heading"><div><h2 id="diagnosis-result-title">诊断结果</h2><p id="diagnosis-device" class="fleet-subtitle">正在选择设备</p></div><a id="diagnosis-report-link" href="/?view=reports">查看运行报告</a></div>
           <div class="diagnosis-score-row"><strong id="diagnosis-score">—</strong><span id="diagnosis-status" class="table-status" data-level="unknown">等待数据</span></div>
-          <p class="diagnosis-score-caption">健康指数 HI · 越高越接近配置的健康基线</p>
+          <p class="diagnosis-score-caption">健康指数 HI</p>
           <dl class="diagnosis-metadata">
             <div><dt>评分 / 规则版本</dt><dd id="diagnosis-rule">—</dd></div>
             <div><dt>最新已存窗口</dt><dd id="diagnosis-window">—</dd></div>
           </dl>
           <div class="diagnosis-source"><strong>五维数据来源</strong><p id="diagnosis-source-meta">暂无已存五维数据</p></div>
           <div id="diagnosis-measurements" class="diagnosis-measurements"></div>
-          <p class="fleet-note">这是教学沙盘的启发式结果，不是剩余寿命预测或真实设备故障确诊。</p>
+
         </section>
         <section class="fleet-panel" aria-labelledby="diagnosis-evidence-title">
           <div class="fleet-panel-heading"><div><h2 id="diagnosis-evidence-title">告警证据链</h2><p id="diagnosis-evidence-count" class="fleet-subtitle">尚未读取</p></div><a id="diagnosis-advice-link" href="/?view=maintenance">维护建议</a></div>
           <ol id="diagnosis-evidence-list" class="diagnosis-evidence-list"></ol>
           <p id="diagnosis-evidence-empty" class="fleet-empty">暂无已读取的告警证据。</p>
-          <p id="diagnosis-evidence-scope" class="fleet-note">证据来自当前已加载告警；记录时间以北京时间显示，窗口位置保留原始采样序号。</p>
+
         </section>
       </div>
     </div>
   </main>
-  <footer class="fleet-footer"><span>G15 预测性维护场景沙盘</span><span>本机只读 · 真实来源 · 人工确认后处置</span></footer>
+  <footer class="fleet-footer"><span>G15 预测性维护场景沙盘</span></footer>
 </div>
-<noscript><p class="fleet-noscript">页面需要 JavaScript 读取真实查询结果。</p></noscript>
+<noscript><p class="fleet-noscript">JavaScript 未启用</p></noscript>
 </body>
 </html>

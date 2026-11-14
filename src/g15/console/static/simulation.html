@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>G15 · 仿真数据流</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/cyber-wafuu.css">
+  <link rel="stylesheet" href="/assets/simulation.css">
+  <link rel="stylesheet" href="/assets/industrial.css">
+  <script type="module" src="/assets/shell.js"></script>
+  <script type="module" src="/assets/simulation.js"></script>
+</head>
+<body class="simulation-page">
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+<div class="app-shell" id="app-root">
+  <aside class="sidebar" aria-label="主导航">
+    <a class="brand" href="/" aria-label="G15设备健康控制台首页"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 24V8h7v16m8 0V8h7v16M5 16h22"/></svg><span><strong>G15</strong><small>预测性维护沙盘</small></span></a>
+    <nav class="main-nav" aria-label="控制台功能">
+      <a class="nav-item" href="/?view=health"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg><span>设备健康</span></a>
+      <a class="nav-item" href="/simulation" aria-current="page"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h5v10H3zm13 0h5v10h-5M8 12h8m-6-3 3 3-3 3"/></svg><span>仿真数据流</span></a>
+      <a class="nav-item" href="/diagnosis"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg><span>诊断工作台</span></a>
+      <a class="nav-item" href="/?view=alarms"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4l7 15v2H3v-2zM12 8v5m0 3v.1"/></svg><span>告警中心</span></a>
+      <a class="nav-item" href="/?view=maintenance"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4-4 4 4-4 4M3 21l9-9m-4 4 4 4"/></svg><span>维护建议</span></a>
+      <a class="nav-item" href="/?view=reports"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7m-7 4h7"/></svg><span>运行报告</span></a>
+      <a class="nav-item" href="/operations"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg><span>运营看板</span></a>
+      <a class="nav-item" href="/screen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v13H3zM8 21h8m-4-4v4"/></svg><span>大屏驾驶舱</span></a>
+      <a class="nav-item" href="/?view=notifications"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v20H7zM10 5h4m-3 14h2M4 8v7m16-7v7"/></svg><span>手机通知</span></a>
+    </nav>
+
+  </aside>
+  <div class="main-shell">
+    <header class="topbar"><div class="breadcrumb">工作台 <span>/</span> 仿真数据流</div><div class="connection"><span class="connection-dot" aria-hidden="true"></span><span id="stream-connection" role="status">正在连接</span></div></header>
+    <main id="main-content" tabindex="-1">
+      <header class="page-heading"><div><h1>仿真数据流</h1></div><div class="refresh-group"><span id="stream-updated" class="update-time">尚未更新</span><button id="stream-refresh" class="button button-secondary" type="button">刷新数据</button></div></header>
+      <div id="stream-error" class="message" role="alert" hidden></div>
+      <div id="stream-feedback" class="stream-feedback" role="status" hidden></div>
+      <section class="stream-panel stream-control" aria-labelledby="control-title">
+        <div><h2 id="control-title">设备启停控制</h2><p id="stream-config">正在读取仿真会话…</p></div>
+        <div class="stream-control-actions"><span id="stream-state" class="status-badge" data-level="unknown">等待状态</span><div class="stream-action-pair"><button id="stream-start-all" class="button stream-start" type="button" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 4 12 8-12 8z"/></svg>全部启动</button><button id="stream-stop-all" class="button button-secondary stream-stop" type="button" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/></svg>全部停止</button></div></div>
+      </section>
+      <section class="stream-panel stream-pipeline" aria-labelledby="pipeline-title">
+        <div class="stream-panel-heading"><h2 id="pipeline-title">仿真数据链路</h2><span id="stream-pipeline-label">等待本机计数</span></div>
+        <div class="pipeline-stations" id="pipeline-stations" data-active="false">
+          <div class="pipeline-station"><div class="station-label"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg><h3>仿真采集</h3></div><strong id="flow-captured">—</strong><span>累计生成样本</span><small id="flow-capture-rate">等待速率采样</small></div>
+          <div class="pipeline-connector" aria-hidden="true"><svg viewBox="0 0 70 24"><path class="flow-track" d="M0 12h65m-7-6 7 6-7 6"/><path class="flow-pulse" d="M0 12h60"/></svg></div>
+          <div class="pipeline-station"><div class="station-label"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v4H4zm0 10h16v4H4zm4-6v6m8-6v6"/></svg><h3>分析队列</h3></div><strong id="flow-pending">—</strong><span>待处理样本</span><small id="flow-queue">等待批次计数</small></div>
+          <div class="pipeline-connector" aria-hidden="true"><svg viewBox="0 0 70 24"><path class="flow-track" d="M0 12h65m-7-6 7 6-7 6"/><path class="flow-pulse" d="M0 12h60"/></svg></div>
+          <div class="pipeline-station"><div class="station-label"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4m0 16h17M8 15l4-5 4 2 5-8"/></svg><h3>特征分析</h3></div><strong id="flow-processed">—</strong><span>累计处理样本</span><small id="flow-process-rate">等待速率采样</small></div>
+          <div class="pipeline-connector" aria-hidden="true"><svg viewBox="0 0 70 24"><path class="flow-track" d="M0 12h65m-7-6 7 6-7 6"/><path class="flow-pulse" d="M0 12h60"/></svg></div>
+          <div class="pipeline-station"><div class="station-label"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></svg><h3>结果入库</h3></div><strong id="flow-windows">—</strong><span>已写入健康窗口</span><small id="flow-alarms">等待告警计数</small></div>
+        </div>
+      </section>
+      <div class="stream-analysis-grid">
+        <section class="stream-panel stream-chart-panel" aria-labelledby="rate-title"><div class="stream-panel-heading"><div><h2 id="rate-title">采集与处理速率</h2><p>样本 / 秒 · 最近 60 次有效读取</p></div><div class="stream-legend"><span class="capture-key">采集</span><span class="process-key">处理</span></div></div><div id="stream-rate-chart" class="stream-rate-chart" role="img" aria-label="速率数据不足"><p class="stream-empty">等待速率数据</p></div></section>
+        <section class="stream-panel stream-observation" aria-labelledby="observation-title"><div class="stream-panel-heading"><h2 id="observation-title">链路观测</h2></div><dl><div><dt>正在采集</dt><dd id="observe-running">—</dd></div><div><dt>已停止采集</dt><dd id="observe-paused">—</dd></div><div><dt>采集至提交延迟 P95</dt><dd id="observe-latency">—</dd></div><div><dt>反压事件</dt><dd id="observe-backpressure">—</dd></div><div><dt>延迟周期</dt><dd id="observe-late">—</dd></div></dl></section>
+      </div>
+      <section class="stream-panel stream-devices" aria-labelledby="devices-title"><div class="stream-panel-heading"><div><h2 id="devices-title">设备采集状态</h2><p id="stream-device-count">正在读取设备</p></div></div><div class="stream-table-scroll"><table class="stream-table"><caption class="sr-only">每台仿真设备的真实采集计数及启停控制</caption><thead><tr><th scope="col">设备 / 运行</th><th scope="col">采集状态</th><th scope="col">采集 / 处理样本</th><th scope="col">待分析批次</th><th scope="col">健康窗口 / 告警</th><th scope="col">最近提交</th><th scope="col">操作</th></tr></thead><tbody id="stream-device-rows"></tbody></table></div><p id="stream-device-empty" class="stream-empty">正在读取设备…</p></section>
+    </main>
+  </div>
+</div>
+<noscript><p>JavaScript 未启用</p></noscript>
+</body>
+</html>
