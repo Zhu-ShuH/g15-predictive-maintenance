@@ -1,8 +1,11 @@
 import { createConsoleStore, deviceKey, latestWindow, chronological, activeStatus,
-  reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout } from "./state.js";
+  reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout, liveDevice, liveStatus, deviceStatus, selectedDeviceStatus } from "./state.js";
 
 const $ = (id) => document.getElementById(id);
-const text = (id, value) => { const element = $(id); if (element) element.textContent = value; };
+const text = (id, value) => {
+  const element = $(id), next = String(value ?? "");
+  if (element && element.textContent !== next) element.textContent = next;
+};
 const number = (value, digits = 0) => finite(value)
   ? value.toLocaleString("zh-CN", { maximumFractionDigits: digits }) : "—";
 const scenarios = { healthy: "正常工况", degradation: "缓慢退化", sudden_fault: "突发故障" };
@@ -41,7 +44,7 @@ export function startConsole() {
   const store = createConsoleStore({ selection: locationSelection(location.search) });
   let previousLocation = null, restoring = false, chartPoints = [];
   let chartLayout = plotLayout(280, 180), lastChartSize = "", resizeFrame = 0;
-  let revealedRosterKey = null, lastRosterSize = "";
+  let revealedRosterKey = null, lastRosterSize = "", renderedState = null;
   function syncLocation(state) {
     if (!state.selected) return;
     const next = `${deviceKey(state.selected)}|${state.view}`;
@@ -56,6 +59,7 @@ export function startConsole() {
   function ensureSelectedInRoster(force = false) {
     const container = $("device-list");
     const overflow = container.scrollWidth > container.clientWidth;
+    const verticalOverflow = container.scrollHeight > container.clientHeight;
     const hint = $("roster-scroll-hint");
     if (hint) hint.hidden = !overflow;
     const selected = container.querySelector('[data-device-key][data-selected="true"]');
@@ -65,13 +69,19 @@ export function startConsole() {
     // data re-rendering must not undo the user's deliberate horizontal pan.
     const reveal = force || key !== revealedRosterKey;
     revealedRosterKey = key;
-    if (!overflow || !reveal || container.clientWidth <= 0) return;
+    if ((!overflow && !verticalOverflow) || !reveal || container.clientWidth <= 0) return;
     const bounds = container.getBoundingClientRect(), item = selected.getBoundingClientRect();
     const left = bounds.left + container.clientLeft, right = left + container.clientWidth;
     const delta = item.left < left ? item.left - left : item.right > right ? item.right - right : 0;
     if (delta) container.scrollLeft = Math.max(0, Math.min(
       container.scrollWidth - container.clientWidth, container.scrollLeft + delta
     ));
+    if (verticalOverflow) {
+      const top = bounds.top + container.clientTop, bottom = top + container.clientHeight;
+      const verticalDelta = item.top < top ? item.top - top : item.bottom > bottom ? item.bottom - bottom : 0;
+      if (verticalDelta) container.scrollTop = Math.max(0, Math.min(
+        container.scrollHeight - container.clientHeight, container.scrollTop + verticalDelta));
+    }
   }
   function renderDevices(state) {
     const container = $("device-list");
@@ -93,9 +103,15 @@ export function startConsole() {
       const score = node("span", preview?.latest ? number(preview.latest.health_score, 1) : "—", "device-score");
       const scoreLabel = preview?.latest ? `最新窗口健康分：${number(preview.latest.health_score, 2)} / 100` : "最新窗口健康分尚不可用";
       score.title = scoreLabel; score.setAttribute("aria-label", scoreLabel);
-      const status = preview?.active || { level: "unknown", label: "等待读取" };
+      const status = deviceStatus(state, device);
       const detail = node("span", "", "device-state"); detail.append(badge(status.level, status.label));
       button.append(main, score, detail);
+      const acquisition = liveDevice(state, device);
+      if (acquisition) {
+        button.append(node("span", `${number(acquisition.captured_samples)} 样本 · ${number(acquisition.windows_written)} 窗`, "device-live-count"));
+        button.append(node("small", acquisition.error ? "采集异常" : acquisition.queue_depth > 0
+          ? `积压 ${number(acquisition.queue_depth)} 个批次` : `最近提交 ${timeText(acquisition.last_commit_at_utc)}`, "device-live-commit"));
+      }
       button.addEventListener("click", () => { void store.selectDevice(key); });
       const item = node("li"); item.append(button); return item;
     });
@@ -217,17 +233,21 @@ export function startConsole() {
   }
   function renderReport(state) {
     const ready = state.reportStatus === "ready", report = state.report;
+    const continuous = Boolean(liveDevice(state, state.selected));
+    text("report-title", continuous ? "持续运行摘要" : "运行分析报告");
+    text("report-description", continuous ? "按读取时已提交数据生成；持续采集不作受控故障验收。" : "由报告模块从同一运行的数据与分析结果生成。");
     const verdict = reportVerdict(report);
     const status = $("report-state");
     status.dataset.result = verdict.result;
-    status.textContent = ready ? verdict.label : state.reportStatus === "loading" ? "正在读取报告…" : state.reportStatus === "error" ? "报告读取失败" : "报告未读取";
-    text("report-scope", "来自当前运行已生成报告的真值对照；不代表独立保留集验收或真实工业诊断能力。未判定、误报与未匹配记录均按来源保留。");
+    status.textContent = ready ? (continuous && verdict.result === "unverifiable" ? "持续运行摘要 · 未判定" : verdict.label) : state.reportStatus === "loading" ? "正在读取报告…" : state.reportStatus === "error" ? "报告读取失败" : "报告未读取";
+    text("report-scope", continuous ? "这是持续仿真的已提交数据摘要；没有受控真值对照，不推导检出率或验收通过。自动采集不会打断当前报告，刷新可读取新摘要。"
+      : "来自当前运行已生成报告的真值对照；不代表独立保留集验收或真实工业诊断能力。未判定、误报与未匹配记录均按来源保留。");
     text("report-error", state.reportError);
     $("report-error").hidden = !state.reportError;
     $("retry-report-button").hidden = state.reportStatus !== "error";
     const metrics = ready ? [
       ["受控故障事件", number(report.fault_events)], ["已检出事件", number(report.detected_events)],
-      ["未检出事件", number(report.missed_events)], ["检出率", detectionText(report)],
+      ["未检出事件", number(report.missed_events)], ["检出率", continuous && report.detection_rate === null ? "未评估（持续仿真）" : detectionText(report)],
       ["误报告警", number(report.false_alarm_count)], ["冗余告警", number(report.redundant_alarm_count)],
       ["未匹配告警", number(report.unmatched_alarm_count)], ["告警总数", number(report.alarm_count)],
       ["健康分最小值（全程）", number(report.health_score_min, 2)],
@@ -260,6 +280,26 @@ export function startConsole() {
       } else { link.removeAttribute("href"); link.setAttribute("aria-disabled", "true"); link.tabIndex = -1; }
     }
   }
+  function renderLive(state) {
+    const shown = state.liveMode === "available" || state.liveMode === "error";
+    $("live-monitor").hidden = !shown;
+    $("device-list").dataset.live = String(shown);
+    if (!shown) return;
+    const status = liveStatus(state);
+    text("live-status", status.label); $("live-status").dataset.level = status.level;
+    const devices = state.live?.devices || [];
+    const sum = (field) => devices.reduce((total, device) => total + device[field], 0);
+    text("live-source", state.live ? `${devices.length} 台仿真设备 · ${number(state.live.sample_rate_hz)} Hz · ${number(state.live.window_points)} 点 / 窗`
+      : "持续状态暂不可读取；已存数据仍可查看。");
+    const totals = state.live ? [["已采集样本", number(sum("captured_samples"))], ["已处理样本", number(sum("processed_samples"))],
+      ["已写入窗口", number(sum("windows_written"))], ["待分析批次", number(sum("queue_depth"))]] : [];
+    if (!renderedState || state.live !== renderedState.live) $("live-totals").replaceChildren(...totals.map(([label, value]) => {
+      const pair = node("div"); pair.append(node("dt", label), node("dd", value)); return pair;
+    }));
+    text("live-note", state.liveError || state.live?.error || (state.pollPaused
+      ? "页面在后台时暂停自动读取；返回后重新读取状态与概览。"
+      : `状态更新（北京时间）${timeText(state.live?.updated_at_utc)}；每轮完成约 2 秒后继续读取。超过 10 秒未更新会标记过期。`));
+  }
   function render(state) {
     syncLocation(state);
     const descriptions = {
@@ -279,17 +319,22 @@ export function startConsole() {
       state.fullLoading ? `正在读取全程趋势，已读取${state.windows.length}个真实窗口…` :
       state.windowLoading ? "正在读取更早窗口…" : state.alarmLoading ? "正在读取更早告警…" : ""));
     $("global-message").hidden = !error && state.catalogStatus !== "loading" && state.healthStatus !== "loading" && !state.windowLoading && !state.alarmLoading && !state.fullLoading;
-    text("connection-status", state.catalogStatus === "error" || state.healthStatus === "error" ? "读取失败" :
+    const continuousStatus = state.liveMode === "available" || state.liveMode === "error" ? liveStatus(state) : null;
+    text("connection-status", continuousStatus ? continuousStatus.label : state.catalogStatus === "error" || state.healthStatus === "error" ? "读取失败" :
       error ? "部分读取失败" : state.healthStatus === "ready" ? "只读连接已就绪" : "正在读取");
-    $("connection-status").dataset.level = error ? "error" : state.healthStatus === "ready" ? "healthy" : "unknown";
+    $("connection-status").dataset.level = error ? "error" : continuousStatus ? continuousStatus.level : state.healthStatus === "ready" ? "healthy" : "unknown";
     $("refresh-button").disabled = state.catalogStatus === "loading" || state.healthStatus === "loading";
     text("last-updated", state.lastRead ? `最近读取（北京时间）${timeText(state.lastRead)}` : "尚未成功读取");
     text("selected-title", state.selected?.device_id || "选择设备");
     text("selected-scenario", state.selected ? scenario(state.selected) : "从设备目录选择一项");
     text("selected-run", state.selected?.run_id || "—");
-    const active = state.healthStatus === "ready" ? activeStatus(state.states)
-      : { level: state.healthStatus === "error" ? "error" : "unknown", label: state.healthStatus === "error" ? "读取失败" : "等待读取" };
+    const active = selectedDeviceStatus(state);
     text("selected-status", active.label); $("selected-status").dataset.level = active.level;
+    const current = liveDevice(state, state.selected);
+    $("selected-live-meta").hidden = !current;
+    if (current) text("selected-live-meta", `仿真采集 ${number(current.captured_samples)} 样本 · 已处理 ${number(current.processed_samples)} · ${number(current.windows_written)} 窗 · 积压 ${number(current.queue_depth)} 个批次 · 最近提交（北京时间）${timeText(current.last_commit_at_utc)}${current.error ? ` · ${current.error}` : ""}`);
+    $("live-update").hidden = !state.newDataAvailable;
+    text("health-score-label", state.historyPinned || state.newDataAvailable ? "当前快照最新窗口健康分" : "最新窗口健康分");
     const latest = latestWindow(state.windows);
     text("health-score", latest ? number(latest.health_score, 2) : "—");
     text("health-window", latest ? `最新已存窗口 [${latest.start_seq}, ${latest.end_seq_exclusive})` : "暂无可用窗口");
@@ -300,13 +345,20 @@ export function startConsole() {
     const allWindows = $("load-all-windows-button");
     allWindows.disabled = !state.windowCursor || state.fullLoading || state.windowLoading || state.healthStatus !== "ready";
     allWindows.textContent = state.fullLoading ? `读取全程…${state.windows.length}窗` : state.windowCursor ? "全程趋势" : "全程已读取";
-    $("reset-chart-button").disabled = state.windows.length === state.initialWindows.length && state.inspectedSeq === null;
-    renderDevices(state); renderChart(state); renderAlarms(state); renderReport(state);
+    $("reset-chart-button").disabled = !state.historyPinned && !state.newDataAvailable && state.windows.length === state.initialWindows.length && state.inspectedSeq === null;
+    const changed = (...fields) => !renderedState || fields.some((field) => state[field] !== renderedState[field]);
+    renderLive(state);
+    if (changed("previews", "devices", "selected", "deviceSearch", "catalogStatus", "live", "liveError", "liveMode", "pollPaused", "clock")) renderDevices(state);
+    if (changed("windows", "alarms", "inspectedSeq", "healthStatus", "windowLoading", "fullLoading", "view")) renderChart(state);
+    if (changed("alarms", "alarmLevel", "alarmSearch", "alarmCursor", "alarmLoading", "healthStatus")) renderAlarms(state);
+    if (changed("report", "reportStatus", "reportError", "selected", "liveMode")) renderReport(state);
+    renderedState = state;
   }
   $("device-search").addEventListener("input", (event) => store.setDeviceSearch(event.target.value));
   $("alarm-search").addEventListener("input", (event) => store.setAlarmFilter(store.getState().alarmLevel, event.target.value));
   $("alarm-level-filter").addEventListener("change", (event) => store.setAlarmFilter(event.target.value));
   $("refresh-button").addEventListener("click", () => { void store.refresh(); });
+  $("show-latest-button").addEventListener("click", () => { void store.returnLatest(); });
   $("load-older-button").addEventListener("click", () => { void store.loadWindows(); });
   $("load-all-windows-button").addEventListener("click", () => { void store.loadAllWindows(); });
   $("reset-chart-button").addEventListener("click", () => store.resetWindows());
@@ -326,14 +378,15 @@ export function startConsole() {
     const nearest = chartPoints.reduce((best, row) => Math.abs(row.start_seq - target) < Math.abs(best.start_seq - target) ? row : best);
     if (nearest.start_seq !== store.getState().inspectedSeq) store.inspect(nearest.start_seq);
   });
-  window.addEventListener("popstate", () => {
+  function restoreLocation() {
     restoring = true;
     const desired = locationSelection(location.search), state = store.getState();
     const device = state.devices.find((item) => item.device_id === desired.device && (!desired.run || item.run_id === desired.run));
     store.setView(desired.view);
     if (device && (!state.selected || deviceKey(device) !== deviceKey(state.selected))) void store.selectDevice(deviceKey(device));
     restoring = false;
-  });
+  }
+  window.addEventListener("popstate", restoreLocation);
   function scheduleChartResize() {
     const container = $("health-chart");
     if ($("health-view").hidden || container.clientWidth <= 0 || container.clientHeight <= 0) return;
@@ -365,8 +418,12 @@ export function startConsole() {
     observer?.disconnect();
     if (resizeFrame) cancelAnimationFrame(resizeFrame);
     window.removeEventListener("resize", scheduleLayoutResize);
+    window.removeEventListener("popstate", restoreLocation);
+    window.removeEventListener("pagehide", leavePage);
     destroy();
   };
+  function leavePage(event) { if (!event.persisted) store.destroy(); }
+  window.addEventListener("pagehide", leavePage);
   store.subscribe(render);
   void store.init();
   return store;

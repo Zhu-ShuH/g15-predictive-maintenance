@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-12T06:05:25.107448+00:00",
+  "generatedAt": "2026-11-12T06:57:58.856642+00:00",
   "title": "Design System: G15 Console",
   "extensions": {
     "colorMeta": {
@@ -654,7 +654,17 @@
       "global": "outline:3px solid #91b6ff;outline-offset:3px",
       "searchContainer": "outline:2px solid #86aaff;outline-offset:1px"
     },
-    "reducedMotion": "@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}"
+    "reducedMotion": "@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}",
+    "continuousSimulation": {
+      "source": "Optional same-origin /api/live, schema_version 1; 404 means legacy static mode.",
+      "polling": "Next round 2000ms after completion; three background preview workers; hidden-page pause; abort and timer cleanup.",
+      "freshness": "6000ms request timeout; 10000ms status, preview or commit expiry removes green current-state presentation.",
+      "readingPosition": "History, full range, manual inspection and reports remain stable until explicit return to latest.",
+      "queueUnit": "Pending analysis batches, not raw samples or a claim of NPZ serialization.",
+      "report": "Continuous simulation summary; passed null, detection rate unassessed without controlled truth.",
+      "layout": "Desktop live roster scrolls vertically at max-height 640px; narrow roster remains horizontal.",
+      "visuals": "Existing surface, line, brand-soft and labeled status tokens; no new palette, font or shadow."
+    }
   },
   "components": [
     {
