@@ -1,0 +1,86 @@
+.workbench-page main {max-width:1800px}
+.workbench-page .wb-intro {color:#275452;font-size:14px;line-height:1.7;margin-top:10px}
+.workbench-page .connection[data-state=ready] .connection-dot {background:#a5cd2e}
+.workbench-page .connection[data-state=error] .connection-dot {background:#ff8d80}
+.workbench-page .connection[data-state=waiting] .connection-dot,.workbench-page .connection[data-state=stale] .connection-dot {background:#b9c8d6}
+.wb-tabs {display:flex;border-bottom:2px solid #657c75;gap:4px;margin-bottom:22px;overflow-x:auto}
+.wb-tabs button {padding:13px 22px;min-height:48px;white-space:nowrap;color:#275452;font-size:14px;background:#e0e8db;border:1px solid #8b9d91;border-bottom:0}
+.wb-tabs button[aria-selected=true] {background:#133e34;color:#c6fff1;box-shadow:inset 0 -3px #80d8cf}
+.wb-tabs button:hover {background:#234f46;color:#feffef}
+.wb-toolbar {display:flex;align-items:end;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.wb-toolbar .lab-field {margin:0;min-width:240px;flex:1;max-width:720px}
+.wb-toolbar .lab-field>span {color:#275452}
+.wb-toolbar .button {min-height:42px}
+.wb-muted {color:#275452;font-size:12px;line-height:1.7;align-self:center}
+.wb-chart {width:100%;min-width:0;background:#17222c;height:235px;display:grid;place-items:center}
+.wb-chart svg {width:100%;height:100%}
+.wb-wave-chart {height:190px}
+.wb-comparison-chart {height:300px}
+.wb-timeline {display:grid;grid-template-columns:max-content minmax(0,1fr) max-content;align-items:center;gap:16px;margin-top:20px;color:#cbdadd;font-size:12px;font-variant-numeric:tabular-nums}
+.wb-timeline input[type=range] {width:100%;min-width:70px;accent-color:#80d8cf}
+.wb-timeline-actions {grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.wb-timeline-actions .button {font-size:12px;min-height:36px;padding:8px 12px}
+.wb-seq-input {display:flex;align-items:center;gap:8px;margin-left:auto}
+.wb-seq-input input {width:112px;background:#111b24;color:#feffef;border:1px solid #788a92;padding:9px}
+.wb-facts {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:22px 0 0;padding:20px 0;border-block:1px solid #586976;font-variant-numeric:tabular-nums}
+.wb-facts dt {font-size:12px;color:#b9c8d6;line-height:1.6}
+.wb-facts dd {font-size:18px;margin:7px 0 0;line-height:1.6;overflow-wrap:anywhere}
+.wb-wave-heading {margin-top:24px;align-items:center}
+.wb-wave-heading h3 {font-size:15px}
+.wb-evidence-grid {display:grid;grid-template-columns:1.2fr 1fr;gap:22px}
+.wb-advice-panel,.wb-selection-panel {border-color:var(--cw-gold,#b89a4a)}
+.wb-event-list {list-style:none;padding:0;margin:0;max-height:440px;overflow-y:auto;scrollbar-color:#80d8cf #17222c}
+.wb-event-list>li {padding:16px 0;border-bottom:1px solid #51616d;line-height:1.7;font-size:13px;overflow-wrap:anywhere}
+.wb-event-list>li:first-child {padding-top:0}
+.wb-event-list>li:last-child {border-bottom:0}
+.wb-event-heading {display:flex;gap:12px;justify-content:space-between;align-items:center;color:#d7e2e7;font-size:12px}
+.wb-event-list p {font-size:12px;color:#c4d3da;line-height:1.75;margin-top:9px;white-space:pre-wrap}
+.wb-event-list details {font-size:11px;color:#b9c8d6;margin-top:10px;line-height:1.7}
+.wb-event-list summary {color:#80d8cf;cursor:pointer}
+.wb-event-list code {white-space:normal;overflow-wrap:anywhere}
+.wb-alarm-level {color:#ffd88b}
+.wb-alarm-level[data-level=red] {color:#ffb3a9}
+.wb-advice {padding-left:20px;margin:0;line-height:1.9;font-size:13px;color:#e0e8eb}
+.wb-advice li+li {margin-top:15px}
+.wb-run-choices {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px;max-height:260px;overflow-y:auto;scrollbar-color:#80d8cf #17222c}
+.wb-run-choice {display:flex;align-items:start;gap:12px;padding:14px 0;border-bottom:1px solid #51616d;cursor:pointer;min-width:0;font-size:13px;line-height:1.6}
+.wb-run-choice input {margin-top:5px;accent-color:#80d8cf;flex-shrink:0}
+.wb-run-choice span {min-width:0;overflow-wrap:anywhere}
+.wb-run-choice small {display:block;color:#b9c8d6;font-size:11px;margin-top:4px}
+.wb-legend {display:flex;gap:18px;flex-wrap:wrap;margin:16px 0 23px;font-size:12px;color:#d9e4e6}
+.wb-legend span {display:flex;gap:8px;align-items:center;overflow-wrap:anywhere}
+.wb-legend i {display:inline-block;width:20px;height:3px;background:var(--series-color);flex-shrink:0}
+.wb-legend .wb-series-0 {background:#80d8cf}
+.wb-legend .wb-series-1 {background:#f3c77a}
+.wb-legend .wb-series-2 {background:#8fbef2}
+.wb-legend .wb-series-3 {background:#efa8cd}
+.wb-table-scroll {overflow-x:auto;scrollbar-color:#80d8cf #17222c}
+.wb-table {border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+.wb-table th,.wb-table td {text-align:left;padding:14px 16px;border-bottom:1px solid #51616d;min-width:160px;line-height:1.75;vertical-align:top}
+.wb-table th {color:#b9c8d6;font-weight:500;min-width:135px}
+.wb-table thead td {color:#feffef;font-size:14px;overflow-wrap:anywhere;max-width:300px}
+.wb-table tbody tr:last-child>* {border-bottom:0}
+.wb-table small {display:block;color:#b9c8d6;font-size:11px;line-height:1.6}
+.wb-scroll-hint {display:none;color:#bdccd4;font-size:11px;margin-bottom:12px}
+.wb-disposition-grid {display:grid;grid-template-columns:370px minmax(0,1fr);gap:22px;align-items:start}
+.wb-disposition-form {border-color:var(--cw-copper,#a66a43)}
+.wb-disposition-form .lab-field:first-child {margin-top:0}
+.wb-disposition-form textarea {resize:vertical;min-height:120px;background:#111b24;color:#feffef;border:1px solid #788a92;border-radius:0;padding:12px;font-size:13px;line-height:1.7}
+.wb-disposition-form textarea:focus-visible,.wb-seq-input input:focus-visible {outline:2px solid #ffb54e;outline-offset:2px}
+.wb-audit {max-height:650px}
+.wb-audit .wb-event-heading {justify-content:flex-start;flex-wrap:wrap}
+.wb-audit .wb-event-heading time {margin-left:auto;color:#b9c8d6}
+.wb-export-actions {display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+#wb-report-preview {margin-top:24px}
+#wb-report-preview h3 {margin:24px 0 14px;font-size:16px}
+.wb-report-note {margin:16px 0 0;color:#bdccd4;font-size:12px;line-height:1.75;max-width:75ch}
+.wb-raw-configuration {margin-top:26px;padding-top:18px;border-top:1px solid #51616d;color:#b9c8d6;font-size:12px;line-height:1.8}
+.wb-raw-configuration summary {color:#80d8cf;cursor:pointer}
+.wb-raw-configuration section {margin-top:20px}
+.wb-raw-configuration h4 {color:#dce8e9;font-size:13px;overflow-wrap:anywhere;margin:0 0 8px}
+.wb-raw-configuration pre {white-space:pre-wrap;overflow-wrap:anywhere;background:#17222c;padding:16px;color:#c9d9df}
+.wb-config-list {margin:0;padding-left:18px;color:#c9d9df;font-size:12px;line-height:1.8;overflow-wrap:anywhere}
+.workbench-page [hidden] {display:none!important}
+@media(max-width:1180px) {.wb-run-choices {grid-template-columns:repeat(2,minmax(0,1fr))}.wb-disposition-grid {grid-template-columns:320px minmax(0,1fr)}}
+@media(max-width:850px) {.wb-disposition-grid {grid-template-columns:minmax(0,1fr)}.wb-evidence-grid {grid-template-columns:minmax(0,1fr);gap:0}.wb-audit {max-height:500px}.wb-tabs button {padding:12px 16px}}
+@media(max-width:650px) {.workbench-page .wb-intro {font-size:13px;max-width:32ch}.wb-tabs {gap:2px}.wb-tabs button {font-size:12px;padding:12px 11px}.wb-toolbar {gap:12px}.wb-toolbar .lab-field {min-width:0;flex-basis:100%}.wb-muted {flex:1}.wb-timeline {grid-template-columns:1fr auto;gap:10px}.wb-timeline input[type=range] {grid-column:1/-1;grid-row:2}.wb-timeline output {grid-column:2;grid-row:1}.wb-timeline-actions {gap:7px}.wb-timeline-actions .button {padding:8px 9px;font-size:11px}.wb-seq-input {margin-left:0;flex-basis:65%}.wb-facts {grid-template-columns:repeat(2,minmax(0,1fr))}.wb-facts dd {font-size:17px}.wb-run-choices {grid-template-columns:minmax(0,1fr);max-height:300px}.wb-chart {height:200px}.wb-comparison-chart {height:240px}.wb-wave-heading {gap:8px}.wb-wave-heading>span {font-size:10px}.wb-scroll-hint {display:block}.wb-export-actions {gap:8px}.wb-export-actions .button {font-size:11px}.wb-event-heading {flex-wrap:wrap;gap:6px}.wb-audit .wb-event-heading time {width:100%;margin-left:0}}

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>G15 · 波形观察与实验台</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/cyber-wafuu.css">
+  <link rel="stylesheet" href="/assets/laboratory.css">
+  <link rel="stylesheet" href="/assets/industrial.css">
+  <script type="module" src="/assets/shell.js"></script>
+  <script type="module" src="/assets/laboratory.js"></script>
+</head>
+<body class="laboratory-page">
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+<div class="app-shell" id="app-root">
+  <aside class="sidebar" aria-label="主导航">
+    <a class="brand" href="/" aria-label="G15设备健康控制台首页"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 24V8h7v16m8 0V8h7v16M5 16h22"/></svg><span><strong>G15</strong><small>预测性维护沙盘</small></span></a>
+    <nav class="main-nav" aria-label="控制台功能">
+      <a class="nav-item" href="/?view=health"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg><span>设备健康</span></a>
+      <a class="nav-item" href="/simulation"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h5v10H3zm13 0h5v10h-5M8 12h8m-6-3 3 3-3 3"/></svg><span>仿真数据流</span></a>
+      <a class="nav-item" href="/laboratory" aria-current="page"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M6 13l3-6 4 10 3-6 5 2"/></svg><span>波形与实验台</span></a>
+      <a class="nav-item" href="/diagnosis"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg><span>诊断工作台</span></a>
+      <a class="nav-item" href="/?view=alarms"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4l7 15v2H3v-2zM12 8v5m0 3v.1"/></svg><span>告警中心</span></a>
+      <a class="nav-item" href="/?view=maintenance"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4-4 4 4-4 4M3 21l9-9m-4 4 4 4"/></svg><span>维护建议</span></a>
+      <a class="nav-item" href="/?view=reports"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7m-7 4h7"/></svg><span>运行报告</span></a>
+      <a class="nav-item" href="/operations"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg><span>运营看板</span></a>
+      <a class="nav-item" href="/screen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v13H3zM8 21h8m-4-4v4"/></svg><span>大屏驾驶舱</span></a>
+      <a class="nav-item" href="/?view=notifications"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v20H7zM10 5h4m-3 14h2M4 8v7m16-7v7"/></svg><span>手机通知</span></a>
+    </nav>
+
+  </aside>
+  <div class="main-shell">
+    <header class="topbar"><div class="breadcrumb">工作台 <span>/</span> 波形与实验台</div><div id="lab-connection-container" class="connection" data-state="waiting"><span class="connection-dot" aria-hidden="true"></span><span id="lab-connection" role="status">正在连接</span></div></header>
+    <main id="main-content" tabindex="-1">
+      <header class="page-heading"><div><h1>波形观察与实验台</h1></div><span id="lab-updated" class="update-time">尚未更新</span></header>
+      <div class="lab-mode-bar"><div class="lab-tabs" role="tablist" aria-label="观察模式"><button id="lab-tab-live" type="button" role="tab" aria-selected="true" aria-controls="lab-live-controls" tabindex="0" data-mode="live"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>实时设备</button><button id="lab-tab-experiment" type="button" role="tab" aria-selected="false" aria-controls="lab-experiment-controls" tabindex="-1" data-mode="experiment"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8m-6 0v7l-6 9v2h16v-2l-6-9V3M7 16h10"/></svg>独立实验</button></div></div>
+      <div id="lab-error" class="message lab-error" role="alert" hidden></div>
+      <div id="lab-feedback" class="lab-feedback" role="status" hidden></div>
+      <div class="lab-workspace">
+        <aside class="lab-panel lab-controls" aria-label="数据来源与实验参数">
+          <section id="lab-live-controls" role="tabpanel" aria-labelledby="lab-tab-live">
+            <h2>观察来源</h2>
+            <label class="lab-field"><span>仿真设备</span><select id="lab-device" disabled><option value="">正在读取设备…</option></select></label>
+            <dl class="lab-source-facts"><div><dt>采集状态</dt><dd id="lab-device-state">—</dd></div><div><dt>采样频率</dt><dd id="lab-sample-rate">—</dd></div><div><dt>当前运行</dt><dd id="lab-live-run" class="lab-run">—</dd></div></dl>
+            <a class="lab-control-link" href="/simulation">打开设备启停控制<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></a>
+          </section>
+          <section id="lab-experiment-controls" role="tabpanel" aria-labelledby="lab-tab-experiment" hidden>
+            <h2>新实验参数</h2>
+            <form id="lab-experiment-form">
+              <label class="lab-field"><span>场景</span><select id="lab-profile" name="profile" disabled><option value="normal">健康基线</option><option value="degradation">持续退化</option><option value="sudden_fault">突发故障</option></select></label>
+              <div class="lab-field-pair"><label class="lab-field"><span>随机种子</span><input id="lab-seed" name="seed" type="number" min="0" max="2147483647" step="1" value="7" required disabled></label><label class="lab-field"><span>样本点数</span><select id="lab-total-points" name="total_points" disabled><option value="8192">8,192</option><option value="16384">16,384</option><option value="32768">32,768</option><option value="65536">65,536</option></select></label></div>
+              <label class="lab-field"><span>噪声标准差 <small>g</small></span><input id="lab-noise" name="noise_std" type="number" min="0" max="1" step="any" value="0.05" required disabled></label>
+              <label class="lab-field" id="lab-degradation-field" hidden><span>每样本退化增量 <small>g / 样本</small></span><input id="lab-degradation" name="degradation_rate_per_sample" type="number" min="0" max="0.001" step="any" value="0" required disabled></label>
+              <label class="lab-field" id="lab-fault-field" hidden><span>故障振幅 <small>g</small></span><input id="lab-fault" name="fault_amplitude" type="number" min="0" max="10" step="any" value="0" required disabled></label>
+              <div id="lab-injection-fields" hidden><label class="lab-field"><span>故障类型</span><select id="lab-fault-type" disabled></select></label><div class="lab-field-pair"><label class="lab-field"><span>开始时间 <small>秒</small></span><input id="lab-fault-start" type="number" min="0" step="0.00390625" value="16" required disabled></label><label class="lab-field"><span>持续时间 <small>秒</small></span><input id="lab-fault-duration" type="number" min="0.00390625" step="0.00390625" value="2" required disabled></label></div><p id="lab-injection-summary" class="lab-help">—</p></div>
+              <p id="lab-parameter-summary" class="lab-parameter-summary">256 Hz · 32 秒 · 每窗口 256 点</p>
+              <button id="lab-create" class="button lab-primary" type="submit" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 4 12 8-12 8z"/></svg>运行实验</button>
+              <p id="lab-capacity-note" class="lab-help">正在读取实验服务状态…</p>
+            </form>
+          </section>
+          <div class="lab-observation-settings"><h3>波形窗口</h3><label class="lab-field"><span>显示样本</span><select id="lab-count"><option value="256">256 点</option><option value="512">512 点</option><option value="1024">1,024 点</option><option value="2048" selected>2,048 点</option></select></label><div class="lab-observe-actions"><button id="lab-refresh" class="button button-secondary" type="button">刷新波形</button><button id="lab-follow" class="button button-quiet" type="button" aria-pressed="true">暂停观察</button></div></div>
+        </aside>
+        <div class="lab-observations">
+          <section class="lab-panel lab-waveform" aria-labelledby="lab-wave-title"><div class="lab-panel-heading"><div><h2 id="lab-wave-title">振动波形</h2><p id="lab-wave-source">等待数据来源</p></div><span id="lab-wave-state" class="lab-state" data-state="waiting">等待样本</span></div><div class="lab-plot-unit"><span>振动 / g</span><span id="lab-wave-range">—</span></div><div id="lab-vibration-chart" class="lab-chart lab-chart-primary" role="img" aria-label="振动波形等待实际样本"><p class="lab-empty">等待样本</p></div><div class="lab-sample-inspector"><label for="lab-sample-inspector" class="sr-only">检查当前片段的单个真实样本</label><input id="lab-sample-inspector" type="range" min="0" max="0" value="0" disabled><span id="lab-sample-readout">—</span></div><div id="lab-position-controls" class="lab-position-controls" hidden><label for="lab-position">实验片段位置</label><input id="lab-position" type="range" min="0" max="0" value="0" step="256" disabled><span id="lab-position-label">—</span><div class="lab-window-actions"><button id="lab-previous-window" class="button button-quiet" type="button" disabled>上一片段</button><button id="lab-next-window" class="button button-quiet" type="button" disabled>下一片段</button></div></div><dl class="lab-measurements"><div><dt>片段 RMS</dt><dd id="lab-rms">—</dd></div><div><dt>片段峰峰值</dt><dd id="lab-ptp">—</dd></div><div><dt>频谱峰值</dt><dd id="lab-dominant">—</dd></div><div><dt>实际样本</dt><dd id="lab-sample-count">—</dd></div></dl><p id="lab-wave-provenance" class="lab-help">—</p></section>
+          <div class="lab-chart-pair">
+            <section class="lab-panel lab-temperature" aria-labelledby="lab-temperature-title"><div class="lab-panel-heading"><h2 id="lab-temperature-title">温度趋势</h2><span>°C</span></div><div id="lab-temperature-chart" class="lab-chart" role="img" aria-label="温度趋势等待实际样本"><p class="lab-empty">等待样本</p></div></section>
+            <section class="lab-panel lab-spectrum" aria-labelledby="lab-spectrum-title"><div class="lab-panel-heading"><h2 id="lab-spectrum-title">振动频谱</h2><span>幅值 / g</span></div><div id="lab-spectrum-chart" class="lab-chart" role="img" aria-label="频谱等待实际样本"><p class="lab-empty">等待样本</p></div><p id="lab-spectrum-note" class="lab-help">—</p></section>
+          </div>
+        </div>
+      </div>
+      <section id="lab-results" class="lab-panel lab-results" aria-labelledby="lab-results-title" hidden><div class="lab-panel-heading"><div><h2 id="lab-results-title">实验结果</h2><p id="lab-result-source">暂无实验结果</p></div><span id="lab-result-verdict" class="lab-state" data-state="waiting">尚未生成报告</span></div><section id="lab-parameter-record" class="lab-parameter-record" aria-labelledby="lab-parameter-record-title" hidden><div class="lab-parameter-record-heading"><h3 id="lab-parameter-record-title">本次运行参数</h3><button id="lab-load-parameters" class="button button-secondary" type="button" disabled>载入这组参数</button></div><dl id="lab-recorded-parameters" class="lab-recorded-parameters"></dl></section><dl id="lab-result-summary" class="lab-result-summary"></dl><div class="lab-result-detail"><div><h3>已存健康窗口</h3><div id="lab-health-chart" class="lab-chart lab-health-chart" role="img" aria-label="实验健康趋势尚未生成"><p class="lab-empty">等待实际分析结果</p></div></div><div><h3>最近告警</h3><ol id="lab-result-alarms" class="lab-result-alarms"></ol><p id="lab-alarm-note" class="lab-help">等待分析结果</p></div></div></section>
+      <section id="lab-history" class="lab-panel lab-history" aria-labelledby="lab-history-title" hidden><div class="lab-panel-heading"><div><h2 id="lab-history-title">实验运行记录</h2><p id="lab-history-caption">0 次独立运行</p></div><button id="lab-history-refresh" class="button button-secondary" type="button">刷新记录</button></div><div class="lab-history-scroll" role="region" aria-label="实验运行记录，可横向滚动" tabindex="0"><table class="lab-history-table"><caption class="sr-only">独立实验列表，可选择查看对应原始波形和结果</caption><thead><tr><th scope="col">场景 / 运行</th><th scope="col">状态</th><th scope="col">样本 / 种子</th><th scope="col">开始时间</th><th scope="col">执行耗时</th><th scope="col">查看</th></tr></thead><tbody id="lab-history-rows"></tbody></table></div><p id="lab-history-empty" class="lab-empty">暂无实验记录</p></section>
+    </main>
+  </div>
+</div>
+<noscript><p>JavaScript 未启用</p></noscript>
+</body>
+</html>

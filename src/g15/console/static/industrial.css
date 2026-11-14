@@ -1,0 +1,56 @@
+/* User-supplied G15 mark, steel slide rails, and locally served type. */
+@font-face {font-family:"G15 Display";src:url('/assets/fonts/g15-display.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face {font-family:"G15 Instrument";src:url('/assets/fonts/g15-instrument.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face {font-family:"G15 UI";src:url('/assets/fonts/g15-ui.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+:root {--rail-closed:76px;--rail-open:222px;--g15-ui:"G15 UI","Microsoft YaHei UI",sans-serif;--g15-heading:"G15 Display",sans-serif;--g15-instrument:"G15 Instrument",sans-serif}
+body,button,input,select,textarea {font-family:var(--g15-ui);font-synthesis:none}
+small,.muted,.fleet-subtitle,.fleet-data-note,.selected-live-meta,.device-live-count,.device-live-commit,.acquisition-row small,.diagnosis-run,.chart-range,.chart-description,.live-note,.live-scope,.maintenance-scope,.maintenance-basis,.maintenance-source,.maintenance-drivers,.maintenance-confirmation,.evidence-time,.evidence-reason,.measurement-detail,.update-time,#fleet-updated,.report-reasons {font-family:var(--g15-ui)}
+h1,.fleet-brand strong {font-family:var(--g15-heading);font-weight:900;letter-spacing:.015em;line-height:1.25}
+.page-heading h1,.operations-heading h1 {font-size:clamp(28px,2.5vw,38px);color:#073b3b;text-shadow:0 1px 0 #e4c270}
+h2,h3,.device-title-line h2,.fleet-panel-heading h2,.notification-heading h2 {font-family:var(--g15-instrument);font-weight:700;letter-spacing:.075em;line-height:1.45}
+.section-heading h3,.fleet-panel-heading h2,.notification-settings h3,.notification-workspace h3 {display:flex;align-items:center;gap:10px}
+.section-heading h3::before,.fleet-panel-heading h2::before,.notification-workspace h3::before {content:"";display:inline-block;flex:none;width:4px;height:1.05em;background:#00e1dc}
+.mono,.run-reference,.fleet-clock,.simulation-number {font-family:var(--g15-ui);font-variant-numeric:tabular-nums}
+.app-shell {display:grid;grid-template-columns:var(--rail-closed) minmax(0,1fr);min-height:100vh}
+.app-shell>.main-shell {grid-column:2;min-width:0}
+.app-shell>.sidebar {position:fixed;inset:8px auto 8px 6px;width:calc(var(--rail-closed) - 12px);height:calc(100dvh - 16px);padding:10px 6px;z-index:50;display:flex;flex-direction:column;overflow:hidden;border:3px solid var(--cw-silver,#b9c1c9);border-radius:2px;background:linear-gradient(90deg,#080d12 0,#34434e 5px,#18252f 9px,#202e38 calc(100% - 8px),#48525c calc(100% - 5px),#080d12 100%);box-shadow:inset 0 0 0 1px #060a0d,3px 5px 12px #07121c40;transition:width 260ms cubic-bezier(.16,1,.3,1)}
+.app-shell>.sidebar[data-expanded=true] {width:var(--rail-open)}
+.app-shell>.sidebar::before,.app-shell>.sidebar::after {content:"";position:absolute;left:5px;right:5px;height:3px;pointer-events:none;background:linear-gradient(90deg,#0a1319,#e2e7e9 12%,#53616b 45%,#e2e7e9 88%,#10181f);border-bottom:1px solid #040709}
+.app-shell>.sidebar::before {top:4px}.app-shell>.sidebar::after {bottom:4px}
+.sidebar .rail-brand {position:relative;display:flex;align-items:center;flex:none;width:100%;min-height:70px;margin:0 0 18px;padding:0;border:0;border-bottom:1px solid #6b7a82;background:transparent;color:#80d8cf;overflow:hidden;cursor:pointer;clip-path:none;border-radius:0;isolation:isolate}
+.rail-logo {display:block;position:relative;flex:none;width:47px;height:52px;overflow:hidden;transition:width 260ms cubic-bezier(.16,1,.3,1)}
+.rail-logo img,.rail-logo::after {position:absolute;left:-7px;top:2px;width:153px;height:51px;max-width:none;object-fit:contain;transition:width 260ms cubic-bezier(.16,1,.3,1),height 260ms cubic-bezier(.16,1,.3,1)}
+.sidebar[data-expanded=true] .rail-logo {width:190px;height:65px}
+.sidebar[data-expanded=true] .rail-logo img,.sidebar[data-expanded=true] .rail-logo::after {width:203px;height:68px;top:0;left:-7px}
+/* The original image is the matte: light stays inside its metal, including while the rail expands. */
+.rail-logo::after {content:"";pointer-events:none;opacity:0;background:linear-gradient(110deg,transparent 34%,#80fafa18 42%,#b4ffff80 47%,#ffffffed 50%,#c7ffff99 53%,#edce8838 58%,transparent 66%) 100% 50%/250% 100% no-repeat;-webkit-mask:url('/assets/g15-logo.png') center/contain no-repeat;mask:url('/assets/g15-logo.png') center/contain no-repeat;mask-mode:luminance;mix-blend-mode:screen}
+@media(hover:hover) {.rail-brand:hover .rail-logo::after {animation:rail-metal-sheen 2.8s linear infinite}}
+.rail-brand:focus-visible .rail-logo::after {animation:rail-metal-sheen 2.8s linear infinite}
+.sidebar[data-motion-paused=true] .rail-logo::after {animation-play-state:paused}
+
+.rail-pin {position:absolute;right:0;bottom:3px;display:none;color:#80d8cf}
+.rail-pin svg {width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.6}
+.sidebar[data-pinned=true] .rail-pin {display:block;color:#f0cb7f}
+.sidebar .main-nav {display:flex;flex-direction:column;flex-wrap:nowrap;gap:7px;padding:0;min-width:0;width:100%;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.sidebar .nav-item {position:relative;display:flex;align-items:center;justify-content:flex-start;flex:0 0 auto;gap:17px;width:100%;min-width:0;height:45px;margin:0;padding:10px 11px;border:1px solid transparent;border-radius:0;background:transparent;color:#c4d6df;text-decoration:none;clip-path:none;white-space:nowrap;transition:background 150ms,border-color 150ms}
+.sidebar .nav-item .icon {flex:0 0 20px;width:20px;height:20px;stroke:currentColor;stroke-width:1.7;fill:none}
+.sidebar .nav-item>span {display:block;opacity:0;font-size:14px;transform:translateX(-5px);transition:opacity 140ms,transform 200ms;pointer-events:none}
+.sidebar[data-expanded=true] .nav-item>span {opacity:1;transform:none}
+.sidebar .nav-item[aria-current=page] {color:#a9f7ed;border-color:#83aaa9;background:linear-gradient(100deg,#14514a,#132c30);box-shadow:inset 0 1px 0 #b6e9df38}
+.sidebar .nav-item:hover {color:#f4fff8;border-color:#8c9d9f;background:#133e34}
+
+.sidebar :focus-visible {outline:2px solid #ffb54e;outline-offset:-2px}
+.app-shell>.sidebar {flex-wrap:nowrap;align-items:stretch;gap:0}
+.sidebar .main-nav {order:0;min-height:0;flex-shrink:1}
+
+.fleet-brand-mark {display:none}
+.fleet-brand::before {content:"";display:block;width:132px;height:47px;background:url('/assets/g15-logo.png') center/contain no-repeat;flex:none}
+::selection {background:#80d8cf;color:#102c2b}
+@keyframes rail-metal-sheen {0% {background-position:100% 50%;opacity:0} 12%,88% {opacity:.9} 100% {background-position:0% 50%;opacity:0}}
+@media(min-width:1100px) {.app-shell:has(.sidebar[data-pinned=true]) {grid-template-columns:calc(var(--rail-open) + 16px) minmax(0,1fr)}}
+@media(max-width:900px) {.app-shell {grid-template-columns:var(--rail-closed) minmax(0,1fr)}.sidebar .brand>span {display:block}.app-shell>.sidebar {flex-direction:column}.main-shell>main {padding-left:18px;padding-right:18px}}
+@media(max-width:650px) {:root {--rail-closed:64px;--rail-open:222px}.app-shell>.sidebar {inset:5px auto 5px 4px;height:calc(100dvh - 10px);padding:8px 3px}.sidebar .rail-brand {min-height:57px;margin-bottom:12px}.rail-logo {width:41px}.rail-logo img,.rail-logo::after {left:-8px;width:144px;height:48px}.sidebar .nav-item {height:43px;padding:10px 8px;gap:17px}.main-shell>main {padding-left:12px;padding-right:12px}.page-heading h1,.operations-heading h1 {font-size:27px}.fleet-brand::before {width:83px;height:34px}.fleet-brand strong {font-size:18px}.topbar {padding:12px;gap:10px}.breadcrumb {display:none}}
+@media(prefers-reduced-motion:reduce) {.app-shell>.sidebar,.rail-logo,.rail-logo img,.rail-logo::after,.sidebar .nav-item>span {transition:none}.rail-brand:hover .rail-logo::after,.rail-brand:focus-visible .rail-logo::after {animation:none}}
+@media(max-width:650px) {.page-heading:has(.refresh-group) {flex-direction:column;align-items:stretch;gap:12px}.page-heading .refresh-group {flex-wrap:wrap;max-width:100%;gap:8px}.page-heading .refresh-group .update-time {min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}}
+@media(max-width:650px) {.app-shell {grid-template-columns:64px minmax(0,1fr)}.app-shell>.sidebar {width:52px}.app-shell>.sidebar[data-expanded=true] {width:222px}.sidebar .rail-logo {width:41px}.sidebar .rail-logo img,.sidebar .rail-logo::after {width:144px;height:48px}.sidebar[data-expanded=true] .rail-logo {width:190px}.sidebar[data-expanded=true] .rail-logo img,.sidebar[data-expanded=true] .rail-logo::after {width:203px;height:68px}}
+.simulation-page .page-heading .simulation-intro {color:#275452}

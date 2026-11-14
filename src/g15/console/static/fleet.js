@@ -207,9 +207,8 @@ function renderScreen(state, summary, selectDevice, cache) {
     actions.append(...item.actions.slice(0, 2).map((action) => node("li", action)));
     return card;
   });
-  if (advice.missingActiveRules.length || advice.partial) {
-    cards.unshift(node("p", "当前建议只覆盖已加载告警；来源缺失或更早记录未加载时不会补造。", "fleet-data-note"));
-  }
+  if (advice.missingActiveRules.length) cards.unshift(node("p", `来源未加载：${advice.missingActiveRules.join("、")}`, "fleet-data-note"));
+  if (advice.partial) cards.unshift(node("p", `已加载 ${advice.loadedAlarmCount} 条告警 · 部分范围`, "fleet-data-note"));
   adviceContainer.replaceChildren(...(cards.length ? cards : [node("p", advice.message, "fleet-empty")]));
   const liveList = $("fleet-live-list");
   if (!state.live) {
@@ -229,7 +228,7 @@ function renderScreen(state, summary, selectDevice, cache) {
   text("live-status-detail", state.liveMode === "available" || state.liveMode === "error" ?
     liveStatus(state).label : "非持续运行");
   text("live-scope", state.live ? `${state.live.devices.length} 台 · ${number(state.live.sample_rate_hz)} Hz · 状态更新 ${timeText(state.live.updated_at_utc)}` :
-    "未检测到持续会话；仅展示离线运行结果。");
+    "未检测到持续会话");
 }
 function renderOperations(state, summary, search, cache) {
   const body = $("fleet-device-table");

@@ -1,6 +1,6 @@
 ---
 name: G15 Console
-description: Cyber Wafuu, evidence-first device health, fleet and diagnosis console for the G15 simulation sandbox.
+description: Cyber Wafuu industrial-rail console with device health, diagnosis and real simulation flow controls.
 colors:
   ink: "#FEFFEF"
   muted: "#B9C8D6"
@@ -47,44 +47,52 @@ colors:
   report-failed: "#D32529"
   report-unknown: "#B9C8D6"
   report-unknown-ground: "#010101"
+  metal-silver: "#B9C1C9"
+  metal-gold: "#B89A4A"
+  metal-copper: "#A66A43"
+  instrument-marker: "#00E1DC"
 typography:
   headline:
-    fontFamily: '"Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif'
-    fontSize: "27px"
-    fontWeight: 650
-    lineHeight: 1.35
-    letterSpacing: "-0.025em"
+    fontFamily: '"G15 Display", sans-serif'
+    fontSize: "clamp(28px, 2.5vw, 38px)"
+    fontWeight: 900
+    lineHeight: 1.25
+    letterSpacing: "0.015em"
   title:
-    fontFamily: '"Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif'
+    fontFamily: '"G15 Instrument", sans-serif'
     fontSize: "18px"
-    fontWeight: 650
+    fontWeight: 700
     lineHeight: 1.45
+    letterSpacing: "0.075em"
   subtitle:
-    fontFamily: '"Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif'
+    fontFamily: '"G15 Instrument", sans-serif'
     fontSize: "16px"
-    fontWeight: 650
-    lineHeight: 1.5
+    fontWeight: 700
+    lineHeight: 1.45
+    letterSpacing: "0.075em"
   body:
-    fontFamily: '"Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif'
+    fontFamily: '"G15 UI", "Microsoft YaHei UI", sans-serif'
     fontSize: "14px"
   label:
-    fontFamily: '"Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif'
+    fontFamily: '"G15 UI", "Microsoft YaHei UI", sans-serif'
     fontSize: "11px"
   metric:
-    fontFamily: '"Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif'
+    fontFamily: '"G15 UI", "Microsoft YaHei UI", sans-serif'
     fontSize: "38px"
     fontWeight: 600
     lineHeight: 1.1
     letterSpacing: "-0.035em"
   identifier:
-    fontFamily: 'ui-monospace, "Cascadia Code", Consolas, monospace'
+    fontFamily: '"G15 UI", "Microsoft YaHei UI", sans-serif'
     fontSize: "11px"
 rounded:
-  badge: "5px"
-  control: "7px"
-  item: "8px"
-  mobile-panel: "10px"
-  panel: "12px"
+  badge: "3px"
+  control: "0px"
+  field: "7px"
+  item: "0px"
+  mobile-panel: "0px"
+  panel: "0px"
+  rail: "2px"
 spacing:
   control-block: "8px"
   control-inline: "13px"
@@ -93,17 +101,20 @@ spacing:
   workspace-gap: "22px"
   workspace-inset: "25px"
   page-inline: "32px"
+  rail-closed-slot: "76px"
+  rail-open: "222px"
+  rail-mobile-slot: "64px"
 components:
   button-secondary:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "{colors.button-primary}"
     textColor: "{colors.control-text}"
     rounded: "{rounded.control}"
     padding: "8px 13px"
   button-secondary-hover:
     backgroundColor: "{colors.control-hover}"
   button-quiet:
-    backgroundColor: "transparent"
-    textColor: "{colors.brand}"
+    backgroundColor: "{colors.component}"
+    textColor: "{colors.control-text}"
     rounded: "{rounded.control}"
     padding: "8px 13px"
   button-quiet-hover:
@@ -111,13 +122,14 @@ components:
   search-field:
     backgroundColor: "{colors.field-ground}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
+    rounded: "{rounded.field}"
     padding: "0 10px"
     height: "36px"
   nav-item:
     textColor: "{colors.nav-text}"
     rounded: "{rounded.item}"
-    padding: "13px 17px"
+    padding: "10px 11px"
+    height: "45px"
   nav-item-hover:
     backgroundColor: "{colors.nav-hover}"
     textColor: "{colors.nav-bright}"
@@ -167,23 +179,23 @@ components:
 
 ## Overview
 
-**Creative North Star: "University Laboratory Exhibition Panels"**
+**Creative North Star: "Cyber Wafuu Industrial Slide Rails"**
 
-深墨色工作面、深蓝导航与可核查的图表构成这套控制台。视觉语气安静、明确，系统字体承担操作阅读，数字通过对齐和层级突出；颜色用于选中、方向和有文字的状态。此文记录已经实现的视觉系统，方向来自已选候选 7（`seed:e51c490a6e88c8c1`）。
+象牙网格底承托深青工作面，银、金、铜金属框与铆钉延续既有组件语言。左侧工业滑轨收为图标，悬停展开；用户提供的 G15 原图标识位于左上，流光响应悬停和键盘焦点。厚重标题、仪表黑体组件标题和方棱小字构成三个自托管字形层级。
 
-这是一套用于 G15 教学沙盘的界面。实际查询与生成报告决定内容，视觉层保持未知、失败和未判定可辨。该设计记录不构成生产环境、真实工业诊断或 Gate0 的验收结论。实现为原生 HTML、CSS 和 ES modules；没有获批的栅格设计稿，也没有随界面交付的栅格资产。
+这是一套用于 G15 教学沙盘的界面。实际查询与生成报告决定内容，视觉层保持未知、失败和未判定可辨。该设计记录不构成生产环境、真实工业诊断或 Gate0 的验收结论。实现为原生 HTML、CSS 和 ES modules；交付用户提供的品牌 PNG 与本地 OFL 字体，参考字形图仅作为风格依据，不声称精确复刻原字体。
 
 **Key Characteristics:**
 
-- 深墨背景、深蓝导航、浅蓝选择与曲线。
-- 扁平分区、细线分隔、紧凑但有明确分组的记录。
-- 青绿、琥珀与柔红状态始终配文字。
-- 系统无衬线用于操作；等宽仅用于运行标识、规则和采样位置等数据。
+- 象牙网格底、深青工作面、银金铜金属框和铆钉。
+- 窄工业滑轨、悬停展开标签、点击 Logo 固定与恢复折叠。
+- 健康、告警、异常与过期状态始终配文字。
+- 三层自托管字体；读数和时间以等宽数字对齐。
 - 图表检查落在实际存储窗口，数据范围与来源保持可见。
 
 ## Colors
 
-前置 token 是颜色的规范值，取自 `src/g15/console/static/app.css`；不增加新的语义色。状态派生色与交互色保留实现中的细微差异。
+前置 token 是颜色的规范值，继承 `cyber-wafuu.css` 并由末层 `industrial.css` 细化导航与字体。状态派生色与交互色保留实现中的细微差异；金属色只表达结构，不替代告警语义。
 
 ### Primary
 
@@ -193,30 +205,33 @@ components:
 
 ### Secondary
 
-- **Teal / 青绿**：`healthy` 与 `healthy-soft` 表示无活动告警；已生成报告的通过状态使用独立的 `report-passed` 配对。
+- **Lime / 黄绿**：`healthy` 与 `healthy-soft` 表示无活动告警；已生成报告的通过状态使用独立的 `report-passed` 配对。
 - **Amber / 琥珀**：`yellow` 与 `yellow-soft` 表示黄色告警。
-- **Soft red / 柔红**：`red` 与 `red-soft` 表示红色告警或读取错误；报告未通过保留其专用文字色。
+- **Alarm red / 告警红**：`red` 与 `red-soft` 表示红色告警；读取失败与报告未通过保留其各自文字和配色。
 
 ### Neutral
 
-- **Ink ground / 深墨底**：`ground` 为页面底，`surface` 为工作面、顶栏和轮廓按钮底。
+- **Ivory ground / 象牙底**：`ground` 为网格页面底，`surface` 为深青工作面、顶栏和轮廓按钮底。
+- **Metal structure / 金属结构**：`metal-silver`、`metal-gold`、`metal-copper` 分别用于银、金、铜框；`instrument-marker` 用于组件标题的青色短标。
 - **Pale ink / 浅墨文字**：`ink` 为主要文字，`muted` 为辅助说明；导航与控制拥有前置 token 中各自的文字色。
 - **Blue slate / 蓝灰分隔**：`line` 分隔容器与章节；图表使用独立的 `plot-grid`、`plot-label`。
 - **Unknown slate / 未知蓝灰**：`unknown-ground`、`unknown-text` 和报告未判定配对，不借用通过状态。
-- **Focus blue / 焦点蓝**：`focus` 用于全局键盘轮廓，`field-focus` 用于搜索框的焦点容器。
+- **Focus orange / 焦点橙**：`focus` 用于全局键盘轮廓，`field-focus` 用于搜索框的焦点容器；滑轨使用内收的暖橙轮廓以免被窄容器裁掉。
 
 **The Labeled State Rule.** 状态色必须与明确的状态文字共同出现；连接提示、活动告警、历史告警和报告结论各自保留名称。
 
 ## Typography
 
-**Body Font:** Segoe UI → Microsoft YaHei UI → PingFang SC → sans-serif。字体来自本机系统，无运行时字体下载。
+**Display Font:** `G15 Display`，由思源黑体 Heavy 900 派生，用于页面大标题。
 
-**Label/Mono Font:** ui-monospace → Cascadia Code → Consolas → monospace，仅用于运行 ID、规则、采样区间和序号等数据。设备名称及健康分使用无衬线。
+**Component Font:** `G15 Instrument`，由思源黑体 Bold 700 派生，用于二、三级组件标题。
+
+**Body / Label Font:** `G15 UI`，由思源宋体 Heavy 派生，用于标签、正文、小字与数字；未覆盖字符回退到 Microsoft YaHei UI / sans-serif。三套 WOFF2 随页面本地提供，采用 OFL 1.1，保留版权与许可；详细来源见 `src/g15/console/static/fonts/SOURCES.md`。使用 `font-display:swap` 与 `font-synthesis:none`，不依赖运行时外网。参考图的定制切角和金属效果由材质、颜色与层级接近表达，字体并非原图同款。
 
 ### Hierarchy
 
-- **Headline**：前置 `headline` 用于页面标题；窄屏降至（24px）。
-- **Title**：前置 `title` 为二级标题；设备标题在桌面采用（21px），设备列表标题采用（14px）。
+- **Headline**：前置 `headline` 用于页面标题；宽屏按视口伸缩，窄屏降至（27px）。标题为深青字与细金色底缘，不把金属材质处理套到正文。
+- **Title**：前置 `title` 为二级标题；设备标题在桌面采用（21px），设备列表标题采用（14px）。指定组件标题前附青色短标（4px）。
 - **Subtitle**：前置 `subtitle` 为章节标题；窄屏采用（14px）。
 - **Body**：根字号为前置 `body`；实际正文、按钮与解释多在（11–13px），不把所有文字放大为标题。
 - **Label**：前置 `label` 为字段说明与辅助数据；辅助说明采用明确的行高（1.65–1.9）。
@@ -228,40 +243,40 @@ components:
 
 ## Layout
 
-桌面为左侧导航（204px）与主工作区；导航固定在滚动视口顶部，高度为整个视口。主区域最大宽度（1700px），两侧内边距（32px）。设备目录与详情形成双列：目录（232px）、间隙（22px）、详情填满剩余宽度。详情通过共享标题与分隔线组织内容，不将每个数值包成单独卡片。
+桌面左侧轨道可见宽（64px），为主工作区预留（76px）；固定于视口左侧，上下各留（8px）。悬停展开到前置 `rail-open`，默认覆盖内容；宽度至少（1100px）且已固定时，主区让出（238px）。主区域最大宽度（1700px），仿真页为（1800px）。设备目录与详情保留双列，详情通过共享标题与分隔线组织内容，不将每个数值包成单独卡片。
 
 响应断点来自实际 CSS，按层叠应用：
 
 | 条件 | 实际布局行为 |
 | --- | --- |
 | 宽度至少 1540px | 目录扩至 252px，列间隙 26px，详情左右内边距 31px，图表高 270px。 |
-| 宽度不超过 1180px | 导航缩至 178px，页面左右 24px，目录 200px、列间隙 16px；范围滑块独占一行，报告指标由三列变两列。 |
-| 宽度不超过 900px | 左导航变成顶部横向导航，目录仍为 203px 的左列；设备标题与运行信息上下排列，图表高 220px。 |
-| 宽度不超过 650px | 页面左右 16px，导航按钮三等分；设备目录在详情上方，设备项横向滚动，每项 164px；详情左右 17px，图表高 205px。 |
+| 宽度不超过 1180px | 保持窄左轨道；页面左右 24px，目录 200px、列间隙 16px；范围滑块独占一行，报告指标由三列变两列。 |
+| 宽度不超过 900px | 左轨道继续纵向排列，主区左右 18px；设备标题与运行信息上下排列，图表高 220px；仿真趋势与观测区堆叠。 |
+| 宽度不超过 650px | 轨道可见宽 52px、占位 64px，展开仍为 222px；主区左右 12px。设备目录在详情上方横向滚动，图表高 205px；仿真链路以两行呈现，设备表明确支持横向查看。 |
 
 窄屏目录提供横向滑动提示，选择或尺寸改变时让已选设备进入可视范围；普通图表检查不会覆盖用户主动横向浏览的位置。告警表在窄屏重排为有字段标签的记录，保留级别、仿真位置、规则、北京时间与可展开原因；报告的逐事件表保留横向滚动。桌面表格保持列对齐。长规则、原因与采样值允许换行，运行 ID 在紧凑标题区以省略号收束，完整值仍以实际标识参与数据选择。
 
-持续模式的目录在桌面限高（640px）并纵向滚动；已选设备在选择或尺寸改变时进入可视范围。窄屏继续使用横向设备条。
+持续模式的目录在桌面随视口限高并纵向滚动，设备列表最大高度为 `calc(100vh - 260px)`；已选设备在选择或尺寸改变时进入可视范围。窄屏继续使用横向设备条。
 
 间距沿用已实现的组件值：控件内边距、目录项间隙、面板内边距和列间隙分别在前置 token 中记录，不要求所有测量都服从单一倍数。
 
 ## Elevation & Depth
 
-界面没有投影、玻璃模糊或渐变。页面底、导航底、工作面、选中面以色调分层；边框与横向分隔线负责结构。悬停改变底色或边框，不抬升组件。焦点轮廓是交互反馈，不作装饰光晕。
+界面继承深青毛玻璃工作面、黑色组件和金属框。银金铜边框、铆钉、内侧暗线与局部投影表达装配层次；滑轨横向渐变模拟金属导轨，展开不抬升其他组件。焦点轮廓是交互反馈，不以流光替代可见焦点。
 
-**The Flat Surface Rule.** 新增同类组件沿用色调与分隔线的层级，保持静态布局稳定。
+**The Metal Frame Rule.** 新增同类组件继承金属框与内部细分隔；材质不承担业务状态，也不改变数据范围。
 
-导航、按钮和目录项的状态过渡为（140–150ms ease）；没有周期性图表运动。系统请求减少动态时关闭动画、过渡与平滑滚动。
+导航颜色、按钮和目录项保持短状态过渡；轨道宽度使用（260ms，`cubic-bezier(.16,1,.3,1)`），标签使用淡入与短位移。Logo 在支持悬停的指针停留或键盘焦点时，以原图透明轮廓和亮度作为蒙版，在图案与字形的金属表面循环流动银白／青色高光（2.8s，linear）；图形间隙与底板不参与发光。移开或失焦即停止，隐藏页面暂停。仿真链路只在新鲜的真实计数增长时播放流向线，图表按实际采样更新。减少动态偏好关闭流光、滑轨过渡与流向动画。
 
 ## Shapes
 
-主面板使用前置 `panel` 圆角，窄屏为 `mobile-panel`；控件、导航/设备项、状态徽标分别使用前置圆角。薄边框承担轮廓，状态前的小圆点仅作为文字的补充。行内图标采用无填充 SVG、圆端和圆连接；常规图标（18px），按钮图标（15px）。品牌为内联线条图形，不依赖外部图片。
+主面板与设备组件为直角金属框（4px），滑轨框为银色（3px）与微圆角（2px）；按钮沿用 JRPG 切角。状态前的小点仅作为文字补充。行内图标采用无填充 SVG、圆端和圆连接；常规图标（18px），滑轨图标（20px）。品牌使用用户原图 `g15-logo.png`：折叠时显示左侧标记，展开后呈现完整横向标识。
 
 ## Components
 
 ### Buttons
 
-轮廓按钮负责刷新、继续加载与报告下载；轻按钮负责趋势范围切换和 JSON 下载。共用高度至少（36px）、字重（550）、字号（12px）与前置 padding，图表内紧凑按钮至少（32px）。轮廓按钮使用细边框，悬停同时改变背景和边框；轻按钮悬停使用柔蓝底。禁用时透明度（0.5），同时阻止交互。链接下载仅在报告就绪后获得 URL。
+轮廓按钮负责刷新、继续加载与报告下载；轻按钮负责趋势范围切换和 JSON 下载。共用高度至少（36px）、字重（650）、字号（12px）与前置 padding，图表内紧凑按钮至少（32px）。按钮使用 JRPG 切角、薄荷细边框和深绿底，轻按钮为黑底；悬停变为深绿与橙边并轻移（-1px），按下回落（2px）。禁用时透明度（0.45），同时阻止交互。链接下载仅在报告就绪后获得 URL。
 
 全局键盘焦点为轮廓（3px）、外偏移（3px）；保留跳到主要内容链接，不以透明度替代焦点。
 
@@ -271,7 +286,7 @@ components:
 
 ### Navigation
 
-导航为图标加完整文字的原生按钮，当前页使用 `aria-current="page"`。深蓝选中底明显区别于悬停底；顶部导航在窄屏均分。设备选择是独立按钮组，用 `aria-pressed` 表达当前选择，不把设备状态与选中状态混为一体。
+滑轨默认仅显示图标，悬停或键盘进入时展开到全宽并显示文字标签；离开后自动收起。点击 Logo 固定，再次点击立即恢复折叠；固定偏好存于本机 localStorage。触屏通过点击 Logo 展开并固定。Logo 用原生按钮，提供 `aria-pressed`、`aria-expanded`、`aria-controls`；Escape 可收起未固定滑轨。导航保留可访问名称与 title，当前页使用 `aria-current="page"`。各断点均使用不换列的纵向布局，导航列表可独立滚动，页脚保持末位，避免窄屏图标被旧布局挤出。设备选择仍为独立按钮组，用 `aria-pressed` 表达当前选择，不把设备状态与选中状态混为一体。
 
 ### Chips / Status badges
 
@@ -279,7 +294,7 @@ components:
 
 ### Cards / Containers
 
-目录和详情是共享工作面的两个容器，保持细边框与扁平圆角。详情内部用分隔线组织最新窗口、曲线和最近告警；报告指标用定义列表与横线形成数据网格。加载、空结果、认证不可用和部分失败显示实际文案，保留重试或刷新入口。
+目录和详情是共享工作面的两个容器，保持金属边框与铆钉。详情内部用细分隔线组织最新窗口、曲线和最近告警；报告指标用定义列表与横线形成数据网格。加载、空结果、认证不可用和部分失败显示实际文案，保留重试或刷新入口。
 
 ### Inspectable health plot
 
@@ -297,7 +312,7 @@ components:
 
 ### Continuous simulation status
 
-持续模式沿用同一套扁平工作面、细分隔线和有文字的状态徽标。页面顶部显示仿真设备数、采样率、窗口长度及采集样本、已处理样本、已写窗口和待分析批次；设备项保留实际查询得到的健康预览，并补充样本、窗口、积压与最近提交。详情上方的采集计数来自当前持续状态，图表中的保留快照仍按其已读取范围解释。
+持续模式沿用同一套金属工作面、内部细分隔线和有文字的状态徽标。页面顶部显示仿真设备数、采样率、窗口长度及采集样本、已处理样本、已写窗口和待分析批次；设备项保留实际查询得到的健康预览，并补充样本、窗口、积压与最近提交。详情上方的采集计数来自当前持续状态，图表中的保留快照仍按其已读取范围解释。
 
 状态与概览在本轮完成后约（2 秒）继续读取，后台概览并发上限（3）；隐藏页面暂停，销毁时取消请求和计时器。请求超过（6 秒）标记超时；持续状态、概览或设备提交超过（10 秒）未更新，使用中性过期标签。停止、异常、暂停和积压分别写明，不让绿色暗示仍在更新。这些是界面读取/新鲜度策略，不是业务健康阈值。
 
@@ -305,19 +320,25 @@ components:
 
 ### Fleet screen and operations views
 
-大屏 `/screen` 以真实状态分布环、异常优先设备矩阵、所选设备趋势和来源明确的维护建议构成三栏布局；窄屏依次堆叠。运营看板 `/operations` 使用指标卡、同一真实趋势和可搜索设备表。两页只用现有查询数据，状态色始终配文字，未知、过期和读取失败单独计数。页面间使用普通链接，不加入截图中未实现的租户、工单、会诊或设备控制入口。
+大屏 `/screen` 以真实状态分布环、异常优先设备矩阵、所选设备趋势和来源明确的维护建议构成三栏布局；窄屏依次堆叠。运营看板 `/operations` 使用指标卡、同一真实趋势和可搜索设备表。两页只用现有查询数据，状态色始终配文字，未知、过期和读取失败单独计数。页面间使用普通链接，可进入仿真控制页；不增加租户、工单或会诊操作。
 
 诊断工作台 `/diagnosis` 使用双栏分析布局：真实设备选择、当前健康分、规则版本、最新窗口的五维风险与最近证据链。五维固定为电平、强度、波动、冲击和频谱，使用原生 progress 与真实持久化风险绘制；任一维度未知时不绘制完整雷达。历史告警来源与当前状态分别标注，不补造温度/电流工业诊断、SLA 或在线会诊。
 
 ### Cyber Wafuu shared theme
 
-所有页面最后加载 `cyber-wafuu.css`，统一使用象牙色 `#FEFFEF` 网格底、深青 `#28313C` 看板、黑色 `#010101` 毛玻璃组件及铆钉角点。健康/趋势/告警分别使用 `#A5CD2E`、`#5796D3`、`#D32529`；黄色状态使用 `#FF8A00`。按钮采用 JRPG 切角、深绿 `#133E34` 与薄荷 `#80D8CF`，焦点为橙色，危险状态用 `#FF4400`。窄屏导航允许换行，不能用横向隐藏冒充适配。
+页面先继承 `cyber-wafuu.css` 的象牙网格底、深青看板、黑色毛玻璃组件、银金铜框与铆钉，再以 `industrial.css` 作为末层统一字体和滑轨。按钮沿用 JRPG 切角、深绿与薄荷配色，焦点为橙色。小屏保留窄纵向滑轨，主区按内容重排；不得以隐藏内容冒充适配。
+
+### Simulation flow and device controls
+
+`/simulation` 用四段链路呈现仿真采集、分析队列、特征分析、结果入库，计数来自同源 `/api/live`。采集与处理速率由相邻有效读取的累计计数差除以实际时间差计算，保留最近（60 次）速率读数；会话切换、计数倒退、设备集合改变或间隔过长不能连成有效速率。延迟 P95、反压事件和延迟周期保留其实际来源与单位。
+
+单台及全体启停操作仅暂停/恢复当前仿真会话的新增采集，已有批次继续处理，恢复后沿用运行与样本序号。请求期间禁用相关操作；旧会话、过期快照、不可用控制与异常均明确提示。全暂停时仍校验服务心跳，不把持续成功读取的旧快照当作新鲜。设备异常、会话异常、已暂停、排空中和会话结束分别显示，不以状态色代替文字。
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** 延用深墨工作面与浅蓝选择，使当前设备和当前页面易于识别。
+- **Do** 延用象牙网格、金属工作面与窄滑轨，使当前设备和当前页面易于识别。
 - **Do** 让状态色与文字共同表达含义，并分开标明活动状态、历史告警和报告结论。
 - **Do** 保留实际数据范围、单位、来源与未知值，使图表和报告可核查。
 - **Do** 在窄屏保留已选设备可见性，并用有字段标签的告警记录保障完整阅读。
@@ -329,4 +350,5 @@ components:
 - **Don't** 把未知、未判定、null 或失败画成通过、零或满分。
 - **Don't** 从健康分另造告警阈值，或用历史告警代替当前活动状态。
 - **Don't** 为图表添加模拟实时跳动、补造缺失窗口或省略部分范围提示。
-- **Don't** 用栅格装饰、外部字体、投影或玻璃效果改变这套已实现的扁平系统。
+- **Don't** 替换用户提供的品牌原图，或将相近的自托管字体声称为参考图精确同款。
+- **Don't** 把仿真采集启停写成物理设备控制，或用装饰动画暗示没有发生的数据传输。

@@ -127,6 +127,7 @@ class _Device:
     latency_count: int = 0
     latency_sum: float = 0.0
     latency_max: float = 0.0
+    capture_paused: bool = False
 
 
 @dataclass(frozen=True)
@@ -268,6 +269,9 @@ class LiveRuntime:
         self.runs_root.mkdir()
         self.catalog_path = self.session_root / "catalog.json"
         self._lock = threading.RLock()
+        # Serialize capture admission with pause acknowledgement. Accepted work
+        # can still drain, but no new capture starts after pause returns.
+        self._control_lock = threading.Lock()
         self._writer_lock = _WriterLock(self.output_root / ".live-writer.lock")
         self._queue = queue.Queue(maxsize=self.config.queue_capacity)
         self._stop = threading.Event()
@@ -381,6 +385,7 @@ class LiveRuntime:
                         "last_capture_at_utc",
                         "last_commit_at_utc",
                         "error",
+                        "capture_paused",
                     )
                 }
                 row["pending_samples"] = d.captured_samples - d.processed_samples
@@ -460,6 +465,28 @@ class LiveRuntime:
     def wait(self, timeout=None) -> bool:
         """Wait until final reports, writer closure and lock release complete."""
         return self._done.wait(timeout)
+
+    def control_capture(self, action: str, pair: tuple[str, str] | None = None) -> None:
+        """Pause/resume simulated capture; preserve accepted work and sequence.
+
+        Controls require a running session. Pausing never freezes the writer or
+        removes data, and the wall-clock duration/disk protections remain active.
+        """
+        if action not in ("pause", "resume"):
+            raise ValueError("invalid capture action")
+        with self._control_lock, self._lock:
+            if self._state != "running" or self._stop.is_set():
+                raise RuntimeError("live session is not running")
+            selected = [
+                device
+                for device in self._devices
+                if pair is None or (device.run_id, device.device_id) == pair
+            ]
+            if not selected:
+                raise ValueError("unknown live resource")
+            for device in selected:
+                device.capture_paused = action == "pause"
+            self._persist_all()
 
     def stop(self, timeout=10) -> dict:
         """Stop new capture, drain durable accepted work, and wait up to timeout."""
@@ -577,7 +604,12 @@ class LiveRuntime:
                         self._limit_reason = "disk_limit"
                         self._stop.set()
                         break
-                    task = self._capture_one(index)
+                    with self._control_lock:
+                        with self._lock:
+                            paused = self._devices[index].capture_paused
+                        if paused:
+                            continue
+                        task = self._capture_one(index)
                     waiting = time.monotonic()
                     recorded = False
                     while not self._writer_failed.is_set():

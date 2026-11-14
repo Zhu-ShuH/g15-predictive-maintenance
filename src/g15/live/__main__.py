@@ -18,6 +18,9 @@ import sys
 import threading
 
 from g15.console.server import create_console_server
+from g15.console.laboratory import LaboratoryController
+from g15.console.archive import LiveHistoryRegistry
+from g15.console.operations import OperationsController
 from g15.console.notifications import (
     EmailNotificationController,
     NotificationController,
@@ -72,6 +75,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--health-rules", type=Path, required=True)
+    parser.add_argument("--laboratory-root", type=Path)
+    parser.add_argument("--operations-root", type=Path)
     parser.add_argument("--devices", type=int, default=10)
     parser.add_argument("--sample-rate-hz", type=int, default=256)
     parser.add_argument("--window-points", type=int, default=256)
@@ -127,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     notifications = None
     email_notifications = None
     notification_lock = None
+    laboratory = None
+    operations = None
     prior_handlers = {}
     result_code = 0
 
@@ -198,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
                 live_status=runtime.status_snapshot()["status"],
             )
 
+        if args.laboratory_root is not None:
+            laboratory = LaboratoryController(args.laboratory_root, args.health_rules)
         console = create_console_server(
             runtime.catalog_path,
             runtime.runs_root,
@@ -207,7 +216,23 @@ def main(argv: list[str] | None = None) -> int:
             live_status_provider=runtime.status_snapshot,
             credential_provider=credential,
             live_report_provider=live_report,
+            live_control_provider=runtime.control_capture,
+            laboratory_provider=laboratory,
         )
+        servers.append(console)
+        history = LiveHistoryRegistry(
+            args.output_root, current_session=runtime.session_id
+        )
+        operations = OperationsController(
+            args.operations_root or args.output_root / "workbench",
+            runs_root=runtime.runs_root,
+            catalog_provider=lambda: console.application.devices,
+            authorize=console.application.authorize_operation,
+            laboratory=laboratory,
+            live_status_provider=runtime.status_snapshot,
+            history_provider=history,
+        )
+        console.application.operations = operations
         notification_lock = _WriterLock(args.output_root / "notifications.writer.lock")
         notification_lock.acquire()
         notifications = NotificationController(
@@ -230,7 +255,6 @@ def main(argv: list[str] | None = None) -> int:
             args.output_root / "email-notifications.sqlite",
         )
         console.application.email_notifications = email_notifications
-        servers.append(console)
         for server in servers:
             thread = threading.Thread(
                 target=server.serve_forever,
@@ -301,6 +325,18 @@ def main(argv: list[str] | None = None) -> int:
                 if threads[index].is_alive():
                     result_code = 1
             server.server_close()
+        if laboratory is not None:
+            try:
+                laboratory.close(wait=True)
+            except Exception:  # pylint: disable=broad-exception-caught
+                logging.error("laboratory service failed to stop cleanly")
+                result_code = 1
+        if operations is not None:
+            try:
+                operations.close()
+            except Exception:  # pylint: disable=broad-exception-caught
+                logging.error("workbench service failed to stop cleanly")
+                result_code = 1
         if notification_lock is not None:
             notification_lock.release()
         for number, handler in prior_handlers.items():

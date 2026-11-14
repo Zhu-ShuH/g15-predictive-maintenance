@@ -1,5 +1,7 @@
 # 本机只读网页控制台（#158 候选）
 
+2026-11-14 用户授权的扩展另见[故障注入、回放与运行对比](workbench.md)：`/workbench` 可读取已提交分析数据并将告警确认及备注写入独立处置库；本页原只读协议及分析数据写入边界保持不变。
+
 控制台独立代理已运行的真实查询 HTTP API，并展示已有公共报告。它不生成数据、不评分、不消费、不读 SQLite 或 `private_truth`，也不替代正式验收。此页描述本次候选行为；真实评审、CI、部署验收状态由对应 PR/Issue 记录。
 
 ## 启动
@@ -51,11 +53,14 @@ python -m g15.console \
 | `GET /screen` | 深色大屏驾驶舱；可带 `device/run` 选择参数，其他参数拒绝。 |
 | `GET /operations` | 浅色运营看板；可带 `device/run` 选择参数，其他参数拒绝。 |
 | `GET /diagnosis` | 单设备诊断工作台；可带 `device/run` 选择参数，其他参数拒绝。 |
+| `GET /simulation` | 仿真采集控制与数据流看板；可带 `device/run` 选择参数，其他参数拒绝。 |
 | `GET /assets/app.css`、`/assets/app.js`、`/assets/state.js` | 控制台固定包资源，不接受 query 或其他资产路径。 |
 | `GET /assets/fleet.css`、`/assets/fleet.js` | 大屏与运营看板固定包资源，不接受 query。 |
 | `GET /assets/diagnosis.css`、`/assets/diagnosis.js` | 诊断工作台固定包资源，不接受 query。 |
 
-以上读取路径也支持 HEAD，响应体为空但仍执行相同授权检查。其他方法返回405；所有响应关闭连接，不接受请求体、Transfer-Encoding、重复 Content-Length 或 Expect。重复/未知 API query 参数返回400，未注册 pair 返回404。
+以上读取路径也支持 HEAD，响应体为空但仍执行相同授权检查。除独立文档定义的通知POST与下述仿真控制POST外，其他方法返回405；读取响应关闭连接，不接受请求体、Transfer-Encoding、重复 Content-Length 或 Expect。重复/未知 API query 参数返回400，未注册 pair 返回404。
+
+内嵌持续会话另外提供 `/api/live` 与 `POST /api/live/control`。控制JSON为当前 `session_id`、`action=pause|resume`；可选成对 `run_id/device_id` 选择单设备，省略则控制全体。正文最多4096字节，要求同源Origin、JSON Content-Type与 `X-G15-Console-Action: live-control`，未知/重复字段拒绝。200返回公开持续状态；409表示会话改变或运行已终止，503表示未配置控制或暂不可用。暂停仅停止新的仿真采集，已接受分析继续排空；恢复不清历史、不补样本、不重置序号。当前会话启用控制时公开 `controls_available=true`，设备公开 `capture_paused`；未提供的控制能力不应显示为可操作。详见[持续采集说明](live.md)与接口契约§18。
 
 合法上游401、404、503等保留状态与既有公开错误信封。连接/超时或暂不可读的凭据返回脱敏503；重定向、超限、错资源、Bearer反射或非公开错误信封返回502。错误不回显异常文本、磁盘路径、traceback或凭据。有效上游响应不因这些异常检查被重新编码。
 
@@ -112,3 +117,7 @@ python -m pylint src/g15/console --fail-under=8.5
 ```
 
 覆盖原样代理、每请求凭据更新、401/404/503、报告先授权/身份错配、目录与文件逃逸、文件更换、Host/Origin/Fetch-Site、无Bearer反射、只读方法、资源与静态白名单、深链接、过载、非整数worker拒绝、上游大小/总时限、重定向拒绝和空态。Windows无创建symlink权限时相应用例明确skip，Linux应实际执行，不能把skip写为通过。完整项目回归、真实浏览器与双Linux安装验证另按最终SHA执行，不以这些定向测试代替。
+
+## 波形观察与场景实验
+
+`/laboratory` 在同一工业控制台中展示已提交的振动、温度和频谱，并管理独立参数实验。实时读取仅限已登记的运行与设备，实验由显式启用的独立服务拥有。配置、接口、数值含义和限额见 [波形与实验台](laboratory.md)。
