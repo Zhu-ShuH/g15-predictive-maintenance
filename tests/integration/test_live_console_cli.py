@@ -25,8 +25,9 @@ def _wait_for(predicate, *, timeout=12):
 
 
 @pytest.mark.parametrize("laboratory_enabled", [False, True])
+@pytest.mark.parametrize("duration_seconds", ["15", "0"])
 def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
-    tmp_path, laboratory_enabled
+    tmp_path, laboratory_enabled, duration_seconds
 ):
     root = Path(__file__).resolve().parents[2]
     output = tmp_path / "runtime"
@@ -49,7 +50,7 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
             "--devices",
             "2",
             "--duration-seconds",
-            "15",
+            duration_seconds,
             "--sample-rate-hz",
             "2560",
             "--interval-seconds",
@@ -78,6 +79,14 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
         ready_path = output / "active.json"
         _wait_for(ready_path.is_file)
         ready = json.loads(ready_path.read_text(encoding="utf-8"))
+        duration_limit = None if duration_seconds == "0" else float(duration_seconds)
+        assert ready["config"]["max_duration_seconds"] == duration_limit
+        capture_config = json.loads(
+            (Path(ready["session_root"]) / "capture-config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert capture_config["config"]["max_duration_seconds"] == duration_limit
         base = ready["console_url"].rstrip("/")
 
         def get(route):
@@ -103,6 +112,10 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
         assert workbench["available"] is True and len(workbench["runs"]) == 2
         identities = [row["id"] for row in workbench["runs"]]
         replay = get("/api/workbench/run?id=" + identities[0])
+        assert (
+            replay["configuration"]["parameters"]["max_duration_seconds"]
+            == duration_limit
+        )
         assert replay["windows"] and replay["complete"] is True
         assert replay["latency"]["kind"] == "capture_to_commit"
         assert replay["latency"]["mean_seconds"] > 0
@@ -185,6 +198,8 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
         stop_file.write_text("stop\n", encoding="utf-8")
         stdout, stderr = child.communicate(timeout=15)
         assert child.returncode == 0, stderr
+        startup = json.loads(stdout.splitlines()[0])
+        assert startup["duration_limit_seconds"] == duration_limit
         final = json.loads(
             (Path(ready["session_root"]) / "service-status.json").read_text(
                 encoding="utf-8"

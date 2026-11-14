@@ -9,10 +9,14 @@
 在业务仓库外准备运行目录；不可用Obsidian规划库或output作为测试、缓存或运行目录。安装现有锁定依赖后运行：
 
 ~~~powershell
-python -m g15.live --output-root D:\work\repos\g15-live-runtime --health-rules configs/health_rules.yaml --devices 10 --sample-rate-hz 256 --window-points 256 --interval-seconds 1 --duration-seconds 3600 --max-disk-mib 512 --console-port 18468 --query-port 18469
+python -m g15.live --output-root "$env:LOCALAPPDATA/G15/live" --health-rules configs/health_rules.yaml --devices 10 --sample-rate-hz 256 --window-points 256 --interval-seconds 1 --duration-seconds 0 --max-disk-mib 512 --console-port 18468 --query-port 18469
 ~~~
 
 控制台和查询仅绑定127.0.0.1。服务端在内存签发短期Bearer，浏览器和运行目录没有令牌或密钥文件；单一身份最多授权10台设备的现有约束不变。
+
+`--duration-seconds 0` 表示不限运行时长，直到手动停止、磁盘保护或真实运行错误发生；不会在 1 小时或 24 小时到点停止。省略该参数仍默认 3600 秒，有限时长可设为大于 0 且不超过 86400 秒。运行配置和启动输出中的时限以 JSON `null` 表示无时限，工作台显示“无时限”；缺少旧配置字段仍表示“未记录”。
+
+不限时长只取消时间截止，不取消默认 512 MiB 会话存储预算、剩余磁盘保护、队列与反压上限。不会自动删除旧样本或处置记录。历史回放/比较仍保留最多 8192 窗口、4096 告警的完整读取限制；超限明确报错，采集与按范围读取波形不因此停止。已进入终态的会话不能恢复，切换模式需新开会话，旧数据保留。
 
 output-root/active.json记录session、端口、PID、源码SHA/dirty和stop_file。向stop_file写内容或对前台进程按Ctrl+C可正常停止：先停新采样，再处理已采任务；超时或失败不能写成正常停止。达到时长/磁盘保护后为limit_reached，网页继续显示已存结果；--exit-after-stop使HTTP也退出，供有界实测使用。
 
@@ -22,7 +26,7 @@ output-root/active.json记录session、端口、PID、源码SHA/dirty和stop_fil
 
 本机控制台支持暂停/恢复单设备或全部设备的仿真采集。暂停确认后停止产生新样本，已落盘且接受的批次仍会分析并写入SQLite，因而暂停后处理计数可能继续增加直到追平。恢复沿同一run的下一样本序号继续，暂停期间不补生成数据，不重置健康评分、告警状态或历史。
 
-暂停不结束会话，整体运行状态仍为running；以每设备 `capture_paused` 判断是否采集。时长和磁盘保护继续生效，达到保护或会话已停止后不能通过恢复绕过保护。控制只作用于当前本机仿真，不发硬件控制命令。控制请求不调用通知测试或修改通知设置；独立运行的已有自动提醒策略保持原语义。
+暂停不结束会话，整体运行状态仍为running；以每设备 `capture_paused` 判断是否采集。已配置的有限时长和磁盘保护继续生效；无时限模式不检查时间截止。达到保护或会话已停止后不能通过恢复绕过保护。控制只作用于当前本机仿真，不发硬件控制命令。控制请求不调用通知测试或修改通知设置；独立运行的已有自动提醒策略保持原语义。
 
 控制契约为 `POST /api/live/control`，传当前 `session_id`、`action=pause|resume`；单设备另传精确 `run_id/device_id`，全体省略这两个字段。必须使用同源 Origin、JSON正文及 `X-G15-Console-Action: live-control`。会话改变或终态返回409，用户应刷新状态；GET `/api/live` 的 `controls_available` 表明是否配置控制能力。界面上的吞吐速率应从真实采集/提交计数与观测时间差计算，首个观测、重连、会话变化与负增量不推断速率。
 

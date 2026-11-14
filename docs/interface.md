@@ -795,7 +795,9 @@ A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次H
 
 用户直接要求的本机仿真启停候选增加 `POST /api/live/control`：JSON 严格为 `{"session_id":"当前会话","action":"pause或resume"}`，单设备操作另加成对 `run_id/device_id`，省略 pair 表示全体。要求精确同源 Origin、`X-G15-Console-Action: live-control`、JSON Content-Type，正文不超过4096字节；不接受重复字段、未知字段、Transfer-Encoding或Expect。成功200返回完整公开状态；400参数错误、403来源不符、404未注册pair、409 `live_session_changed`/`live_not_running`、503 `live_control_unavailable`。未显式配置控制提供者的独立控制台不能控制采集。
 
-启用控制时 `/api/live` 增加 `controls_available=true`；具备本增量的运行时每设备增加严格布尔 `capture_paused`。服务整体 `status=running` 表示会话仍运行，不能据此忽略单设备暂停。暂停确认后不再新增该设备样本；已接受批次继续分析排空。恢复沿原run、样本序号、评分状态继续，不清空历史、重置统计或补生成暂停期间样本；时长/磁盘保护仍生效，终态不可恢复。本增量不改变严格 `live-session.json` 字段、查询主服务或物理设备接口。
+启用控制时 `/api/live` 增加 `controls_available=true`；具备本增量的运行时每设备增加严格布尔 `capture_paused`。服务整体 `status=running` 表示会话仍运行，不能据此忽略单设备暂停。暂停确认后不再新增该设备样本；已接受批次继续分析排空。恢复沿原run、样本序号、评分状态继续，不清空历史、重置统计或补生成暂停期间样本；已配置的有限时长/磁盘保护仍生效，终态不可恢复。本增量不改变严格 `live-session.json` 字段、查询主服务或物理设备接口。
+
+持续入口 `--duration-seconds 0` 显式取消时间截止，映射为 `LiveConfig.max_duration_seconds=None`；省略仍默认3600秒，有限值保持大于0且不超过86400秒。配置、`active.json` 与启动输出的时限使用JSON null，不序列化Infinity；bool、NaN、Infinity和负数仍拒绝。工作台参数投影保留显式 `max_duration_seconds:null` 并显示“无时限”，缺字段仍表示未记录。无时限模式保留磁盘/剩余空间/队列/反压保护、手动暂停恢复、正常停止排空及既有历史完整读取上限；不自动清理历史，不改变离线仿真总点数或Manifest契约。
 
 数据流看板另投影运行时已有的真实观测：设备 `pending_samples` 必须等于采集减提交样本数；会话 `backpressure_events/late_cycles` 为非负整数，`limit_reason` 仅为null、duration_limit或disk_limit。`latency` 只公开 `recent_count`（0–2048）与 `recent_p95_seconds`；无提交时二者为0/null，有观测时延迟必须有限非负，表示样本生成开始到SQLite提交返回的近2048条P95，不是硬件延迟。缺失的旧提供者字段保持缺失，不补零；自由文本、路径与资源进程信息不投影。
 

@@ -114,6 +114,7 @@ function recordedParameters(detail) {
 function parameterText(key, value, detail) {
   const scenario = detail.configuration.parameters?.profile || detail.run.scenario;
   const inactive = key.startsWith("fault_") && scenario !== "sudden_fault" || key === "degradation_rate_per_sample" && scenario !== "degradation";
+  if (key === "max_duration_seconds" && value === null) return "无时限";
   if (value === undefined || value === null) return inactive ? "不适用" : "未记录";
   let output;
   if (key === "profile") output = SCENARIO_LABELS[value] || String(value);
@@ -142,7 +143,8 @@ export function reportContentHTML(snapshot, headingLevel = 3) {
 export function exportCSV(snapshot) {
   const runs = snapshot.runs || [], headers = ["比较项", ...runs.map((d) => `${d.run.device_id} / ${d.run.run_id}`)];
   const configs = [...new Set(runs.flatMap((d) => Object.keys(d.configuration.parameters || {})))].sort().map((key) => [`配置.${key}`, ...runs.map((d) => Object.hasOwn(d.configuration.parameters || {}, key) ? JSON.stringify(d.configuration.parameters[key]) : null)]);
-  return "\uFEFF" + [headers, ["快照生成时间", ...runs.map(() => snapshot.generated_at_utc || "")], ...comparisonRows(runs), ...configs].map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const duration = configurationRows(runs).filter(([label]) => label === PARAMETER_LABELS.max_duration_seconds);
+  return "\uFEFF" + [headers, ["快照生成时间", ...runs.map(() => snapshot.generated_at_utc || "")], ...comparisonRows(runs), ...duration, ...configs].map((row) => row.map(csvCell).join(",")).join("\r\n");
 }
 
 export function exportHTML(snapshot) {

@@ -38,14 +38,14 @@ from .schema import SCHEMA_VERSION, SCENARIO_ID, atomic_json, atomic_replace, ut
 
 @dataclass(frozen=True)
 class LiveConfig:
-    """Finite public capture limits; nominal sampling geometry is explicit."""
+    """Bounded capture resources; ``None`` disables only the duration limit."""
 
     devices: int = 10
     sample_rate_hz: int = 256
     window_points: int = 256
     interval_seconds: float = 1.0
     queue_capacity: int = 20
-    max_duration_seconds: float = 3600.0
+    max_duration_seconds: float | None = 3600.0
     max_disk_bytes: int = 536870912
     seed: int = 160
     cycle_windows: int = 12
@@ -77,7 +77,6 @@ class LiveConfig:
             raise ValueError("invalid live queue/profile configuration")
         for key in (
             "interval_seconds",
-            "max_duration_seconds",
             "backpressure_timeout_seconds",
         ):
             value = getattr(self, key)
@@ -88,9 +87,17 @@ class LiveConfig:
                 or value <= 0
             ):
                 raise ValueError("finite positive live duration required")
+        duration = self.max_duration_seconds
+        if duration is not None and (
+            isinstance(duration, bool)
+            or not isinstance(duration, (int, float))
+            or not math.isfinite(duration)
+            or duration <= 0
+        ):
+            raise ValueError("finite positive live duration or None required")
         if (
             not 0.02 <= self.interval_seconds <= 5
-            or self.max_duration_seconds > 86400
+            or (duration is not None and duration > 86400)
             or self.backpressure_timeout_seconds > 30
         ):
             raise ValueError("live duration limit exceeded")
@@ -470,7 +477,7 @@ class LiveRuntime:
         """Pause/resume simulated capture; preserve accepted work and sequence.
 
         Controls require a running session. Pausing never freezes the writer or
-        removes data, and the wall-clock duration/disk protections remain active.
+        removes data. Disk protection and any configured duration limit remain.
         """
         if action not in ("pause", "resume"):
             raise ValueError("invalid capture action")
@@ -573,9 +580,13 @@ class LiveRuntime:
 
     def _capture(self):
         deadline = self._origin + self.config.interval_seconds
+        until_limit = (
+            self._origin + self.config.max_duration_seconds
+            if self.config.max_duration_seconds is not None
+            else math.inf
+        )
         try:
             while not self._stop.is_set():
-                until_limit = self._origin + self.config.max_duration_seconds
                 if self._stop.wait(
                     max(0, min(deadline, until_limit) - time.monotonic())
                 ):
@@ -668,14 +679,7 @@ class LiveRuntime:
                     "seed": self.config.seed + index,
                     "sample_rate_hz": self.config.sample_rate_hz,
                     "start_time_utc": self._started_at,
-                    "total_points": max(
-                        1,
-                        math.ceil(
-                            self.config.max_duration_seconds
-                            * self.config.sample_rate_hz
-                        )
-                        + self.config.batch_points,
-                    ),
+                    "total_points": start + self.config.batch_points,
                     "device_id": device.device_id,
                 },
                 "signals": {

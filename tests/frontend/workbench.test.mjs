@@ -113,6 +113,20 @@ test("narrow health diagrams use visible pixel geometry while independent report
   assert.match(svg, /viewBox="0 0 258 200"/); assert.match(svg, /font-size="12"/); assert.doesNotMatch(svg, /NaN|Infinity/);
   assert.match(exportHTML(snapshot()), /viewBox="0 0 900 255"/);
 });
+
+test("capture duration distinguishes unlimited, missing and finite values in previews and exports", () => {
+  const unlimited = detail(), missing = detail(), finiteRun = detail();
+  unlimited.configuration.parameters.max_duration_seconds = null;
+  finiteRun.configuration.parameters.max_duration_seconds = 3600;
+  const data = { ...snapshot(), runs: [unlimited, missing, finiteRun] };
+  assert.deepEqual(configurationRows(data.runs).find(([label]) => label === "采集时限"), ["采集时限", "无时限", "未记录", "3600 秒"]);
+  for (const html of [reportContentHTML(data), exportHTML(data)]) assert.match(html, /<th scope="row">采集时限<\/th><td>无时限<\/td><td>未记录<\/td><td>3600 秒<\/td>/);
+  const csv = exportCSV(data);
+  assert.match(csv, /"采集时限","无时限","未记录","3600 秒"/);
+  assert.match(csv, /"配置.max_duration_seconds","null","","3600"/);
+  assert.equal(JSON.parse(JSON.stringify(data)).runs[0].configuration.parameters.max_duration_seconds, null);
+  assert.equal(Object.hasOwn(missing.configuration.parameters, "max_duration_seconds"), false);
+});
 test("workbench keeps every laboratory navigation destination plus its current workspace", () => {
   const navLinks = (name) => { const html = readFileSync(new URL(`../../src/g15/console/static/${name}.html`, import.meta.url), "utf8"); const nav = /<nav class="main-nav"[^>]*>([\s\S]*?)<\/nav>/.exec(html)[1]; return [...nav.matchAll(/href="([^"]+)"/g)].map((match) => match[1]); };
   const laboratory = navLinks("laboratory"), workbench = navLinks("workbench");
