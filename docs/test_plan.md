@@ -1,5 +1,7 @@
 # 测试计划：独立验证与报告（Issue #9）
 
+> 2026-11-15 实施补记：A 已在[收据6881148970](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6881148970)批准 `457c2612` 的 §9.4 选择方法及两槽预算，随后接手 #56 的工具实施。候选账本与冻结后工程验证入口见[执行说明](holdout_execution.md)。该工具交付不代替具体值本人声明、精确配置复评或原独立验收；下方旧批次和未执行计划按其原时点保留。
+
 > 负责人：B1（kittywent，2026-10-25 承接原 C5 职责）
 > 依据：`docs/acceptance.md` §3/§4、`docs/interface.md` §5.3/§5.4/§8.5、`docs/development.md`
 > 本文件是**计划**，实测结果见 `docs/test_report.md`。计划里写的任何数字都不是成绩。
@@ -320,7 +322,7 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 | ACC-IDEMP-01 | 完成一次消费 | 对同一 run/库再消费两次 | 第二、三次不新增分片、窗口或告警 | 自动化已有；现场记录五表计数 |
 | ACC-RECON-01 | 完整或受控部分消费 run | 生成报告并读取 JSON/Markdown | `processed+rejected=total`；`analysed+dropped=processed`；两份报告同源 | 自动化已有；最终 SHA 现场保存产物 |
 | PERF-1M-01 | 空运行目录、固定 benchmark 配置、目标 Linux | 每系统独立进程连续运行 3 次 `benchmark.sh` | 每轮 1,000,000 点、10 分片、独立校验通过、生产窗口严格 <60s；报告中位/最大/RSS | 双 Linux 历史证据已有；最终 SHA 重跑 |
-| PERF-QUERY-01 | #135 已实现（#149）；#136 Gate 0、D0 数据待执行 | 按 #136 Gate 0 跑冷热查询、oracle 与 `EXPLAIN QUERY PLAN` | 响应逐项等于独立 SQL；给出 p50/p95/p99、计划、资源、计数守恒 | **#135 已实现；#136 Gate 0 未执行**；禁止以 ADR 目标代替数据 |
+| PERF-QUERY-01 | #135 已交付；#136 Gate 0 已执行但未通过 | 留存既有 D0、查询计划、oracle、计数及原始失败；停止继续修复和重测 | 原 AND 判据保持，不降门槛 | **Gate 0 未通过、AND=false，#136 关闭留档；100k 未验证**；详见测试报告 §10 |
 | SEC-LOG-01 | 完成一轮主链及已实现查询服务 | 扫描仓库外运行日志/报告 | 无 token、密码、真实个人身份、真实厂区信息、私人绝对路径或 `private_truth` 原文 | 主链最终 SHA 待执行；查询服务已实现（#149） |
 | SAFE-NOACT-01 | 使用发布 CLI/脚本清单 | 搜索并演示告警、reset 边界 | 系统无停机/控制命令；reset 必须 `--yes`+原因；任何未来执行动作需人工确认 | no-actuation 为架构边界；reset 自动化已有 |
 
@@ -335,7 +337,7 @@ A 已裁决（Issue #56 评论 A-T151，2026-11-10）：采用「补充真正未
 
 ### 10.2 最终发布门禁
 
-只有同一个最终候选 SHA 在 Ubuntu 与 RHEL 上完成 clean-clone、setup、离线 demo/verify、百万点、坏数据和 kill 演练，并完成 #56→#9 独立保留集后，才可在期末矩阵中把这些项标为“通过”。#136 容量 Gate 未完成时，查询 p95/EXPLAIN 和 100k 必须保留“未执行”，不得降级成文档完成。
+只有同一个最终候选 SHA 在 Ubuntu 与 RHEL 上完成 clean-clone、setup、离线 demo/verify、百万点、坏数据和 kill 演练，并完成 #56→#9 独立保留集后，才可在期末矩阵中把这些项标为“通过”。#136 容量观察已有实测，Gate 0 结论为“已执行未通过并停止修复”，100k 为“未验证”；保留各批次实际数字和失败，不能把已有测试改称未执行，也不能把关闭留档记成通过。
 ## 11 用户查询容量门禁（Issue #136，Gate 0 计划）
 
 > 本节属 #136（父单 #133，ADR-0007），与 #9 的「受控事件检出」是两个不同主题。负责人 B1（kittywent）承接，A 共同负责，C4 非作者复核，A 门禁。只授权 Gate 0（oracle / 可信计数 / D0 / 低负载），不授权高负载；D1/D2 与十万级逐档重新授权。
