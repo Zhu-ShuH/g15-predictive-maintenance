@@ -35,3 +35,5 @@ HealthQueryApplication仅显式allow_live_runs=True才接纳live。身份、路�
 保留每设备实收/提交样本、窗口/告警、原始批次与SQLite连续序号和摘要对账、积压、失败；轮询真实API证明持续推进。保存逐批生成开始到SQLite commit返回的原始纳秒延迟与分位数、HTTP延迟、同进程CPU/RSS/handle或FD和磁盘观察。该延迟不是硬件采样延迟，资源峰值只是已观察值。
 
 本轮要求10台都持续推进至少60秒、无静默丢样/重复窗口/状态回退/SQLite损坏/HTTP错误；正常停止后captured=processed且queue_depth=0。失败原样留存，不重跑择优、放宽阈值或扩队列造通过。未设工业SLO，不声明最大容量。实测、CI、双Linux兼容与内部界面复核分别记录，不能代替真实非作者Review。
+
+接口与范围见[interface §19](interface.md#19-持续仿真会话增量160候选)。

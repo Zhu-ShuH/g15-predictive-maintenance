@@ -44,6 +44,7 @@ def _validate_retained(report, db_paths):
         raw=report["paging"]["raw_responses"],
         consumed=report["paging"]["consumed_responses"],
         discards=report["paging"]["discards"],
+        request_contexts=report["paging"]["request_contexts"],
         oracle_problems=report["paging"]["raw_oracle_problems"],
         traversal_problems=report["paging"]["traversal_problems"],
     )

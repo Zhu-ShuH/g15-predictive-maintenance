@@ -152,9 +152,59 @@ def verify_all(
     *,
     first_page: bool = False,
     page_size: int = 10,
+    request_contexts: list[dict[str, object]] | None = None,
 ) -> list[str]:
     problems: list[str] = []
+    if request_contexts is not None and len(request_contexts) != len(results):
+        problems.append("response/request context counts do not match")
     for position, (status, body, run_id) in enumerate(results):
+        streams = None
+        first_streams = ()
+        if request_contexts is not None:
+            context = (
+                request_contexts[position] if position < len(request_contexts) else None
+            )
+            if not isinstance(context, dict) or set(context) != {
+                "request_id",
+                "streams",
+                "page_size",
+                "first_page_streams",
+            }:
+                problems.append(
+                    f"response[{position}] missing or malformed request context"
+                )
+                continue
+            if context["request_id"] != body.get("request_id"):
+                problems.append(
+                    f"response[{position}] request context identity mismatch"
+                )
+            streams = context["streams"]
+            if streams not in (None, "both", "windows", "alarms"):
+                problems.append(f"response[{position}] invalid requested streams")
+                continue
+            selected = (
+                ("windows", "alarms") if streams in (None, "both") else (streams,)
+            )
+            first_streams = context["first_page_streams"]
+            if (
+                not isinstance(first_streams, (list, tuple))
+                or any(
+                    type(stream) is not str or stream not in selected
+                    for stream in first_streams
+                )
+                or len(first_streams) != len(set(first_streams))
+            ):
+                problems.append(
+                    f"response[{position}] invalid first-page request context"
+                )
+                continue
+            if (
+                type(context["page_size"]) is not int
+                or context["page_size"] != page_size
+            ):
+                problems.append(
+                    f"response[{position}] page_size differs from request context"
+                )
         if status != 200:
             problems.append(f"response[{position}] status {status} != 200")
             continue
@@ -170,6 +220,8 @@ def verify_all(
                 device,
                 page_size=page_size,
                 first_page=first_page,
+                first_page_streams=tuple(first_streams),
+                streams=streams,
             )
         )
     return problems

@@ -527,6 +527,7 @@ def run_process_measurement(
             "raw_responses": paging.raw,
             "consumed_responses": paging.consumed,
             "discards": paging.discards,
+            "request_contexts": paging.request_contexts,
             "incomplete": True,
         }
         try:
@@ -672,7 +673,7 @@ def run_process_measurement(
         "two Linux evidence",
         "application queue absent; queued N/A requires reviewed scope ruling",
         "per-endpoint network wire bytes unmeasured",
-        "raw exhausted-stream replay protocol limitation",
+        "selected-stream raw paging on final source requires independent review",
     ]
     report["gate0_passed"] = False
     report["exit_code"] = int(
