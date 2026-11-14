@@ -33,3 +33,5 @@
 POST `/api/notifications/settings/delete` 只接受空 JSON 对象 `{}`，沿用唯一同源 Origin、`X-G15-Console-Action: notifications` 和原请求边界；返回安全状态及 `deleted=true`、`cancelled_count`。取消任务保留为 `failed/notification_cancelled`，页面显示“已取消 · 未发送”，不会再派发。
 
 若有发送中、等待重试、已尝试待发或尚未闭合的渠道请求，删除返回 `409 notification_busy`，不进行部分删除。请先核对接收渠道和记录，再重试；不能把不确定投递结果改写成未发送。删除会持久保存凭据停用标记，重启也不会自动从原 `G15_PUSHPLUS_TOKEN` 环境变量恢复。本人再次明确保存非空新 Token 后，才重新允许该启动环境凭据入口。
+
+接口与范围见[interface §20](interface.md#20-手机通知增量用户直接要求候选待评审)。

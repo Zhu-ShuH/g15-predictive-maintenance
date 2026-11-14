@@ -165,9 +165,12 @@ class HealthQueryApplication:
         page_size: int = DEFAULT_PAGE_SIZE,
         windows_cursor: str | None = None,
         alarms_cursor: str | None = None,
+        streams: str | None = None,
     ) -> QueryResponse:
         """Return one stable page from each result stream.
 
+        An absent streams argument preserves v1. Explicit both/windows/alarms
+        selects v2, where each stream says whether it was omitted, not exhausted.
         Authentication and authorization are repeated for every call. The two
         cursors are independent and each freezes its stream at the first-page
         high-water mark. Callers using a non-default page size must repeat it
@@ -189,6 +192,7 @@ class HealthQueryApplication:
             page_size=page_size,
             windows_cursor=windows_cursor,
             alarms_cursor=alarms_cursor,
+            streams=streams,
         )
 
     def authenticate(
@@ -253,6 +257,7 @@ class HealthQueryApplication:
         page_size: int = DEFAULT_PAGE_SIZE,
         windows_cursor: str | None = None,
         alarms_cursor: str | None = None,
+        streams: str | None = None,
     ) -> QueryResponse:
         """Query one page from an opaque, exact authorization snapshot."""
         if not isinstance(request_id, str) or not request_id:
@@ -266,6 +271,11 @@ class HealthQueryApplication:
         device_id = authorized.device_id
         grant = authorized.grant
         try:
+            selected_streams = _selected_streams(streams)
+            if ("windows" not in selected_streams and windows_cursor is not None) or (
+                "alarms" not in selected_streams and alarms_cursor is not None
+            ):
+                raise InvalidQueryError("cursor supplied for an unselected stream")
             size = _page_size(page_size)
             window_scope = _cursor_scope(
                 grant=grant,
@@ -285,8 +295,16 @@ class HealthQueryApplication:
                 sort=ALARM_SORT,
                 page_size=size,
             )
-            window_state = self._decode_cursor(windows_cursor, window_scope)
-            alarm_state = self._decode_cursor(alarms_cursor, alarm_scope)
+            window_state = (
+                self._decode_cursor(windows_cursor, window_scope)
+                if "windows" in selected_streams
+                else None
+            )
+            alarm_state = (
+                self._decode_cursor(alarms_cursor, alarm_scope)
+                if "alarms" in selected_streams
+                else None
+            )
             run_dir, database_path, live_identity = self._resolve_resource(
                 run_id, device_id
             )
@@ -341,6 +359,7 @@ class HealthQueryApplication:
                 window_state=window_state,
                 alarm_state=alarm_state,
                 live_identity=live_identity,
+                selected_streams=selected_streams,
             )
         except ResourceNotFoundError:
             self._emit(
@@ -361,8 +380,12 @@ class HealthQueryApplication:
         finally:
             connection.close()
 
+        windows, alarms = snapshot.windows, snapshot.alarms
+        if streams is not None:
+            windows = dict(windows, omitted="windows" not in selected_streams)
+            alarms = dict(alarms, omitted="alarms" not in selected_streams)
         body: dict[str, object] = {
-            "query_contract_version": "1",
+            "query_contract_version": "1" if streams is None else "2",
             "run_id": run_id,
             "device_id": device_id,
             "versions": {
@@ -377,8 +400,8 @@ class HealthQueryApplication:
                 "alarm": snapshot.alarms["high_water"],
                 "state_last_end_seq_exclusive": (snapshot.state_last_end_seq_exclusive),
             },
-            "windows": snapshot.windows,
-            "alarms": snapshot.alarms,
+            "windows": windows,
+            "alarms": alarms,
             "states": list(snapshot.states),
         }
         self._emit(
@@ -498,6 +521,7 @@ class HealthQueryApplication:
         window_state: CursorState | None,
         alarm_state: CursorState | None,
         live_identity: Mapping[str, str] | None = None,
+        selected_streams: tuple[str, ...] = ("windows", "alarms"),
     ) -> _RunSnapshot:
         connection.execute("BEGIN")
         try:
@@ -523,21 +547,18 @@ class HealthQueryApplication:
                 )
             ):
                 raise ResourceNotFoundError("resource not found")
-            windows, feature_versions = self._read_windows(
-                connection,
-                run_id,
-                device_id,
-                page_size,
-                window_scope,
-                window_state,
-            )
-            alarms = self._read_alarms(
-                connection,
-                run_id,
-                device_id,
-                page_size,
-                alarm_scope,
-                alarm_state,
+            if "windows" in selected_streams:
+                windows, feature_versions = self._read_windows(
+                    connection, run_id, device_id, page_size, window_scope, window_state
+                )
+            else:
+                windows, feature_versions = _omitted_page("windows", page_size), ()
+            alarms = (
+                self._read_alarms(
+                    connection, run_id, device_id, page_size, alarm_scope, alarm_state
+                )
+                if "alarms" in selected_streams
+                else _omitted_page("alarms", page_size)
             )
             states, state_versions, last_state_end = _read_states(
                 connection, run_id, device_id
@@ -720,6 +741,30 @@ def _cursor_scope(
         sort=sort,
         page_size=page_size,
     )
+
+
+def _selected_streams(streams: str | None) -> tuple[str, ...]:
+    """Keep absence as legacy v1; explicit selection opts into v2."""
+    if streams is None:
+        return ("windows", "alarms")
+    if type(streams) is str:
+        if streams == "both":
+            return ("windows", "alarms")
+        if streams in ("windows", "alarms"):
+            return (streams,)
+    raise InvalidQueryError("invalid stream selection")
+
+
+def _omitted_page(stream: str, page_size: int) -> dict[str, object]:
+    """Build metadata for an unqueried stream, never an exhausted data page."""
+    windows = stream == "windows"
+    return {
+        "sort": WINDOW_SORT if windows else ALARM_SORT,
+        "page_size": page_size,
+        "high_water_start_seq" if windows else "high_water": None,
+        "items": [],
+        "next_cursor": None,
+    }
 
 
 def _page_size(value: object) -> int:

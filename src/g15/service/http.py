@@ -249,13 +249,16 @@ class QueryRequestHandler(BaseHTTPRequestHandler):
                 device_id=device_id,
                 request_id=request_id,
             )
-            page_size, windows_cursor, alarms_cursor = _parse_parameters(parameters)
+            page_size, windows_cursor, alarms_cursor, streams = _parse_parameters(
+                parameters
+            )
             response_context = self._server.application.query_authorized(
                 authorized=authorized,
                 request_id=request_id,
                 page_size=page_size,
                 windows_cursor=windows_cursor,
                 alarms_cursor=alarms_cursor,
+                streams=streams,
             )
             body = dict(response_context.body)
             body["request_id"] = request_id
@@ -492,7 +495,7 @@ def _parse_target(target: str) -> tuple[str, str, str]:
     return run_id, device_id, parsed.query
 
 
-def _parse_parameters(query: str) -> tuple[int, str | None, str | None]:
+def _parse_parameters(query: str) -> tuple[int, str | None, str | None, str | None]:
     if len(query.encode("utf-8", errors="surrogatepass")) > MAX_QUERY_BYTES:
         raise InvalidQueryError("invalid query parameters")
     try:
@@ -500,11 +503,11 @@ def _parse_parameters(query: str) -> tuple[int, str | None, str | None]:
             query,
             keep_blank_values=True,
             strict_parsing=True,
-            max_num_fields=3,
+            max_num_fields=4,
         )
     except ValueError as exc:
         raise InvalidQueryError("invalid query parameters") from exc
-    allowed = {"page_size", "windows_cursor", "alarms_cursor"}
+    allowed = {"page_size", "windows_cursor", "alarms_cursor", "streams"}
     has_duplicate = any(len(values) != 1 for values in parameters.values())
     if set(parameters) - allowed or has_duplicate:
         raise InvalidQueryError("invalid query parameters")
@@ -517,7 +520,10 @@ def _parse_parameters(query: str) -> tuple[int, str | None, str | None]:
         raise InvalidQueryError("invalid page size")
     windows_cursor = _optional_nonempty(parameters, "windows_cursor")
     alarms_cursor = _optional_nonempty(parameters, "alarms_cursor")
-    return int(raw_page_size), windows_cursor, alarms_cursor
+    streams = _optional_nonempty(parameters, "streams")
+    if streams not in (None, "both", "windows", "alarms"):
+        raise InvalidQueryError("invalid stream selection")
+    return int(raw_page_size), windows_cursor, alarms_cursor, streams
 
 
 def _optional_nonempty(parameters: Mapping[str, list[str]], name: str) -> str | None:

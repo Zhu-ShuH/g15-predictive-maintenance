@@ -1,5 +1,7 @@
 # 本机只读网页控制台（#158 候选）
 
+接口与范围见[interface §18](interface.md#18-本机只读网页控制台158-候选)；§17 保留给双流查询与发送前准备契约。
+
 2026-11-14 用户授权的扩展另见[故障注入、回放与运行对比](workbench.md)：`/workbench` 可读取已提交分析数据并将告警确认及备注写入独立处置库；本页原只读协议及分析数据写入边界保持不变。
 
 控制台独立代理已运行的真实查询 HTTP API，并展示已有公共报告。它不生成数据、不评分、不消费、不读 SQLite 或 `private_truth`，也不替代正式验收。此页描述本次候选行为；真实评审、CI、部署验收状态由对应 PR/Issue 记录。
@@ -60,7 +62,7 @@ python -m g15.console \
 
 以上读取路径也支持 HEAD，响应体为空但仍执行相同授权检查。除独立文档定义的通知POST与下述仿真控制POST外，其他方法返回405；读取响应关闭连接，不接受请求体、Transfer-Encoding、重复 Content-Length 或 Expect。重复/未知 API query 参数返回400，未注册 pair 返回404。
 
-内嵌持续会话另外提供 `/api/live` 与 `POST /api/live/control`。控制JSON为当前 `session_id`、`action=pause|resume`；可选成对 `run_id/device_id` 选择单设备，省略则控制全体。正文最多4096字节，要求同源Origin、JSON Content-Type与 `X-G15-Console-Action: live-control`，未知/重复字段拒绝。200返回公开持续状态；409表示会话改变或运行已终止，503表示未配置控制或暂不可用。暂停仅停止新的仿真采集，已接受分析继续排空；恢复不清历史、不补样本、不重置序号。当前会话启用控制时公开 `controls_available=true`，设备公开 `capture_paused`；未提供的控制能力不应显示为可操作。详见[持续采集说明](live.md)与接口契约§18。
+内嵌持续会话另外提供 `/api/live` 与 `POST /api/live/control`。控制JSON为当前 `session_id`、`action=pause|resume`；可选成对 `run_id/device_id` 选择单设备，省略则控制全体。正文最多4096字节，要求同源Origin、JSON Content-Type与 `X-G15-Console-Action: live-control`，未知/重复字段拒绝。200返回公开持续状态；409表示会话改变或运行已终止，503表示未配置控制或暂不可用。暂停仅停止新的仿真采集，已接受分析继续排空；恢复不清历史、不补样本、不重置序号。当前会话启用控制时公开 `controls_available=true`，设备公开 `capture_paused`；未提供的控制能力不应显示为可操作。详见[持续采集说明](live.md)与接口契约§19。
 
 合法上游401、404、503等保留状态与既有公开错误信封。连接/超时或暂不可读的凭据返回脱敏503；重定向、超限、错资源、Bearer反射或非公开错误信封返回502。错误不回显异常文本、磁盘路径、traceback或凭据。有效上游响应不因这些异常检查被重新编码。
 

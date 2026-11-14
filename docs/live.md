@@ -46,6 +46,8 @@ HealthQueryApplication仅显式allow_live_runs=True才接纳live。身份、路�
 
 本轮要求10台都持续推进至少60秒、无静默丢样/重复窗口/状态回退/SQLite损坏/HTTP错误；正常停止后captured=processed且queue_depth=0。失败原样留存，不重跑择优、放宽阈值或扩队列造通过。未设工业SLO，不声明最大容量。实测、CI、双Linux兼容与内部界面复核分别记录，不能代替真实非作者Review。
 
+接口与范围见[interface §19](interface.md#19-持续仿真会话增量160候选)。
+
 ## 波形和独立实验入口
 
 持续服务可附加 `--laboratory-root <独立实验目录>` 启用 `/laboratory` 的场景创建；不指定时该页仍可读取登记设备的已提交原始样本。实验参数和运行目录独立于持续会话，不修改当前设备采集配置；退出服务会关闭实验 worker，实验记录跨重启保留。波形在 SQLite 已提交范围内核对原始批次 SHA，参数与限额见 [波形与实验台](laboratory.md)。
