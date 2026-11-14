@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "g15-predictive-maintenance"
 version = "0.0.0"
-description = "G15 predictive-maintenance sandbox skeleton (Issue #1 only)"
+description = "G15 predictive-maintenance simulation, analysis and reporting sandbox"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "numpy",  # TODO: 待锁定；本轮仅初始化
-    "PyYAML",  # TODO: 待锁定；本轮仅初始化
+    "numpy",  # Reproducible environment versions are in requirements.lock.txt.
+    "PyYAML",
 ]
 
 [tool.setuptools.packages.find]
