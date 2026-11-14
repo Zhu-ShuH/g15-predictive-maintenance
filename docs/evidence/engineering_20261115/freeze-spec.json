@@ -1,0 +1,130 @@
+{
+  "format": "g15-engineering-freeze-spec-v1",
+  "prepared_at_utc": "2026-11-14T18:04:22.416129+00:00",
+  "source_commit": "0292cc04ec7faa4182e97f99ccd020bf23c9ee81",
+  "source_tree": "1824cfc5f96fabedfac81d977b58943ddcbe4960",
+  "runner_git_path": "tools/run_final_validation.py",
+  "runner_sha256": "26374c26859009232af0df774d0eae2cb565a7e527c8cf5405ded5efa7461593",
+  "consumer_git_path": "configs/consumer.yaml",
+  "consumer_sha256": "aebb18a9191f154c16e1320a73d7593774879d44573d5c10811fea8e35c08bac",
+  "rules_git_path": "configs/health_rules.yaml",
+  "rules_sha256": "c26bad78809424599a48ccebd7f92b1b290e9d598a0367778127c9e1b9c77f1f",
+  "evidence_kind": "engineering_validation",
+  "independent_acceptance": false,
+  "original_protocol": "discontinued_by_explicit_scope_decision; original ledger unchanged",
+  "seeds": [
+    {
+      "seed": 4065886415,
+      "origin": "previous pending candidate; used now only as engineering input"
+    },
+    {
+      "seed": 42,
+      "origin": "public development/regression control; never claimed unseen"
+    }
+  ],
+  "no_additional_candidate_rng": true,
+  "criteria": {
+    "normal_alarm_count": 0,
+    "normal_detection_rate": null,
+    "fault_events": 6,
+    "detected_events": 6,
+    "missed_events": 0,
+    "degradation": "second half health-score median < first half",
+    "fault_false_alarm_gate": null,
+    "matching": "one-to-one maximum matching; right-open event window plus two-window grace",
+    "window_points": 256,
+    "points_per_case": 65536
+  },
+  "cases": [
+    {
+      "slot_id": 1,
+      "profile": "normal",
+      "seed": 4065886415,
+      "path": "configs/slot1_normal.yaml",
+      "sha256": "e8fe801f301d5a8298b614d5758fe0c2b7fbc4e49f351b61641196f7c806b61e",
+      "template_git_path": "configs/acceptance_healthy_seed42.yaml",
+      "template_sha256": "3315c1d1a56566ddeecc6930d570c93f252e09d4a6e39c19e670ce01ee63b337"
+    },
+    {
+      "slot_id": 1,
+      "profile": "degradation",
+      "seed": 4065886415,
+      "path": "configs/slot1_degradation.yaml",
+      "sha256": "359ef58923f7f8600538bbf4170910faf576344b7c931901dfca2880bdf8a931",
+      "template_git_path": "configs/acceptance_degradation_seed42.yaml",
+      "template_sha256": "27f1828d5d88ddbfc78f8ac64e19ae7052768829a3b63b5524109a564d552a59"
+    },
+    {
+      "slot_id": 1,
+      "profile": "spike",
+      "seed": 4065886415,
+      "path": "configs/slot1_spike.yaml",
+      "sha256": "da72d8dad86853e0ee03d25f8e305e54c41bc83e57c0df2df6c445c343c14e09",
+      "template_git_path": "configs/acceptance_spike_seed42.yaml",
+      "template_sha256": "6ecb0ff969a92d28d7e9ad6355869d237a3a3a360975da46959e41b6efcf6813"
+    },
+    {
+      "slot_id": 1,
+      "profile": "step",
+      "seed": 4065886415,
+      "path": "configs/slot1_step.yaml",
+      "sha256": "86b990c78dec6c2c239a68e847209a305356e6cf174ffedef0ab4d6328467784",
+      "template_git_path": "configs/acceptance_step_seed42.yaml",
+      "template_sha256": "822e1486a6d4e0b17977c644139c8c888563696142eb5336e1488000b39f6189"
+    },
+    {
+      "slot_id": 1,
+      "profile": "burst",
+      "seed": 4065886415,
+      "path": "configs/slot1_burst.yaml",
+      "sha256": "d7b5f6ef42a907bfd4fec10a98d6e607c88af48d8e24125781c0cea5a27063d3",
+      "template_git_path": "configs/acceptance_burst_seed42.yaml",
+      "template_sha256": "461fb25dc3fe91a7aab5af74b07abf340ca200233bfbe701f0c93bcd848f8a00"
+    },
+    {
+      "slot_id": 2,
+      "profile": "normal",
+      "seed": 42,
+      "path": "configs/slot2_normal.yaml",
+      "sha256": "8a1f890472cb3a3d9021c9a53d1975547137f4935eb7aebb9a971a8ce9908303",
+      "template_git_path": "configs/acceptance_healthy_seed42.yaml",
+      "template_sha256": "3315c1d1a56566ddeecc6930d570c93f252e09d4a6e39c19e670ce01ee63b337"
+    },
+    {
+      "slot_id": 2,
+      "profile": "degradation",
+      "seed": 42,
+      "path": "configs/slot2_degradation.yaml",
+      "sha256": "175bc61cee2484758d7f19cc2abbe6c3b83876a8e7e96b1b87ffbe28c89317ce",
+      "template_git_path": "configs/acceptance_degradation_seed42.yaml",
+      "template_sha256": "27f1828d5d88ddbfc78f8ac64e19ae7052768829a3b63b5524109a564d552a59"
+    },
+    {
+      "slot_id": 2,
+      "profile": "spike",
+      "seed": 42,
+      "path": "configs/slot2_spike.yaml",
+      "sha256": "766d4de0ad1e7108fc538750eb35168ebef41aa12947be018e322172eb2092ca",
+      "template_git_path": "configs/acceptance_spike_seed42.yaml",
+      "template_sha256": "6ecb0ff969a92d28d7e9ad6355869d237a3a3a360975da46959e41b6efcf6813"
+    },
+    {
+      "slot_id": 2,
+      "profile": "step",
+      "seed": 42,
+      "path": "configs/slot2_step.yaml",
+      "sha256": "02a2f8610548f1c1028f5bcc485bdcf9dec9a6d737ab3e59cde3bcf86c3e0cd8",
+      "template_git_path": "configs/acceptance_step_seed42.yaml",
+      "template_sha256": "822e1486a6d4e0b17977c644139c8c888563696142eb5336e1488000b39f6189"
+    },
+    {
+      "slot_id": 2,
+      "profile": "burst",
+      "seed": 42,
+      "path": "configs/slot2_burst.yaml",
+      "sha256": "e6910043edc77336e68ef5f848958ad0727e709d44bca197e423619917c0e3e3",
+      "template_git_path": "configs/acceptance_burst_seed42.yaml",
+      "template_sha256": "461fb25dc3fe91a7aab5af74b07abf340ca200233bfbe701f0c93bcd848f8a00"
+    }
+  ]
+}

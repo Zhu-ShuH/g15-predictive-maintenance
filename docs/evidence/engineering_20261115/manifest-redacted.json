@@ -1,0 +1,96 @@
+{
+  "format": "g15-final-validation-v1",
+  "status": "frozen",
+  "rules_frozen": true,
+  "authorization_receipt": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6881950509",
+  "frozen_at_utc": "2026-11-14T18:07:31.621228+00:00",
+  "source_commit": "0292cc04ec7faa4182e97f99ccd020bf23c9ee81",
+  "runner_sha256": "26374c26859009232af0df774d0eae2cb565a7e527c8cf5405ded5efa7461593",
+  "consumer_config": {
+    "path": "<SOURCE>\\configs\\consumer.yaml",
+    "sha256": "aebb18a9191f154c16e1320a73d7593774879d44573d5c10811fea8e35c08bac"
+  },
+  "health_rules": {
+    "path": "<SOURCE>\\configs\\health_rules.yaml",
+    "sha256": "c26bad78809424599a48ccebd7f92b1b290e9d598a0367778127c9e1b9c77f1f"
+  },
+  "cases": [
+    {
+      "slot_id": 1,
+      "profile": "normal",
+      "seed": 4065886415,
+      "path": "configs/slot1_normal.yaml",
+      "sha256": "e8fe801f301d5a8298b614d5758fe0c2b7fbc4e49f351b61641196f7c806b61e"
+    },
+    {
+      "slot_id": 1,
+      "profile": "degradation",
+      "seed": 4065886415,
+      "path": "configs/slot1_degradation.yaml",
+      "sha256": "359ef58923f7f8600538bbf4170910faf576344b7c931901dfca2880bdf8a931"
+    },
+    {
+      "slot_id": 1,
+      "profile": "spike",
+      "seed": 4065886415,
+      "path": "configs/slot1_spike.yaml",
+      "sha256": "da72d8dad86853e0ee03d25f8e305e54c41bc83e57c0df2df6c445c343c14e09"
+    },
+    {
+      "slot_id": 1,
+      "profile": "step",
+      "seed": 4065886415,
+      "path": "configs/slot1_step.yaml",
+      "sha256": "86b990c78dec6c2c239a68e847209a305356e6cf174ffedef0ab4d6328467784"
+    },
+    {
+      "slot_id": 1,
+      "profile": "burst",
+      "seed": 4065886415,
+      "path": "configs/slot1_burst.yaml",
+      "sha256": "d7b5f6ef42a907bfd4fec10a98d6e607c88af48d8e24125781c0cea5a27063d3"
+    },
+    {
+      "slot_id": 2,
+      "profile": "normal",
+      "seed": 42,
+      "path": "configs/slot2_normal.yaml",
+      "sha256": "8a1f890472cb3a3d9021c9a53d1975547137f4935eb7aebb9a971a8ce9908303"
+    },
+    {
+      "slot_id": 2,
+      "profile": "degradation",
+      "seed": 42,
+      "path": "configs/slot2_degradation.yaml",
+      "sha256": "175bc61cee2484758d7f19cc2abbe6c3b83876a8e7e96b1b87ffbe28c89317ce"
+    },
+    {
+      "slot_id": 2,
+      "profile": "spike",
+      "seed": 42,
+      "path": "configs/slot2_spike.yaml",
+      "sha256": "766d4de0ad1e7108fc538750eb35168ebef41aa12947be018e322172eb2092ca"
+    },
+    {
+      "slot_id": 2,
+      "profile": "step",
+      "seed": 42,
+      "path": "configs/slot2_step.yaml",
+      "sha256": "02a2f8610548f1c1028f5bcc485bdcf9dec9a6d737ab3e59cde3bcf86c3e0cd8"
+    },
+    {
+      "slot_id": 2,
+      "profile": "burst",
+      "seed": 42,
+      "path": "configs/slot2_burst.yaml",
+      "sha256": "e6910043edc77336e68ef5f848958ad0727e709d44bca197e423619917c0e3e3"
+    }
+  ],
+  "evidence_kind": "engineering_validation",
+  "independent_acceptance": false,
+  "freeze_spec_sha256": "bdea33418fb22d1cf560611298a869626432d5b9e71171bc50b08a4b9fb9fa97",
+  "original_protocol": "stopped incomplete; historical three-event pending ledger unchanged; seed 4065886415 becomes exposed engineering data",
+  "engineering_slot_note": "execution grouping only; seed 42 is a public development control, not a second selector draw",
+  "publication_note": "Path-redacted view only, not the original executable manifest; its raw-byte SHA256 is recorded separately.",
+  "original_manifest_sha256": "0596e3d66bed62501b5c9c92b859054f8eebf3199e84e78f83d48341d89ad6be"
+}
