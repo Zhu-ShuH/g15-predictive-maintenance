@@ -758,3 +758,58 @@ these limitations, and leave full Gate0 unaccepted pending independent review an
 any future properly controlled validation. Course-project presentation may explain
 this residual limitation; it must not label the unchanged AND threshold passed.
 100k simultaneous users remain unverified. No merge or grading claim is implied.
+
+## 11 #155 种子方法审查补正与收尾边界（2026-11-13）
+
+本节为文档核查增量，基于 #155 的 `9a6c15eecefd69795e08bfe044d5dafb19c318ff`；不把旧报告或其他分支的实测当作该提交的新测试结果。该轮 C4 复核指出历史日志中的 `20261023`、`20261024` 亦已暴露。当时按 [测试计划 §9.4](test_plan.md) 补齐限定来源排除集，并逐项登记文件、日志行与暴露事实；该轮范围不含 tests，已由下述 §11.3 的全仓静态核查取代，当前值表只维护在测试计划。历史批次 exit 5 与失败记录继续保留；日志中的单条 passed 不能冒充独立验收通过。
+
+### 11.1 ea5b25c 提交时的实际核查（历史范围）
+
+| 核查 | 范围与结果 |
+|---|---|
+| 全量来源文本静态扫描 | 对 `git ls-files configs docs/review_evidence` 的已跟踪文本（包括 .log）提取 seed 数值，并人工核对配置字段与完整日志；当时在该限定来源内去重为六值；这不是全仓结论，见 §11.3。没有调用随机数、生成器或业务运行。 |
+| 文档引用 | `python tools/check_doc_references.py --root .`：0 issue(s)，exit 0；检查本地文件引用，不验证远端网页或 Markdown 标题锚点。 |
+| 基线保护 | `git diff --exit-code -- docs/adr/0006-independent-validation-baseline.json`：exit 0；按 Git 属性规范化的工作副本 blob 与 HEAD 同为 `a1e4d5346ca879f932cb31305a161d1f573e5622`。首次直接比较 Windows 工作副本与 Git 原始字节因 CRLF/LF 差异断言失败；未改文件，以 Git 规范化 blob 和 diff 复核，不冒称原始字节相同。 |
+| 变更检查 | `git diff --check`：exit 0。该次提交只改测试计划和本报告（整个 PR 还包含原 requirements.md 的 N02 改动）；源码、配置、基线及历史证据未改。 |
+| 未执行 | 本轮未运行全量 pytest、Black/Pylint、性能/压力或双 Linux 测试；属于纯文档修正，不能把历史成绩或后续 CI 等同本地复测。 |
+
+基线仍为 `proposed_unfrozen`；`new_holdout_seed=null`、`integrated_validation_commit=null`、`new_holdout_generated=false`、`rules_frozen=false`。本轮没有选 seed、冻结、生成或运行保留集。方法修正仍须真实非作者复核；A 参与编辑不计独立批准，#56→#9 的执行顺序不变。
+
+### 11.2 与容量收尾报告的边界
+
+本文件 §10.1–§10.4 是早期低负载历史记录，不代表最新 Gate0；后续固定源码证据与限制见本文件 §10.5–§10.13。#165 已先纳入 #157，#157 于 2026-11-13 合入 main `46daeca2f7adf94ac591d7c20e650dd41c72ded8`；本次 #155 同步该 main，完整保留其容量章节与最终测试证据归属修正。容量证据与本轮种子方法文档核查分属不同执行批次，不能拼成一次新测试。
+
+- 正式三平台容量观察源码为 `3ddf12d00c913e02217b5ebced90fc70b9ac723d`：2903 波、45510 个主请求，HTTP 错误 0；RHEL 的 10 档 2 波、50 档 1 波未达到既定重叠目标。**完整 Gate0 仍未通过**，不能把 HTTP 无错误或 2900/2903 达峰比例写成原 AND 判据通过。
+- 后续客户端 READ-only polling 修正和有界 Windows 验证不追认上述 3 个未达波，也不等同新的完整三平台一分钟验证。旧失败、失败来源和限制保留。
+- **十万用户同时查询仍未验证**；本轮不升档、不放宽门槛、不继续追加压测。#157 的合并不等于容量门槛通过；#155 及其他未合并 PR 仍须独立评审，本文不宣告验收通过或项目全部完成。
+
+
+### 11.3 C4 范围复核后的补正（2026-11-13，基于 ea5b25c）
+
+C4 指出 §9.4「全部已跟踪文本」与 §11.1 实际只扫两个目录不一致，本轮选择保守的全仓范围，不收窄来源规避公开测试值。静态核查又发现只按 seed 键值/赋值检索仍会漏函数位置参数，因此本轮结论不是照抄九值初筛。当前排除清单及逐项来源以 [测试计划 §9.4](test_plan.md) 为唯一维护点，本文不重复列表。
+
+| 实际检查 | 结果与边界 |
+|---|---|
+| 全仓文本 | `git ls-files -z` 在精确父提交 ea5b25c 列出 310 文件；310 均可 UTF-8 解码，无跳过；不设扩展名白名单。正则 `seed\W{0,3}[:=]\s*(\d{1,12})` 只作初筛，得到九值，不称语义穷举。 |
+| 位置参数与边界复核 | 静态 `ast.parse` 已跟踪 Python 文件，查找参数名 seed 的函数声明及对应调用；核对 noise.py 的 `stream_entropy`/`block_generator`/`standard_normal`/`gaussian_noise` 首参数，并查 `default_rng`、配置赋值及测试参数化。位置参数补四个域内公开值；合计十三值与计划表一致。负值/超范围表达式单独归类，不执行 AST、测试或 RNG。源码静态可见使用不等于本轮运行成功。 |
+| 文档门禁 | `python tools/check_doc_references.py --root .`：0 issue，exit 0；`git diff --check`：exit 0。 |
+| 基线保护 | 基线 blob 仍为 §11.1 记录值，`git diff --exit-code -- docs/adr/0006-independent-validation-baseline.json` exit 0；未修改 seed、集成 SHA、冻结或生成标志。 |
+| 范围 | 本次提交只改 test_plan.md/test_report.md；整个 PR 仍含此前 requirements.md。未改 #157 或任何实现、测试、历史证据；本地未跑 pytest、Black/Pylint、性能或双 Linux 测试。CI 按最终 HEAD 单列，不代替方法批准。 |
+
+扫描只能证明该提交中已识别的静态来源，不能证明不存在动态生成或仓外接触。冻结前仍须在准确集成版本重算、解决未知来源、取得全部本人接触声明与真实非作者 Review。本轮不抽选、不冻结、不生成或运行新保留集。
+
+
+### 11.4 同步已合并 main 后的重算（2026-11-13）
+
+本轮将 #155 原 head `4c3a108cff5410153e847965bf3c3f6584ef71b5` 与 main `46daeca2f7adf94ac591d7c20e650dd41c72ded8` 整合。唯一内容冲突是本报告末尾双方追加章节：保留 main 的 §10.5–§10.13，再接 #155 的 §11；测试计划自动合并后只更新本轮来源说明。相对 main，整个 PR 仍只修改 requirements.md、test_plan.md、test_report.md；不修改源码、测试、配置、冻结基线或历史原始证据。
+
+| 静态复核 | 实际结果与限制 |
+|---|---|
+| 范围 | `git ls-files -z` 列出 340 个路径，逐文件 UTF-8 解码成功，无跳过；旧 310 文件扫描不覆盖新增的 30 个文件。本次候选的精确提交与树 SHA 在 PR 复评记录中登记。 |
+| 键值初筛 | 对所有文本逐行应用 `seed\W{0,3}[:=]\s*(\d{1,12})`，域内去重仍为九值。该正则不捕获所有位置参数、参数化或表达式，不作为语义穷举结论。 |
+| Python 及参数来源 | 100 个 Python 文件逐一 `ast.parse`，复查 seed 参数声明、赋值、关键字调用、噪声函数首参数、`default_rng`/`SeedSequence`、默认值及测试参数化；噪声函数位置参数补四值。当前核实的域内公开使用值仍与测试计划 §9.4 的十三值一致；负值、bool 与超范围测试输入不混入域内表。 |
+| main 增量 | 相比旧 main `c75bb9d6`，同步范围为 17 个提交、46 个变更路径；新增查询证据 JSON 和测试均纳入扫描。`_seed_alarm_pages` 是告警测试装载函数，不是随机种子参数；现有 d0_fixture 仍使用已登记配置值。本轮未识别出新增域内公开 seed，不据此保证动态或仓外接触不存在。 |
+| 文档与保护检查 | `python tools/check_doc_references.py --root .`：0 issue，exit 0；`git diff --check`：exit 0。main 原测试报告正文逐字节保留；ADR-0006 baseline blob 仍为 `a1e4d5346ca879f932cb31305a161d1f573e5622`，冻结及生成标志未变。 |
+| 未执行 | 只做静态文档核对，无 RNG 调用、候选选择、冻结、保留集生成/运行、压测或双 Linux 复测；本地未跑全量 pytest、Black/Pylint，最终 head 的 CI 另行核验。 |
+
+以上是 A 参与编辑后的自核，不是独立批准。请 C4 对本次最终 head 重新评审；原请求变更票不由本轮代为解除，方法批准、候选接触声明和冻结仍按 §9.5 分开。冻结前仍须针对届时的最终集成版本重算，保留未知暂停与本人声明要求。
