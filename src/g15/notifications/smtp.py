@@ -458,7 +458,7 @@ class EmailNotificationService(NotificationService):
             provider_name="smtp163",
         )
         try:
-            with closing(self._connect()) as connection:
+            with closing(self._connect_writer()) as connection:
                 connection.execute(
                     "CREATE TABLE IF NOT EXISTS email_settings (singleton INTEGER PRIMARY KEY CHECK(singleton=1),sender TEXT NOT NULL,recipient TEXT NOT NULL)"
                 )
@@ -513,7 +513,7 @@ class EmailNotificationService(NotificationService):
                 else secrets.token_hex(32) if candidate else None
             )
             try:
-                with closing(self._connect()) as connection:
+                with closing(self._connect_writer()) as connection:
                     connection.execute("BEGIN IMMEDIATE")
                     connection.execute(
                         "UPDATE notification_settings SET policy_json=? WHERE singleton=1",
