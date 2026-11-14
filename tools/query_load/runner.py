@@ -160,9 +160,15 @@ def validate_run(
         "raw_oracle": verify_all(
             results, db_paths, first_page=True, page_size=page_size
         )
-        + verify_all(paging.raw, db_paths, page_size=paging_page_size)
+        + verify_all(
+            paging.raw,
+            db_paths,
+            page_size=paging_page_size,
+            request_contexts=paging.request_contexts,
+        )
         + paging.oracle_problems,
         "consumed_coverage": verify_paging_coverage(paging.consumed),
+        "raw_coverage": verify_paging_coverage(paging.raw),
         "traversal": paging.traversal_problems,
         "conservation": accounting.conservation_report(),
         "response_accounting": _response_accounting(results + paging.raw, accounting),
@@ -205,7 +211,7 @@ def _new_report(serial: int, concurrent: int, workers: int) -> dict[str, object]
             "two Linux evidence",
             "separate client/server resources",
             "queued not-applicable decision requires review",
-            "raw exhausted-stream replay protocol limitation",
+            "selected-stream raw paging on final source requires independent review",
         ],
         "resources_before": None,
         "quality_passed": False,
@@ -302,6 +308,7 @@ def run_measurement(
             "raw_responses": paging.raw,
             "consumed_responses": paging.consumed,
             "discards": paging.discards,
+            "request_contexts": paging.request_contexts,
             "raw_oracle_problems": paging.oracle_problems,
             "traversal_problems": paging.traversal_problems,
             "incomplete": True,

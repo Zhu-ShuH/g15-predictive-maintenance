@@ -705,7 +705,56 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 
 容量观察工具可在event_sink边界附实际socket的 `connection_ref`（local/peer host:port），用于将request_id与独立网络计数对应；不修改外部HTTP响应或认证授权。网络适配是每实例显式包装，不全局替换socket，不记录请求头或payload。服务端每波结束须等真实worker返回、连接关闭与采样结束后，依原发wave_id/PID/单调时钟发送end marker；下一波才允许清空已成功归档的closed计数。活跃、失败、未知部分字节或错误关闭不得reset，跨波数据或raw/control快照不一致均使该波失败。
 
-## 17. 本机只读网页控制台（#158 候选）
+
+## 17. 双流显式选择与发送前准备（#162，2026-11-13 候选）
+
+本节为[#162](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/162)登记的查询子项候选，须由原属地 B1/C4 按精确 SHA 真实复核；不是合并批准、完整 Gate0 或 D1/D2/100k 授权。不改评分、阈值、存储、cursor编码、应用队列或数据/并发门槛。T177六档固定clean`2bcd639`，包括67个未达波及page10告警原始/消费/丢弃10/1/9，均不回写或追认为通过。
+
+### 17.1 版本与选择
+
+`GET /v1/runs/{run_id}/devices/{device_id}/health`新增可选`streams`；application的同名keyword默认`None`。参数必须是单个精确字符串，不接受空值、大小写变体、列表、数字、bool、未知或重复参数。
+
+| 请求 | query_contract_version | windows.omitted | alarms.omitted |
+|---|---|---|---|
+| 不传streams / application传None | `"1"`，保留旧shape及旧行为 | 不增加该键 | 不增加该键 |
+| `streams=both` | `"2"` | false | false |
+| `streams=windows` | `"2"` | false | true |
+| `streams=alarms` | `"2"` | true | false |
+
+显式v2仍返回两个分页对象，不新增顶层选择回显。`omitted`必须是严格JSON bool。选中流保留原`sort/page_size/items/next_cursor`及高水位；未选流保留相同`sort/page_size`，但`items=[]`、`next_cursor=null`，windows的`high_water_start_seq=null`或alarms的`high_water=null`，顶层`committed_high_water.window_start_seq`或`.alarm`亦为null。`omitted=true`仅指本次未请求该流，不表示无数据或已耗尽。
+
+未选流不执行该表的SELECT。`states`、状态信封版本和`state_last_end_seq_exclusive`仍从当前只读事务真实读取；它们不随窗口/告警cursor冻结。`versions.features_versions`只描述实际返回窗口的版本集合，未选windows时为`[]`，不代表数据库没有窗口或版本。
+
+### 17.2 cursor、错误优先级与遍历
+
+在合法HTTP framing及可解析资源路径下，每请求仍先认证、授权，再校验可选参数；未认证401、无精确资源授权404优先于streams错误。携带未选流的cursor一律400，包括空字符串、损坏或有效签名cursor，不能以omitted跳过验证。选中cursor保持`g15c1`完整性及actor/policy/domain/run/device/query_type/sort/page_size、高水位和末键绑定；结构/签名错误400，跨scope统一404。相同scope的旧v1 cursor可用于v2选择该流，不因切换streams重置高水位。
+
+遍历首屏可用both；一流的`next_cursor=null`后，后续只选另一个尚未耗尽的流并提交其cursor，两流都耗尽即停止，不补发首页。每页仍重新认证授权；追加的新排序键不进入旧cursor快照，新首屏可见新提交。原始响应必须先按请求选择上下文做独立SQL/oracle核对，再对整个遍历检查准确键集合、条数及顺序；不能信响应自报omitted/version而跳过校验。D0新协议目标为原始100窗/1告警、丢弃0；负例必须能击穿重复、缺失、重放、伪omitted、版本降级与scope越界。旧v1省略耗尽cursor重发首屏的行为及T17710/1/9历史边界继续明示，不降低“无重复错序”要求。
+
+### 17.3 D0量测准备与A候选阶段裁定
+
+A对T177 Windows50的`wave-00192`既有记录复核：以first_received为基准，last_accept为28.3545ms、first_completion为22.7892ms，原波存在HTTP发送前尚未全部accept的连接。它仍是旧实现的真实失败，不因新准备方案改判。
+
+新增准备仅在tools观测adapter登记真正handler reader安装完成的就绪事实，不等待、不发received。控制通道须按本wave/PID与精确反向local/peer四元组确认N个连接均已就绪，再释放客户端发送前barrier；缺失、重复、跨wave、错误端点、超时或诊断失败都保留并使本轮失败。请求headers只在barrier前内存拼装，正式计时从barrier后实际endheaders发送前开始，随后立即读取直至完整解码。TCP建连、accept、reader安装、控制确认与barrier准备耗时单列，不填进请求延迟或有效负载时长。
+
+prepared不是received、已认证用户或请求在途；服务端不新增barrier、sleep、响应hold、限速或队列扩容。就绪确认也不保证N峰必达。A的D0候选验收阶段采用`server_received→response_completed`，executing按§16单列，不混算。无应用队列维持absent/null，queued有条件记N/A并保留`listen_backlog=unmeasured`，不能导出排队为0、非瓶颈或Gate0通过。累计有效60秒、全部波次目标AND、所有未达与失败保留不变；socket证据仅为本机HTTP应用字节，不代表物理链路容量，缓存未控制不声称冷/热结果。新协议、准备及阶段/资源充分性仍待B1/C4复核和固定SHA实测后另判。
+
+### 17.4 Selector单loop客户端与有界证据写入（#162后续候选）
+
+A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次HTTP读写，替代N个请求线程的发起；不修改service/query业务或引入服务端等待。单loop仅指HTTP调度，控制通道、资源采样与单证据写者仍有各自开销，不能称整个客户端进程仅一个线程。目标是减少负载端发起散布，不保证峰值N或预先宣称Gate0通过。§17.1/§17.2的v1/v2、真实授权、原始oracle/coverage及§16阶段计数保持原义。
+
+1. **准备与共同gate**：真实TCP连接、请求内存准备后，仍须核验本wave/PID与精确反向端点的reader就绪ACK，失败或超时保留并停止。本机客户端收到并核验回执后记录共同launch gate及实际`selector_backend`，使用`launch_mode`/`launch_released`说明发起方式和释放时刻，不复用线程的`barrier_released`语义。gate的本机时钟与ns口径明确，但不能据它批造N个`client_started`、已认证用户或在途；准备时间单列。服务端事件保原发PID/单调时钟，不与客户端gate跨进程相减。
+2. **逐请求真实边界**：每socket在首次真实`socket.send`调用尝试之前记录自己的`client_start`与发送时刻；即使该次EAGAIN暂为0字节，它也是已实际调用的尝试，字节进度仍为0，不能改成“首次成功字节”口径。首send、实际read、body完整、JSON解码完成分开留证。准备/ACK失败且从未send的attempt不调用accounting start/complete，另记raw `client_attempt`、status0、`http_started=false`、`latency_eligible=false`，纳入失败/attempt核对而非成功请求延迟或已发请求数。
+3. **读写公平与无hold**：socket均为nonblocking；每次推进一个有界write步骤后立即检查并处理read-ready，不能先完成本波所有请求的写入再统一读。短写只推进真实返回字节；普通EAGAIN/BlockingIOError仅无进度，不加假字节、不当成真I/O错误或无限延长截止时间。真实I/O错误、reset、5秒I/O超时及中断分别留存，既有5秒数值不变。不得busy-spin、sleep、节流、压读完整响应或等慢请求造峰。
+4. **即时complete**：按HTTP framing确认body完整且JSON解码完成时立即记该请求complete，不等其他socket发送完、连接EOF或证据flush。非法JSON、HTTP错误与提前EOF保留原始字节和真实失败终态，不补造成功。client的start/complete只按实际逐请求边界计数，不能拿gate或journal进度代替。
+5. **内存计数与journal**：主并发用纯内存`RunAccounting`即时记时间/计数，前置串行与分页保持原`PersistedAccounting`路径。`tools/query_load/completion_journal.py`将本波最多N个完成record/connection元数据pairs交给N有界队列的单写者，emit只负责落盘，不让同步磁盘写入/flush延后complete或阻塞ready读取。容量、接纳/写出/未排空数量及writer错误须可对账，不允许无界积压、静默丢弃或假成功。写失败/队列异常使本波质量失败，以单独emergency artifact保留已知记录及未写边界，不重试或改写原raw，不能用空报告覆盖已有证据。
+6. **排空与波界**：journal finish/drain/flush和记录核对属于load span之外的波后工作，计入墙钟/波间空档及客户端资源观察，不加入请求latency或有效秒。下一波前须确认本波排空、真实handler/连接完成、network与marker闭合；退出须回收写者等资源。失败和中断先留存再传播，清理不得抹掉原记录。网络仍按实际socket逐连接计字节和生命周期，不记录请求头、凭据或cursor值。
+
+最重要的可证伪反例：A的响应已read-ready，B仍短写/EAGAIN，A必须先完成read、JSON解码及complete，再发生B的发送完成。“先发完全部再读”或“等writer落盘再complete”必须被负例击穿；完整body不能等EOF。fragment、cutoff、HTTP错误、timeout、reset、中断、journal失败及跨两波守恒见test_plan §11.10。
+
+本候选独立于clean`dba4dce9`的线程发起实现/工作负载，须固定新SHA后另作同SHA三平台回归和逐档观察。原dba六档、Ubuntu10 wave-00024真实server9/exit1及T17767个未达波全部保留。AND、10/50、累计有效60秒、received→response_completed候选和executing单列不变；queued仍null/absent且仅有条件N/A，backlog未测、cache uncontrolled和非物理网络边界不变。本节不产生新成绩或批准，精确新head仍须B1/C4真实Review及A门禁裁定。
+
+## 18. 本机只读网页控制台（#158 候选）
 
 本节为用户要求新增控制台后的实现候选，未替代#157/Gate0的独立评审和统计门槛。原查询响应、认证授权、分页、评分和SQLite写入契约不变。
 
@@ -726,7 +775,7 @@ Linux 验证目标由小组自选为 Ubuntu 24.04 LTS + Red Hat Enterprise Linux
 本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。远程暴露、账户登录、设备控制和完整容量需另有实现与评审，当前界面不据此宣称。
 
 
-## 18. 持续仿真会话增量（#160，候选）
+## 19. 持续仿真会话增量（#160，候选）
 
 独立入口 `python -m g15.live` 提供墙钟仿真采集与有界分析调度，默认10台、256Hz、256点窗口和1秒批次。`live-session.json` 是独立schema_version=1描述，source_kind=wall_clock_simulator；不扩展或放松Manifest2.0的complete规则，两种描述并存拒绝。SQLite的streaming是运行种类，真实采集中/停止/错误/达到保护状态以持续状态为准。
 
