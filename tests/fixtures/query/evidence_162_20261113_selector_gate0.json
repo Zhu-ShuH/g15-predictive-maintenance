@@ -1,0 +1,1751 @@
+{
+  "acceptance_basis": "Measurement checks do not replace exact-head B1/C4 review or A acceptance of conditional queued N/A and resource/cache limits. Old T177/dba misses remain historical failures.",
+  "all_six_all_wave_target_passed": false,
+  "all_six_quality_passed": true,
+  "archives": [
+    {
+      "artifact_label": "formal-3ddf12d-windows-20261113.tar.gz",
+      "bytes": 34928242,
+      "file_members": 2972,
+      "platform": "windows",
+      "sha256": "1e463270ca110e78598c558f1bdf121fd412bdee0bd18fe5e77f8c1a15fb02e5"
+    },
+    {
+      "artifact_label": "formal-selector-3ddf12d-ubuntu-20261113.tar.gz",
+      "bytes": 11447892,
+      "file_manifest_sha256": "9a09a6a689773a58296b3137a45e97fc4e628e01c8400c206e7fd6e538eef961",
+      "file_members": 942,
+      "indexed_files_checked": 896,
+      "indexed_mismatches": [],
+      "platform": "ubuntu",
+      "sha256": "606e163a050e4cc307de3b3a78e3ff3a1a8760788add03ea4a58b400247953fb"
+    },
+    {
+      "artifact_label": "formal-selector-3ddf12d-rhel-20261113.tar.gz",
+      "bytes": 25284059,
+      "file_manifest_sha256": "9200adb84d6ea640a74e849d5ad2ab35efb13348cdc1e652e29a000ee0cd615c",
+      "file_members": 2022,
+      "indexed_files_checked": 1976,
+      "indexed_mismatches": [],
+      "platform": "rhel",
+      "sha256": "052621deab0a31ab79c7d318fa136689258dc621a9d37639a15053387ff396d3"
+    }
+  ],
+  "auditor_sha256": "a9df182c5e8ef17ce38b33d0d2872bc17707f42d0a07181a115cc2ddf2b59dfa",
+  "ci": {
+    "actual_pr_merge_checkout": "0b75fababee55ab6487e4345c50b40df69139f20",
+    "all_four_jobs": "success",
+    "associated_head": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+    "base_sha": "a10cab2f56cdd109632135ee21645b5c3b9ac064",
+    "black_src_tests": 81,
+    "black_tools": 19,
+    "docrefs_problems": 0,
+    "lock_step_actual": "pip check only; no independent exact-version comparison claim",
+    "pylint_src": 9.87,
+    "python311": {
+      "passed": 1336,
+      "seconds": 92.91,
+      "skipped": 14
+    },
+    "python312": {
+      "passed": 1336,
+      "seconds": 93.32,
+      "skipped": 14
+    },
+    "run": 43342529840,
+    "run_number": 740
+  },
+  "format": "g15-gate0-selector-public-evidence-v1",
+  "full_gate0_accepted": false,
+  "implementation_sha": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+  "implementation_tree": "23895053afe1d1a4b93a386c6ca61e09aa5c66ce",
+  "observations": [
+    {
+      "artifact_label": "windows-10",
+      "audit_problem_count": 0,
+      "audit_valid": true,
+      "between_wave_gap_seconds": 126.51822179969167,
+      "completed_waves": 1242,
+      "effective_load_seconds": 60.023070400289726,
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "cpu_percent_host_capacity": 5.4828973377288355,
+          "cpu_percent_one_core": 87.72635740366137,
+          "open_fds": null,
+          "open_handles": 678,
+          "rss_bytes": 208777216,
+          "samples": 7698,
+          "waves": 1243
+        },
+        "server": {
+          "cpu_percent_host_capacity": 11.440784698751317,
+          "cpu_percent_one_core": 183.05255518002107,
+          "open_fds": null,
+          "open_handles": 360,
+          "rss_bytes": 184201216,
+          "samples": 7814,
+          "waves": 1243
+        }
+      },
+      "hashed_index_bytes": 4475568,
+      "hashed_index_entries": 1243,
+      "hashed_raw_report_index_bytes": 461985216,
+      "latency_seconds_concurrent_all_raw_requests": {
+        "count": 12420,
+        "max": 0.21292510000057518,
+        "method": "global raw samples; linear interpolation at (n-1)*p",
+        "p50": 0.04029530001571402,
+        "p95": 0.051774844995816235,
+        "p99": 0.07919516995258163
+      },
+      "limitations": [
+        "No new requests, SQL oracle, product imports or source-file replay; archived quality checks are preserved, not independently rerun against fixture databases.",
+        "Recorded before/after source hashes and clean flags are reconciled; original checkout files and shell invocation are not independently attested. Stored command_template is verbatim and may name the legacy driver.",
+        "Linear global percentiles differ from archived nearest-rank per-wave values; no per-wave percentile is averaged. Memory is one wave plus scalar concurrent latencies and compact peaks (up to 500000 samples at the recorded bounds).",
+        "CPU maxima are per-wave process interval ratios, not instantaneous or whole-host saturation. RSS/FD/handle are observed sampling lower bounds; unavailable metrics remain null.",
+        "Socket bytes include HTTP headers/body, not TCP/IP/link headers, retransmissions, physical NIC capacity or other host traffic. Prepared is not received, authenticated or in-flight.",
+        "Prelude projection is not a private/raw database checksum. Cache uncontrolled; no cold/hot or steady-state claim.",
+        "All original target misses, Gate0=false and original exit code remain unchanged. At most 200 diagnostic codes are printed; every target-miss ID is retained.",
+        "Selector timings compare only client perf_counter_ns observations within the same PID/wave; wrapper timestamps are not kernel syscall-entry traces. Prepared remains reader-installed, not proof of kernel blocking. JSON framing was checked by the archived harness; only body JSON is stored and revalidated offline.",
+        "Raw readiness-poll scheduling is not stored; no-hold dispatch is covered by source/tests, not independently reconstructed from observed socket I/O."
+      ],
+      "network_pair_checked_waves_including_prelude": 1243,
+      "nonempty_archived_checks": {},
+      "offline_aggregate_bytes": 794842,
+      "offline_aggregate_sha256": "db37ebd462591b5601732d6b10ed76415994324a1c66aefbc10daab5d5017553",
+      "original_run": {
+        "bounds": {
+          "byte_budget": 1073741824,
+          "in_memory": "one wave only: at most 50 concurrent client records, 200 transport and 300 application events",
+          "max_waves": 10000,
+          "raw_io": "one client base64 response copy; raw streamed to separate per-wave NDJSON",
+          "wave_reservation_bytes": 16777216
+        },
+        "exit_code": 0,
+        "failures": [],
+        "gate0_passed": false,
+        "quality_passed": true,
+        "remaining_gates": [
+          "independent non-author review",
+          "two Linux evidence on this exact source",
+          "application queue absent; N/A scope requires real review and ruling",
+          "selected-stream raw paging on final source requires independent review",
+          "TCP/IP/link overhead, retransmissions and host network saturation unmeasured",
+          "cache cold/hot evidence requires controlled environment"
+        ],
+        "shutdown_errors": [],
+        "target_reached": true
+      },
+      "phase_counts": {
+        "concurrent": {
+          "client_requests": 12420,
+          "http_errors": 0,
+          "raw_application": 74520,
+          "raw_client": 12420,
+          "raw_marker": 2484,
+          "raw_network": 1242,
+          "raw_network_client": 1242,
+          "raw_preparation": 1242,
+          "raw_request_connection": 12420,
+          "raw_resource": 7793,
+          "raw_resource_client": 7677,
+          "raw_transport": 49680,
+          "stage_response_completed": 12420,
+          "stage_server_executing": 12420,
+          "stage_server_execution_completed": 12420,
+          "stage_server_received": 12420,
+          "waves": 1242
+        },
+        "serial10_and_full_paging": {
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_application": 120,
+          "raw_client": 20,
+          "raw_marker": 2,
+          "raw_network": 1,
+          "raw_network_client": 1,
+          "raw_request_connection": 20,
+          "raw_resource": 21,
+          "raw_resource_client": 21,
+          "raw_transport": 80,
+          "stage_response_completed": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_server_received": 20,
+          "waves": 1
+        }
+      },
+      "prelude_public_projection_and_page10": {
+        "canonical_basis": "list of 10 actual page100 bodies; remove only top-level request_id/trace_id; sort by run_id; JSON sort_keys/separators=(',',':')/ensure_ascii=True/UTF-8",
+        "counts": {
+          "alarms": 10,
+          "states": 10,
+          "windows": 1000
+        },
+        "page10": {
+          "alarms": {
+            "consumed": 1,
+            "discarded": 0,
+            "raw": 1
+          },
+          "windows": {
+            "consumed": 100,
+            "discarded": 0,
+            "raw": 100
+          }
+        },
+        "page10_request_count": 10,
+        "public_projection_sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+      },
+      "prepared_concurrent_waves": 1242,
+      "quality_failed_wave_ids": [],
+      "raw_recomputed_peak_ranges": {
+        "client": {
+          "max": 10,
+          "min": 10,
+          "users_max": 10,
+          "users_min": 10
+        },
+        "executing": {
+          "max": 10,
+          "min": 10,
+          "users_max": 10,
+          "users_min": 10
+        },
+        "server": {
+          "max": 10,
+          "min": 10,
+          "users_max": 10,
+          "users_min": 10
+        }
+      },
+      "recomputed_target_miss_wave_ids": [],
+      "requested_concurrent_basis": "label verified against every selector planned count and phase request product",
+      "requested_concurrent_users": 10,
+      "selector": {
+        "actual_http_started": 12420,
+        "backends": [
+          "SelectSelector"
+        ],
+        "not_started_attempts": 0,
+        "planned_calls": 12420,
+        "terminal_pairs": 12420,
+        "timing_basis": "client perf_counter_ns only, wrapper observations not kernel syscall-entry traces; never cross-process subtraction",
+        "timing_spread_ms": {
+          "first_positive_receive_spread_ms": {
+            "count": 1242,
+            "max": 54.113,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 8.5991,
+            "p50": 16.08065,
+            "p95": 21.840825,
+            "p99": 24.879133999999997
+          },
+          "first_send_spread_ms": {
+            "count": 1242,
+            "max": 2.1471,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.4486,
+            "p50": 0.8626,
+            "p95": 1.16057,
+            "p99": 1.2937699999999996
+          },
+          "first_to_second_send_gap_ms": {
+            "count": 1242,
+            "max": 0.3161,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.0654,
+            "p50": 0.10375000000000001,
+            "p95": 0.15918500000000002,
+            "p99": 0.19360299999999986
+          },
+          "send_completion_spread_ms": {
+            "count": 1242,
+            "max": 2.0697,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.4291,
+            "p50": 0.8428,
+            "p95": 1.1297899999999998,
+            "p99": 1.2874439999999998
+          }
+        },
+        "waves_with_timing": 1242
+      },
+      "socket_application_bytes_by_phase_and_endpoint": {
+        "concurrent:client": {
+          "bytes_received_known": 236824560,
+          "bytes_sent_known": 5421330
+        },
+        "concurrent:server": {
+          "bytes_received_known": 5421330,
+          "bytes_sent_known": 236824560
+        },
+        "serial10_and_full_paging:client": {
+          "bytes_received_known": 224132,
+          "bytes_sent_known": 12396
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_received_known": 12396,
+          "bytes_sent_known": 224132
+        }
+      },
+      "source_file_sha256": "10abcebb78496eb91568e4fe0879a730a0263099510f7d8847ad27d3945af609",
+      "source_hash_entries": 69,
+      "source_machine": {
+        "architecture": "AMD64",
+        "cpu_count": 16,
+        "os": "Windows",
+        "python": "3.12.15",
+        "release": "11",
+        "sqlite": "3.53.4"
+      },
+      "source_sha": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+      "source_unchanged_recorded": true,
+      "summary_sha256": "32b05cf9ed370b3164380064115e8038e0e59ae6b35845c9aae91d5087b8b026",
+      "target_miss_wave_ids": [],
+      "target_reached_waves": 1242,
+      "wall_observation_seconds": 186.5412921999814
+    },
+    {
+      "artifact_label": "windows-50",
+      "audit_problem_count": 0,
+      "audit_valid": true,
+      "between_wave_gap_seconds": 98.324355799763,
+      "completed_waves": 235,
+      "effective_load_seconds": 60.11978880024981,
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "cpu_percent_host_capacity": 2.383598038606686,
+          "cpu_percent_one_core": 38.137568617706975,
+          "open_fds": null,
+          "open_handles": 491,
+          "rss_bytes": 191746048,
+          "samples": 5361,
+          "waves": 236
+        },
+        "server": {
+          "cpu_percent_host_capacity": 8.474757622145706,
+          "cpu_percent_one_core": 135.5961219543313,
+          "open_fds": null,
+          "open_handles": 682,
+          "rss_bytes": 128241664,
+          "samples": 4630,
+          "waves": 236
+        }
+      },
+      "hashed_index_bytes": 2507304,
+      "hashed_index_entries": 236,
+      "hashed_raw_report_index_bytes": 420310360,
+      "latency_seconds_concurrent_all_raw_requests": {
+        "count": 11750,
+        "max": 0.4835309000336565,
+        "method": "global raw samples; linear interpolation at (n-1)*p",
+        "p50": 0.20541105000302196,
+        "p95": 0.29276393999462014,
+        "p99": 0.35599024402268703
+      },
+      "limitations": [
+        "No new requests, SQL oracle, product imports or source-file replay; archived quality checks are preserved, not independently rerun against fixture databases.",
+        "Recorded before/after source hashes and clean flags are reconciled; original checkout files and shell invocation are not independently attested. Stored command_template is verbatim and may name the legacy driver.",
+        "Linear global percentiles differ from archived nearest-rank per-wave values; no per-wave percentile is averaged. Memory is one wave plus scalar concurrent latencies and compact peaks (up to 500000 samples at the recorded bounds).",
+        "CPU maxima are per-wave process interval ratios, not instantaneous or whole-host saturation. RSS/FD/handle are observed sampling lower bounds; unavailable metrics remain null.",
+        "Socket bytes include HTTP headers/body, not TCP/IP/link headers, retransmissions, physical NIC capacity or other host traffic. Prepared is not received, authenticated or in-flight.",
+        "Prelude projection is not a private/raw database checksum. Cache uncontrolled; no cold/hot or steady-state claim.",
+        "All original target misses, Gate0=false and original exit code remain unchanged. At most 200 diagnostic codes are printed; every target-miss ID is retained.",
+        "Selector timings compare only client perf_counter_ns observations within the same PID/wave; wrapper timestamps are not kernel syscall-entry traces. Prepared remains reader-installed, not proof of kernel blocking. JSON framing was checked by the archived harness; only body JSON is stored and revalidated offline.",
+        "Raw readiness-poll scheduling is not stored; no-hold dispatch is covered by source/tests, not independently reconstructed from observed socket I/O."
+      ],
+      "network_pair_checked_waves_including_prelude": 236,
+      "nonempty_archived_checks": {},
+      "offline_aggregate_bytes": 156872,
+      "offline_aggregate_sha256": "448db343de328ec0409aa6f765f6906479a5f603de2337ae2ca23f70e3f283ee",
+      "original_run": {
+        "bounds": {
+          "byte_budget": 1073741824,
+          "in_memory": "one wave only: at most 50 concurrent client records, 200 transport and 300 application events",
+          "max_waves": 10000,
+          "raw_io": "one client base64 response copy; raw streamed to separate per-wave NDJSON",
+          "wave_reservation_bytes": 16777216
+        },
+        "exit_code": 0,
+        "failures": [],
+        "gate0_passed": false,
+        "quality_passed": true,
+        "remaining_gates": [
+          "independent non-author review",
+          "two Linux evidence on this exact source",
+          "application queue absent; N/A scope requires real review and ruling",
+          "selected-stream raw paging on final source requires independent review",
+          "TCP/IP/link overhead, retransmissions and host network saturation unmeasured",
+          "cache cold/hot evidence requires controlled environment"
+        ],
+        "shutdown_errors": [],
+        "target_reached": true
+      },
+      "phase_counts": {
+        "concurrent": {
+          "client_requests": 11750,
+          "http_errors": 0,
+          "raw_application": 70500,
+          "raw_client": 11750,
+          "raw_marker": 470,
+          "raw_network": 235,
+          "raw_network_client": 235,
+          "raw_preparation": 235,
+          "raw_request_connection": 11750,
+          "raw_resource": 4604,
+          "raw_resource_client": 5335,
+          "raw_transport": 47000,
+          "stage_response_completed": 11750,
+          "stage_server_executing": 11750,
+          "stage_server_execution_completed": 11750,
+          "stage_server_received": 11750,
+          "waves": 235
+        },
+        "serial10_and_full_paging": {
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_application": 120,
+          "raw_client": 20,
+          "raw_marker": 2,
+          "raw_network": 1,
+          "raw_network_client": 1,
+          "raw_request_connection": 20,
+          "raw_resource": 26,
+          "raw_resource_client": 26,
+          "raw_transport": 80,
+          "stage_response_completed": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_server_received": 20,
+          "waves": 1
+        }
+      },
+      "prelude_public_projection_and_page10": {
+        "canonical_basis": "list of 10 actual page100 bodies; remove only top-level request_id/trace_id; sort by run_id; JSON sort_keys/separators=(',',':')/ensure_ascii=True/UTF-8",
+        "counts": {
+          "alarms": 10,
+          "states": 10,
+          "windows": 1000
+        },
+        "page10": {
+          "alarms": {
+            "consumed": 1,
+            "discarded": 0,
+            "raw": 1
+          },
+          "windows": {
+            "consumed": 100,
+            "discarded": 0,
+            "raw": 100
+          }
+        },
+        "page10_request_count": 10,
+        "public_projection_sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+      },
+      "prepared_concurrent_waves": 235,
+      "quality_failed_wave_ids": [],
+      "raw_recomputed_peak_ranges": {
+        "client": {
+          "max": 50,
+          "min": 50,
+          "users_max": 50,
+          "users_min": 50
+        },
+        "executing": {
+          "max": 50,
+          "min": 44,
+          "users_max": 50,
+          "users_min": 44
+        },
+        "server": {
+          "max": 50,
+          "min": 50,
+          "users_max": 50,
+          "users_min": 50
+        }
+      },
+      "recomputed_target_miss_wave_ids": [],
+      "requested_concurrent_basis": "label verified against every selector planned count and phase request product",
+      "requested_concurrent_users": 50,
+      "selector": {
+        "actual_http_started": 11750,
+        "backends": [
+          "SelectSelector"
+        ],
+        "not_started_attempts": 0,
+        "planned_calls": 11750,
+        "terminal_pairs": 11750,
+        "timing_basis": "client perf_counter_ns only, wrapper observations not kernel syscall-entry traces; never cross-process subtraction",
+        "timing_spread_ms": {
+          "first_positive_receive_spread_ms": {
+            "count": 235,
+            "max": 295.5721,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 52.9442,
+            "p50": 76.3713,
+            "p95": 143.16578999999996,
+            "p99": 209.60117599999995
+          },
+          "first_send_spread_ms": {
+            "count": 235,
+            "max": 9.3325,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 3.446,
+            "p50": 5.9747,
+            "p95": 7.9032399999999985,
+            "p99": 9.082256000000001
+          },
+          "first_to_second_send_gap_ms": {
+            "count": 235,
+            "max": 0.4954,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.0985,
+            "p50": 0.1626,
+            "p95": 0.27129999999999993,
+            "p99": 0.362938
+          },
+          "send_completion_spread_ms": {
+            "count": 235,
+            "max": 9.2799,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 3.4264,
+            "p50": 5.9415,
+            "p95": 7.819859999999999,
+            "p99": 9.011159999999999
+          }
+        },
+        "waves_with_timing": 235
+      },
+      "socket_application_bytes_by_phase_and_endpoint": {
+        "concurrent:client": {
+          "bytes_received_known": 224049000,
+          "bytes_sent_known": 5133575
+        },
+        "concurrent:server": {
+          "bytes_received_known": 5133575,
+          "bytes_sent_known": 224049000
+        },
+        "serial10_and_full_paging:client": {
+          "bytes_received_known": 224132,
+          "bytes_sent_known": 12396
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_received_known": 12396,
+          "bytes_sent_known": 224132
+        }
+      },
+      "source_file_sha256": "10abcebb78496eb91568e4fe0879a730a0263099510f7d8847ad27d3945af609",
+      "source_hash_entries": 69,
+      "source_machine": {
+        "architecture": "AMD64",
+        "cpu_count": 16,
+        "os": "Windows",
+        "python": "3.12.15",
+        "release": "11",
+        "sqlite": "3.53.4"
+      },
+      "source_sha": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+      "source_unchanged_recorded": true,
+      "summary_sha256": "0106c3db1482229d2741748dea9ae815450c59655b3cd0491e6f160ddbb378dd",
+      "target_miss_wave_ids": [],
+      "target_reached_waves": 235,
+      "wall_observation_seconds": 158.4441446000128
+    },
+    {
+      "artifact_label": "ubuntu-10",
+      "audit_problem_count": 0,
+      "audit_valid": true,
+      "between_wave_gap_seconds": 27.410122526009218,
+      "completed_waves": 388,
+      "effective_load_seconds": 60.11359207898204,
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "cpu_percent_host_capacity": 3.083288046223194,
+          "cpu_percent_one_core": 49.33260873957111,
+          "open_fds": 22,
+          "open_handles": null,
+          "rss_bytes": 66879488,
+          "samples": 5874,
+          "waves": 389
+        },
+        "server": {
+          "cpu_percent_host_capacity": 10.06024696696657,
+          "cpu_percent_one_core": 160.96395147146512,
+          "open_fds": 51,
+          "open_handles": null,
+          "rss_bytes": 60674048,
+          "samples": 3128,
+          "waves": 389
+        }
+      },
+      "hashed_index_bytes": 1397264,
+      "hashed_index_entries": 389,
+      "hashed_raw_report_index_bytes": 146996137,
+      "latency_seconds_concurrent_all_raw_requests": {
+        "count": 3880,
+        "max": 0.29210119000345003,
+        "method": "global raw samples; linear interpolation at (n-1)*p",
+        "p50": 0.13762237350601936,
+        "p95": 0.19123735765824673,
+        "p99": 0.21052401811553864
+      },
+      "limitations": [
+        "No new requests, SQL oracle, product imports or source-file replay; archived quality checks are preserved, not independently rerun against fixture databases.",
+        "Recorded before/after source hashes and clean flags are reconciled; original checkout files and shell invocation are not independently attested. Stored command_template is verbatim and may name the legacy driver.",
+        "Linear global percentiles differ from archived nearest-rank per-wave values; no per-wave percentile is averaged. Memory is one wave plus scalar concurrent latencies and compact peaks (up to 500000 samples at the recorded bounds).",
+        "CPU maxima are per-wave process interval ratios, not instantaneous or whole-host saturation. RSS/FD/handle are observed sampling lower bounds; unavailable metrics remain null.",
+        "Socket bytes include HTTP headers/body, not TCP/IP/link headers, retransmissions, physical NIC capacity or other host traffic. Prepared is not received, authenticated or in-flight.",
+        "Prelude projection is not a private/raw database checksum. Cache uncontrolled; no cold/hot or steady-state claim.",
+        "All original target misses, Gate0=false and original exit code remain unchanged. At most 200 diagnostic codes are printed; every target-miss ID is retained.",
+        "Selector timings compare only client perf_counter_ns observations within the same PID/wave; wrapper timestamps are not kernel syscall-entry traces. Prepared remains reader-installed, not proof of kernel blocking. JSON framing was checked by the archived harness; only body JSON is stored and revalidated offline.",
+        "Raw readiness-poll scheduling is not stored; no-hold dispatch is covered by source/tests, not independently reconstructed from observed socket I/O."
+      ],
+      "network_pair_checked_waves_including_prelude": 389,
+      "nonempty_archived_checks": {},
+      "offline_aggregate_bytes": 257201,
+      "offline_aggregate_sha256": "25e5fcc10765aef885642b819a63c1d44769cd93a2d026777471b2157581405c",
+      "original_run": {
+        "bounds": {
+          "byte_budget": 1073741824,
+          "in_memory": "one wave only: at most 50 concurrent client records, 200 transport and 300 application events",
+          "max_waves": 10000,
+          "raw_io": "one client base64 response copy; raw streamed to separate per-wave NDJSON",
+          "wave_reservation_bytes": 16777216
+        },
+        "exit_code": 0,
+        "failures": [],
+        "gate0_passed": false,
+        "quality_passed": true,
+        "remaining_gates": [
+          "independent non-author review",
+          "two Linux evidence on this exact source",
+          "application queue absent; N/A scope requires real review and ruling",
+          "selected-stream raw paging on final source requires independent review",
+          "TCP/IP/link overhead, retransmissions and host network saturation unmeasured",
+          "cache cold/hot evidence requires controlled environment"
+        ],
+        "shutdown_errors": [],
+        "target_reached": true
+      },
+      "phase_counts": {
+        "concurrent": {
+          "client_requests": 3880,
+          "http_errors": 0,
+          "raw_application": 23280,
+          "raw_client": 3880,
+          "raw_marker": 776,
+          "raw_network": 388,
+          "raw_network_client": 388,
+          "raw_preparation": 388,
+          "raw_request_connection": 3880,
+          "raw_resource": 3116,
+          "raw_resource_client": 5862,
+          "raw_transport": 15520,
+          "stage_response_completed": 3880,
+          "stage_server_executing": 3880,
+          "stage_server_execution_completed": 3880,
+          "stage_server_received": 3880,
+          "waves": 388
+        },
+        "serial10_and_full_paging": {
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_application": 120,
+          "raw_client": 20,
+          "raw_marker": 2,
+          "raw_network": 1,
+          "raw_network_client": 1,
+          "raw_request_connection": 20,
+          "raw_resource": 12,
+          "raw_resource_client": 12,
+          "raw_transport": 80,
+          "stage_response_completed": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_server_received": 20,
+          "waves": 1
+        }
+      },
+      "prelude_public_projection_and_page10": {
+        "canonical_basis": "list of 10 actual page100 bodies; remove only top-level request_id/trace_id; sort by run_id; JSON sort_keys/separators=(',',':')/ensure_ascii=True/UTF-8",
+        "counts": {
+          "alarms": 10,
+          "states": 10,
+          "windows": 1000
+        },
+        "page10": {
+          "alarms": {
+            "consumed": 1,
+            "discarded": 0,
+            "raw": 1
+          },
+          "windows": {
+            "consumed": 100,
+            "discarded": 0,
+            "raw": 100
+          }
+        },
+        "page10_request_count": 10,
+        "public_projection_sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+      },
+      "prepared_concurrent_waves": 388,
+      "quality_failed_wave_ids": [],
+      "raw_recomputed_peak_ranges": {
+        "client": {
+          "max": 10,
+          "min": 10,
+          "users_max": 10,
+          "users_min": 10
+        },
+        "executing": {
+          "max": 10,
+          "min": 7,
+          "users_max": 10,
+          "users_min": 7
+        },
+        "server": {
+          "max": 10,
+          "min": 10,
+          "users_max": 10,
+          "users_min": 10
+        }
+      },
+      "recomputed_target_miss_wave_ids": [],
+      "requested_concurrent_basis": "label verified against every selector planned count and phase request product",
+      "requested_concurrent_users": 10,
+      "selector": {
+        "actual_http_started": 3880,
+        "backends": [
+          "EpollSelector"
+        ],
+        "not_started_attempts": 0,
+        "planned_calls": 3880,
+        "terminal_pairs": 3880,
+        "timing_basis": "client perf_counter_ns only, wrapper observations not kernel syscall-entry traces; never cross-process subtraction",
+        "timing_spread_ms": {
+          "first_positive_receive_spread_ms": {
+            "count": 388,
+            "max": 145.216532,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 15.593871,
+            "p50": 67.89315049999999,
+            "p95": 106.57341809999998,
+            "p99": 127.84008157999999
+          },
+          "first_send_spread_ms": {
+            "count": 388,
+            "max": 4.375909,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.403025,
+            "p50": 1.0021585000000002,
+            "p95": 1.49386525,
+            "p99": 2.28809319
+          },
+          "first_to_second_send_gap_ms": {
+            "count": 388,
+            "max": 1.103749,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.085881,
+            "p50": 0.145488,
+            "p95": 0.22044559999999983,
+            "p99": 0.4764011499999997
+          },
+          "send_completion_spread_ms": {
+            "count": 388,
+            "max": 4.263218,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.342241,
+            "p50": 0.9708165,
+            "p95": 1.4799427999999997,
+            "p99": 2.0677431199999994
+          }
+        },
+        "waves_with_timing": 388
+      },
+      "socket_application_bytes_by_phase_and_endpoint": {
+        "concurrent:client": {
+          "bytes_received_known": 73983840,
+          "bytes_sent_known": 1697500
+        },
+        "concurrent:server": {
+          "bytes_received_known": 1697500,
+          "bytes_sent_known": 73983840
+        },
+        "serial10_and_full_paging:client": {
+          "bytes_received_known": 224132,
+          "bytes_sent_known": 12416
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_received_known": 12416,
+          "bytes_sent_known": 224132
+        }
+      },
+      "source_file_sha256": "3a3590abb39e8f7635e15fb57933ef1847bc77626cb2c422258cdea82dbd50a5",
+      "source_hash_entries": 69,
+      "source_machine": {
+        "architecture": "x86_64",
+        "cpu_count": 16,
+        "os": "Linux",
+        "python": "3.12.16",
+        "release": "7.0.0-34-generic",
+        "sqlite": "3.54.1"
+      },
+      "source_sha": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+      "source_unchanged_recorded": true,
+      "summary_sha256": "015265827fe5784c1596ada08d9137ec25c33c7735d3a88ecb9a1d35a07915a5",
+      "target_miss_wave_ids": [],
+      "target_reached_waves": 388,
+      "wall_observation_seconds": 87.52371460499126
+    },
+    {
+      "artifact_label": "ubuntu-50",
+      "audit_problem_count": 0,
+      "audit_valid": true,
+      "between_wave_gap_seconds": 17.27066134598863,
+      "completed_waves": 55,
+      "effective_load_seconds": 60.34574403701117,
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "cpu_percent_host_capacity": 3.4177610941485264,
+          "cpu_percent_one_core": 54.68417750637642,
+          "open_fds": 62,
+          "open_handles": null,
+          "rss_bytes": 93622272,
+          "samples": 5632,
+          "waves": 56
+        },
+        "server": {
+          "cpu_percent_host_capacity": 11.264901929283885,
+          "cpu_percent_one_core": 180.23843086854217,
+          "open_fds": 165,
+          "open_handles": null,
+          "rss_bytes": 80125952,
+          "samples": 1090,
+          "waves": 56
+        }
+      },
+      "hashed_index_bytes": 564771,
+      "hashed_index_entries": 56,
+      "hashed_raw_report_index_bytes": 101341323,
+      "latency_seconds_concurrent_all_raw_requests": {
+        "count": 2750,
+        "max": 1.3776321399927838,
+        "method": "global raw samples; linear interpolation at (n-1)*p",
+        "p50": 0.8971314305017586,
+        "p95": 1.2571058547437133,
+        "p99": 1.3025025660468963
+      },
+      "limitations": [
+        "No new requests, SQL oracle, product imports or source-file replay; archived quality checks are preserved, not independently rerun against fixture databases.",
+        "Recorded before/after source hashes and clean flags are reconciled; original checkout files and shell invocation are not independently attested. Stored command_template is verbatim and may name the legacy driver.",
+        "Linear global percentiles differ from archived nearest-rank per-wave values; no per-wave percentile is averaged. Memory is one wave plus scalar concurrent latencies and compact peaks (up to 500000 samples at the recorded bounds).",
+        "CPU maxima are per-wave process interval ratios, not instantaneous or whole-host saturation. RSS/FD/handle are observed sampling lower bounds; unavailable metrics remain null.",
+        "Socket bytes include HTTP headers/body, not TCP/IP/link headers, retransmissions, physical NIC capacity or other host traffic. Prepared is not received, authenticated or in-flight.",
+        "Prelude projection is not a private/raw database checksum. Cache uncontrolled; no cold/hot or steady-state claim.",
+        "All original target misses, Gate0=false and original exit code remain unchanged. At most 200 diagnostic codes are printed; every target-miss ID is retained.",
+        "Selector timings compare only client perf_counter_ns observations within the same PID/wave; wrapper timestamps are not kernel syscall-entry traces. Prepared remains reader-installed, not proof of kernel blocking. JSON framing was checked by the archived harness; only body JSON is stored and revalidated offline.",
+        "Raw readiness-poll scheduling is not stored; no-hold dispatch is covered by source/tests, not independently reconstructed from observed socket I/O."
+      ],
+      "network_pair_checked_waves_including_prelude": 56,
+      "nonempty_archived_checks": {},
+      "offline_aggregate_bytes": 43304,
+      "offline_aggregate_sha256": "82f711429229f34b2b1d7d81f41b99b272fc6db17e93418607f2e332ae7ee71c",
+      "original_run": {
+        "bounds": {
+          "byte_budget": 1073741824,
+          "in_memory": "one wave only: at most 50 concurrent client records, 200 transport and 300 application events",
+          "max_waves": 10000,
+          "raw_io": "one client base64 response copy; raw streamed to separate per-wave NDJSON",
+          "wave_reservation_bytes": 16777216
+        },
+        "exit_code": 0,
+        "failures": [],
+        "gate0_passed": false,
+        "quality_passed": true,
+        "remaining_gates": [
+          "independent non-author review",
+          "two Linux evidence on this exact source",
+          "application queue absent; N/A scope requires real review and ruling",
+          "selected-stream raw paging on final source requires independent review",
+          "TCP/IP/link overhead, retransmissions and host network saturation unmeasured",
+          "cache cold/hot evidence requires controlled environment"
+        ],
+        "shutdown_errors": [],
+        "target_reached": true
+      },
+      "phase_counts": {
+        "concurrent": {
+          "client_requests": 2750,
+          "http_errors": 0,
+          "raw_application": 16500,
+          "raw_client": 2750,
+          "raw_marker": 110,
+          "raw_network": 55,
+          "raw_network_client": 55,
+          "raw_preparation": 55,
+          "raw_request_connection": 2750,
+          "raw_resource": 1080,
+          "raw_resource_client": 5622,
+          "raw_transport": 11000,
+          "stage_response_completed": 2750,
+          "stage_server_executing": 2750,
+          "stage_server_execution_completed": 2750,
+          "stage_server_received": 2750,
+          "waves": 55
+        },
+        "serial10_and_full_paging": {
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_application": 120,
+          "raw_client": 20,
+          "raw_marker": 2,
+          "raw_network": 1,
+          "raw_network_client": 1,
+          "raw_request_connection": 20,
+          "raw_resource": 10,
+          "raw_resource_client": 10,
+          "raw_transport": 80,
+          "stage_response_completed": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_server_received": 20,
+          "waves": 1
+        }
+      },
+      "prelude_public_projection_and_page10": {
+        "canonical_basis": "list of 10 actual page100 bodies; remove only top-level request_id/trace_id; sort by run_id; JSON sort_keys/separators=(',',':')/ensure_ascii=True/UTF-8",
+        "counts": {
+          "alarms": 10,
+          "states": 10,
+          "windows": 1000
+        },
+        "page10": {
+          "alarms": {
+            "consumed": 1,
+            "discarded": 0,
+            "raw": 1
+          },
+          "windows": {
+            "consumed": 100,
+            "discarded": 0,
+            "raw": 100
+          }
+        },
+        "page10_request_count": 10,
+        "public_projection_sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+      },
+      "prepared_concurrent_waves": 55,
+      "quality_failed_wave_ids": [],
+      "raw_recomputed_peak_ranges": {
+        "client": {
+          "max": 50,
+          "min": 50,
+          "users_max": 50,
+          "users_min": 50
+        },
+        "executing": {
+          "max": 50,
+          "min": 20,
+          "users_max": 50,
+          "users_min": 20
+        },
+        "server": {
+          "max": 50,
+          "min": 50,
+          "users_max": 50,
+          "users_min": 50
+        }
+      },
+      "recomputed_target_miss_wave_ids": [],
+      "requested_concurrent_basis": "label verified against every selector planned count and phase request product",
+      "requested_concurrent_users": 50,
+      "selector": {
+        "actual_http_started": 2750,
+        "backends": [
+          "EpollSelector"
+        ],
+        "not_started_attempts": 0,
+        "planned_calls": 2750,
+        "terminal_pairs": 2750,
+        "timing_basis": "client perf_counter_ns only, wrapper observations not kernel syscall-entry traces; never cross-process subtraction",
+        "timing_spread_ms": {
+          "first_positive_receive_spread_ms": {
+            "count": 55,
+            "max": 1100.362692,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 280.149162,
+            "p50": 703.733946,
+            "p95": 1042.116872,
+            "p99": 1087.22838918
+          },
+          "first_send_spread_ms": {
+            "count": 55,
+            "max": 10.352314,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 3.611853,
+            "p50": 6.204222,
+            "p95": 9.060759299999999,
+            "p99": 9.73397836
+          },
+          "first_to_second_send_gap_ms": {
+            "count": 55,
+            "max": 0.655886,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.141475,
+            "p50": 0.193052,
+            "p95": 0.3047324999999999,
+            "p99": 0.5245617800000002
+          },
+          "send_completion_spread_ms": {
+            "count": 55,
+            "max": 10.252497,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 3.559344,
+            "p50": 6.133259,
+            "p95": 8.9908984,
+            "p99": 9.64763274
+          }
+        },
+        "waves_with_timing": 55
+      },
+      "socket_application_bytes_by_phase_and_endpoint": {
+        "concurrent:client": {
+          "bytes_received_known": 52437000,
+          "bytes_sent_known": 1204225
+        },
+        "concurrent:server": {
+          "bytes_received_known": 1204225,
+          "bytes_sent_known": 52437000
+        },
+        "serial10_and_full_paging:client": {
+          "bytes_received_known": 224132,
+          "bytes_sent_known": 12416
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_received_known": 12416,
+          "bytes_sent_known": 224132
+        }
+      },
+      "source_file_sha256": "3a3590abb39e8f7635e15fb57933ef1847bc77626cb2c422258cdea82dbd50a5",
+      "source_hash_entries": 69,
+      "source_machine": {
+        "architecture": "x86_64",
+        "cpu_count": 16,
+        "os": "Linux",
+        "python": "3.12.16",
+        "release": "7.0.0-34-generic",
+        "sqlite": "3.54.1"
+      },
+      "source_sha": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+      "source_unchanged_recorded": true,
+      "summary_sha256": "b8bd8da985c3d916c1619fe537247fd9e978681e17388e787da11d8d4ea62285",
+      "target_miss_wave_ids": [],
+      "target_reached_waves": 55,
+      "wall_observation_seconds": 77.6164053829998
+    },
+    {
+      "artifact_label": "rhel-10",
+      "audit_problem_count": 0,
+      "audit_valid": true,
+      "between_wave_gap_seconds": 64.74693886797468,
+      "completed_waves": 861,
+      "effective_load_seconds": 60.02043710001453,
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "cpu_percent_host_capacity": 17.526430998646966,
+          "cpu_percent_one_core": 70.10572399458786,
+          "open_fds": 22,
+          "open_handles": null,
+          "rss_bytes": 59088896,
+          "samples": 7518,
+          "waves": 862
+        },
+        "server": {
+          "cpu_percent_host_capacity": 37.05215392447364,
+          "cpu_percent_one_core": 148.20861569789457,
+          "open_fds": 51,
+          "open_handles": null,
+          "rss_bytes": 52346880,
+          "samples": 5744,
+          "waves": 862
+        }
+      },
+      "hashed_index_bytes": 3082243,
+      "hashed_index_entries": 862,
+      "hashed_raw_report_index_bytes": 321326857,
+      "latency_seconds_concurrent_all_raw_requests": {
+        "count": 8610,
+        "max": 0.1250586030073464,
+        "method": "global raw samples; linear interpolation at (n-1)*p",
+        "p50": 0.05873928850633092,
+        "p95": 0.08086806590217746,
+        "p99": 0.08795023576516542
+      },
+      "limitations": [
+        "No new requests, SQL oracle, product imports or source-file replay; archived quality checks are preserved, not independently rerun against fixture databases.",
+        "Recorded before/after source hashes and clean flags are reconciled; original checkout files and shell invocation are not independently attested. Stored command_template is verbatim and may name the legacy driver.",
+        "Linear global percentiles differ from archived nearest-rank per-wave values; no per-wave percentile is averaged. Memory is one wave plus scalar concurrent latencies and compact peaks (up to 500000 samples at the recorded bounds).",
+        "CPU maxima are per-wave process interval ratios, not instantaneous or whole-host saturation. RSS/FD/handle are observed sampling lower bounds; unavailable metrics remain null.",
+        "Socket bytes include HTTP headers/body, not TCP/IP/link headers, retransmissions, physical NIC capacity or other host traffic. Prepared is not received, authenticated or in-flight.",
+        "Prelude projection is not a private/raw database checksum. Cache uncontrolled; no cold/hot or steady-state claim.",
+        "All original target misses, Gate0=false and original exit code remain unchanged. At most 200 diagnostic codes are printed; every target-miss ID is retained.",
+        "Selector timings compare only client perf_counter_ns observations within the same PID/wave; wrapper timestamps are not kernel syscall-entry traces. Prepared remains reader-installed, not proof of kernel blocking. JSON framing was checked by the archived harness; only body JSON is stored and revalidated offline.",
+        "Raw readiness-poll scheduling is not stored; no-hold dispatch is covered by source/tests, not independently reconstructed from observed socket I/O."
+      ],
+      "network_pair_checked_waves_including_prelude": 862,
+      "nonempty_archived_checks": {},
+      "offline_aggregate_bytes": 559889,
+      "offline_aggregate_sha256": "b47f1343e6a2178c49adaa1ed17e3c24b63cb15c1ce62c03a827c9f266287c4a",
+      "original_run": {
+        "bounds": {
+          "byte_budget": 1073741824,
+          "in_memory": "one wave only: at most 50 concurrent client records, 200 transport and 300 application events",
+          "max_waves": 10000,
+          "raw_io": "one client base64 response copy; raw streamed to separate per-wave NDJSON",
+          "wave_reservation_bytes": 16777216
+        },
+        "exit_code": 1,
+        "failures": [],
+        "gate0_passed": false,
+        "quality_passed": true,
+        "remaining_gates": [
+          "independent non-author review",
+          "two Linux evidence on this exact source",
+          "application queue absent; N/A scope requires real review and ruling",
+          "selected-stream raw paging on final source requires independent review",
+          "TCP/IP/link overhead, retransmissions and host network saturation unmeasured",
+          "cache cold/hot evidence requires controlled environment"
+        ],
+        "shutdown_errors": [],
+        "target_reached": false
+      },
+      "phase_counts": {
+        "concurrent": {
+          "client_requests": 8610,
+          "http_errors": 0,
+          "raw_application": 51660,
+          "raw_client": 8610,
+          "raw_marker": 1722,
+          "raw_network": 861,
+          "raw_network_client": 861,
+          "raw_preparation": 861,
+          "raw_request_connection": 8610,
+          "raw_resource": 5731,
+          "raw_resource_client": 7505,
+          "raw_transport": 34440,
+          "stage_response_completed": 8610,
+          "stage_server_executing": 8610,
+          "stage_server_execution_completed": 8610,
+          "stage_server_received": 8610,
+          "waves": 861
+        },
+        "serial10_and_full_paging": {
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_application": 120,
+          "raw_client": 20,
+          "raw_marker": 2,
+          "raw_network": 1,
+          "raw_network_client": 1,
+          "raw_request_connection": 20,
+          "raw_resource": 13,
+          "raw_resource_client": 13,
+          "raw_transport": 80,
+          "stage_response_completed": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_server_received": 20,
+          "waves": 1
+        }
+      },
+      "prelude_public_projection_and_page10": {
+        "canonical_basis": "list of 10 actual page100 bodies; remove only top-level request_id/trace_id; sort by run_id; JSON sort_keys/separators=(',',':')/ensure_ascii=True/UTF-8",
+        "counts": {
+          "alarms": 10,
+          "states": 10,
+          "windows": 1000
+        },
+        "page10": {
+          "alarms": {
+            "consumed": 1,
+            "discarded": 0,
+            "raw": 1
+          },
+          "windows": {
+            "consumed": 100,
+            "discarded": 0,
+            "raw": 100
+          }
+        },
+        "page10_request_count": 10,
+        "public_projection_sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+      },
+      "prepared_concurrent_waves": 861,
+      "quality_failed_wave_ids": [],
+      "raw_recomputed_peak_ranges": {
+        "client": {
+          "max": 10,
+          "min": 9,
+          "users_max": 10,
+          "users_min": 9
+        },
+        "executing": {
+          "max": 10,
+          "min": 5,
+          "users_max": 10,
+          "users_min": 5
+        },
+        "server": {
+          "max": 10,
+          "min": 9,
+          "users_max": 10,
+          "users_min": 9
+        }
+      },
+      "recomputed_target_miss_wave_ids": [
+        "wave-00661",
+        "wave-00780"
+      ],
+      "requested_concurrent_basis": "label verified against every selector planned count and phase request product",
+      "requested_concurrent_users": 10,
+      "selector": {
+        "actual_http_started": 8610,
+        "backends": [
+          "EpollSelector"
+        ],
+        "not_started_attempts": 0,
+        "planned_calls": 8610,
+        "terminal_pairs": 8610,
+        "timing_basis": "client perf_counter_ns only, wrapper observations not kernel syscall-entry traces; never cross-process subtraction",
+        "timing_spread_ms": {
+          "first_positive_receive_spread_ms": {
+            "count": 861,
+            "max": 83.318748,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 7.684039,
+            "p50": 32.292579,
+            "p95": 50.958903,
+            "p99": 59.321345799999975
+          },
+          "first_send_spread_ms": {
+            "count": 861,
+            "max": 7.167265,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.328419,
+            "p50": 1.037144,
+            "p95": 1.676479,
+            "p99": 2.323807999999998
+          },
+          "first_to_second_send_gap_ms": {
+            "count": 861,
+            "max": 0.808488,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.075111,
+            "p50": 0.140465,
+            "p95": 0.205457,
+            "p99": 0.28870699999999994
+          },
+          "send_completion_spread_ms": {
+            "count": 861,
+            "max": 7.063911,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.2918,
+            "p50": 1.008806,
+            "p95": 1.655716,
+            "p99": 2.328552999999997
+          }
+        },
+        "waves_with_timing": 861
+      },
+      "socket_application_bytes_by_phase_and_endpoint": {
+        "concurrent:client": {
+          "bytes_received_known": 164175480,
+          "bytes_sent_known": 3766875
+        },
+        "concurrent:server": {
+          "bytes_received_known": 3766875,
+          "bytes_sent_known": 164175480
+        },
+        "serial10_and_full_paging:client": {
+          "bytes_received_known": 224132,
+          "bytes_sent_known": 12416
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_received_known": 12416,
+          "bytes_sent_known": 224132
+        }
+      },
+      "source_file_sha256": "d1ab060079a64c38f76367ec30ee05e517071e4279980ea19abdeca6329aae3a",
+      "source_hash_entries": 69,
+      "source_machine": {
+        "architecture": "x86_64",
+        "cpu_count": 4,
+        "os": "Linux",
+        "python": "3.12.16",
+        "release": "5.14.0-611.5.1.el9_7.x86_64",
+        "sqlite": "3.54.1"
+      },
+      "source_sha": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+      "source_unchanged_recorded": true,
+      "summary_sha256": "3eb346b8d1b4d34c016de92c1997acbb67d961b1bd39b7e80fbf5b2f93611050",
+      "target_miss_wave_ids": [
+        "wave-00661",
+        "wave-00780"
+      ],
+      "target_reached_waves": 859,
+      "wall_observation_seconds": 124.76737596798921
+    },
+    {
+      "artifact_label": "rhel-50",
+      "audit_problem_count": 0,
+      "audit_valid": true,
+      "between_wave_gap_seconds": 42.27094530407339,
+      "completed_waves": 122,
+      "effective_load_seconds": 60.41401435692387,
+      "endpoint_resource_observed_max_including_prelude": {
+        "client": {
+          "cpu_percent_host_capacity": 14.227765410373538,
+          "cpu_percent_one_core": 56.91106164149415,
+          "open_fds": 62,
+          "open_handles": null,
+          "rss_bytes": 85688320,
+          "samples": 6054,
+          "waves": 123
+        },
+        "server": {
+          "cpu_percent_host_capacity": 43.514352223640806,
+          "cpu_percent_one_core": 174.05740889456322,
+          "open_fds": 164,
+          "open_handles": null,
+          "rss_bytes": 72830976,
+          "samples": 2268,
+          "waves": 123
+        }
+      },
+      "hashed_index_bytes": 1227752,
+      "hashed_index_entries": 123,
+      "hashed_raw_report_index_bytes": 219912117,
+      "latency_seconds_concurrent_all_raw_requests": {
+        "count": 6100,
+        "max": 0.7069647649914259,
+        "method": "global raw samples; linear interpolation at (n-1)*p",
+        "p50": 0.3961889870042796,
+        "p95": 0.6195212540442299,
+        "p99": 0.6812033336071182
+      },
+      "limitations": [
+        "No new requests, SQL oracle, product imports or source-file replay; archived quality checks are preserved, not independently rerun against fixture databases.",
+        "Recorded before/after source hashes and clean flags are reconciled; original checkout files and shell invocation are not independently attested. Stored command_template is verbatim and may name the legacy driver.",
+        "Linear global percentiles differ from archived nearest-rank per-wave values; no per-wave percentile is averaged. Memory is one wave plus scalar concurrent latencies and compact peaks (up to 500000 samples at the recorded bounds).",
+        "CPU maxima are per-wave process interval ratios, not instantaneous or whole-host saturation. RSS/FD/handle are observed sampling lower bounds; unavailable metrics remain null.",
+        "Socket bytes include HTTP headers/body, not TCP/IP/link headers, retransmissions, physical NIC capacity or other host traffic. Prepared is not received, authenticated or in-flight.",
+        "Prelude projection is not a private/raw database checksum. Cache uncontrolled; no cold/hot or steady-state claim.",
+        "All original target misses, Gate0=false and original exit code remain unchanged. At most 200 diagnostic codes are printed; every target-miss ID is retained.",
+        "Selector timings compare only client perf_counter_ns observations within the same PID/wave; wrapper timestamps are not kernel syscall-entry traces. Prepared remains reader-installed, not proof of kernel blocking. JSON framing was checked by the archived harness; only body JSON is stored and revalidated offline.",
+        "Raw readiness-poll scheduling is not stored; no-hold dispatch is covered by source/tests, not independently reconstructed from observed socket I/O."
+      ],
+      "network_pair_checked_waves_including_prelude": 123,
+      "nonempty_archived_checks": {},
+      "offline_aggregate_bytes": 86373,
+      "offline_aggregate_sha256": "4cadec61dcfe171b556dac913eb18b69fa5bfdc4586c5f02a5411a9ecd2c25f4",
+      "original_run": {
+        "bounds": {
+          "byte_budget": 1073741824,
+          "in_memory": "one wave only: at most 50 concurrent client records, 200 transport and 300 application events",
+          "max_waves": 10000,
+          "raw_io": "one client base64 response copy; raw streamed to separate per-wave NDJSON",
+          "wave_reservation_bytes": 16777216
+        },
+        "exit_code": 1,
+        "failures": [],
+        "gate0_passed": false,
+        "quality_passed": true,
+        "remaining_gates": [
+          "independent non-author review",
+          "two Linux evidence on this exact source",
+          "application queue absent; N/A scope requires real review and ruling",
+          "selected-stream raw paging on final source requires independent review",
+          "TCP/IP/link overhead, retransmissions and host network saturation unmeasured",
+          "cache cold/hot evidence requires controlled environment"
+        ],
+        "shutdown_errors": [],
+        "target_reached": false
+      },
+      "phase_counts": {
+        "concurrent": {
+          "client_requests": 6100,
+          "http_errors": 0,
+          "raw_application": 36600,
+          "raw_client": 6100,
+          "raw_marker": 244,
+          "raw_network": 122,
+          "raw_network_client": 122,
+          "raw_preparation": 122,
+          "raw_request_connection": 6100,
+          "raw_resource": 2257,
+          "raw_resource_client": 6043,
+          "raw_transport": 24400,
+          "stage_response_completed": 6100,
+          "stage_server_executing": 6100,
+          "stage_server_execution_completed": 6100,
+          "stage_server_received": 6100,
+          "waves": 122
+        },
+        "serial10_and_full_paging": {
+          "client_requests": 20,
+          "http_errors": 0,
+          "raw_application": 120,
+          "raw_client": 20,
+          "raw_marker": 2,
+          "raw_network": 1,
+          "raw_network_client": 1,
+          "raw_request_connection": 20,
+          "raw_resource": 11,
+          "raw_resource_client": 11,
+          "raw_transport": 80,
+          "stage_response_completed": 20,
+          "stage_server_executing": 20,
+          "stage_server_execution_completed": 20,
+          "stage_server_received": 20,
+          "waves": 1
+        }
+      },
+      "prelude_public_projection_and_page10": {
+        "canonical_basis": "list of 10 actual page100 bodies; remove only top-level request_id/trace_id; sort by run_id; JSON sort_keys/separators=(',',':')/ensure_ascii=True/UTF-8",
+        "counts": {
+          "alarms": 10,
+          "states": 10,
+          "windows": 1000
+        },
+        "page10": {
+          "alarms": {
+            "consumed": 1,
+            "discarded": 0,
+            "raw": 1
+          },
+          "windows": {
+            "consumed": 100,
+            "discarded": 0,
+            "raw": 100
+          }
+        },
+        "page10_request_count": 10,
+        "public_projection_sha256": "990707d9fe56da2d66f2523813e71d630f3aad31e8c16ae6293d46d713ea9cfc"
+      },
+      "prepared_concurrent_waves": 122,
+      "quality_failed_wave_ids": [],
+      "raw_recomputed_peak_ranges": {
+        "client": {
+          "max": 50,
+          "min": 50,
+          "users_max": 50,
+          "users_min": 50
+        },
+        "executing": {
+          "max": 50,
+          "min": 20,
+          "users_max": 50,
+          "users_min": 20
+        },
+        "server": {
+          "max": 50,
+          "min": 49,
+          "users_max": 50,
+          "users_min": 49
+        }
+      },
+      "recomputed_target_miss_wave_ids": [
+        "wave-00070"
+      ],
+      "requested_concurrent_basis": "label verified against every selector planned count and phase request product",
+      "requested_concurrent_users": 50,
+      "selector": {
+        "actual_http_started": 6100,
+        "backends": [
+          "EpollSelector"
+        ],
+        "not_started_attempts": 0,
+        "planned_calls": 6100,
+        "terminal_pairs": 6100,
+        "timing_basis": "client perf_counter_ns only, wrapper observations not kernel syscall-entry traces; never cross-process subtraction",
+        "timing_spread_ms": {
+          "first_positive_receive_spread_ms": {
+            "count": 122,
+            "max": 600.386963,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 112.443196,
+            "p50": 347.52810050000005,
+            "p95": 500.5518573,
+            "p99": 571.9602750399997
+          },
+          "first_send_spread_ms": {
+            "count": 122,
+            "max": 11.128539,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 3.376873,
+            "p50": 6.271605,
+            "p95": 9.664012099999997,
+            "p99": 10.702786429999998
+          },
+          "first_to_second_send_gap_ms": {
+            "count": 122,
+            "max": 1.669777,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 0.111851,
+            "p50": 0.204343,
+            "p95": 0.3035062999999998,
+            "p99": 0.6128538399999983
+          },
+          "send_completion_spread_ms": {
+            "count": 122,
+            "max": 11.046966,
+            "method": "global (n-1)p linear interpolation of per-wave same-process timing spreads",
+            "min": 3.310388,
+            "p50": 6.1960675,
+            "p95": 9.652109649999996,
+            "p99": 10.6284755
+          }
+        },
+        "waves_with_timing": 122
+      },
+      "socket_application_bytes_by_phase_and_endpoint": {
+        "concurrent:client": {
+          "bytes_received_known": 116314800,
+          "bytes_sent_known": 2671190
+        },
+        "concurrent:server": {
+          "bytes_received_known": 2671190,
+          "bytes_sent_known": 116314800
+        },
+        "serial10_and_full_paging:client": {
+          "bytes_received_known": 224132,
+          "bytes_sent_known": 12416
+        },
+        "serial10_and_full_paging:server": {
+          "bytes_received_known": 12416,
+          "bytes_sent_known": 224132
+        }
+      },
+      "source_file_sha256": "d1ab060079a64c38f76367ec30ee05e517071e4279980ea19abdeca6329aae3a",
+      "source_hash_entries": 69,
+      "source_machine": {
+        "architecture": "x86_64",
+        "cpu_count": 4,
+        "os": "Linux",
+        "python": "3.12.16",
+        "release": "5.14.0-611.5.1.el9_7.x86_64",
+        "sqlite": "3.54.1"
+      },
+      "source_sha": "3ddf12d00c913e02217b5ebced90fc70b9ac723d",
+      "source_unchanged_recorded": true,
+      "summary_sha256": "b48a35b06e26540deb2f468081f6b5e79340025f96a78066ccbd11e9c0cca078",
+      "target_miss_wave_ids": [
+        "wave-00070"
+      ],
+      "target_reached_waves": 121,
+      "wall_observation_seconds": 102.68495966099727
+    }
+  ],
+  "platform_label_basis": "invocation mapping plus source os check; Ubuntu/RHEL distro identity comes from original execution/system records, not inferred from kernel or aggregate path",
+  "preserved_prior_results": {
+    "T177_target_misses": 67,
+    "current_rhel10_target_misses": [
+      "wave-00661",
+      "wave-00780"
+    ],
+    "current_rhel50_target_misses": [
+      "wave-00070"
+    ],
+    "dba4dce9_ubuntu10_target_misses": [
+      "wave-00024"
+    ],
+    "no_server_or_acceptance_threshold_changes": true,
+    "same_source_formal_reruns": 0
+  },
+  "regression": [
+    {
+      "black_files": 100,
+      "docrefs": 0,
+      "git_blob_entries": 338,
+      "locked_package_mismatches": 0,
+      "locked_packages_checked": 21,
+      "passed": 1335,
+      "platform": "windows",
+      "pylint": 9.87,
+      "seconds": 225.79,
+      "skipped": 15,
+      "source_hash_entries": 69
+    },
+    {
+      "all_tracked_files_checked": 338,
+      "black_files": 100,
+      "clean_after": true,
+      "clean_before": true,
+      "docrefs_problems": 0,
+      "lock_mismatches": 0,
+      "lock_packages": 21,
+      "passed": 1336,
+      "platform": "ubuntu",
+      "pylint_score": "9.87",
+      "pytest_seconds": 176.59,
+      "skipped": 14,
+      "source_hash_entries": 69
+    },
+    {
+      "all_tracked_files_checked": 338,
+      "black_files": 100,
+      "clean_after": true,
+      "clean_before": true,
+      "docrefs_problems": 0,
+      "lock_mismatches": 0,
+      "lock_packages": 21,
+      "passed": 1336,
+      "platform": "rhel",
+      "pylint_score": "9.87",
+      "pytest_seconds": 162.39,
+      "skipped": 14,
+      "source_hash_entries": 69
+    }
+  ],
+  "rhel_miss_diagnostic": {
+    "artifact_label": "rhel-three-miss-diagnostic.json",
+    "bytes": 274943,
+    "limits": [
+      "Only same-process timings are subtracted.",
+      "Socket wrapper timestamps are not kernel entry or scheduler/GIL traces.",
+      "All 3 original misses remain failures."
+    ],
+    "sha256": "2bb84e3c47b534603714a9f6b12ee68e4d37194911ba4be9007691dc3aca3473",
+    "waves": [
+      {
+        "client_only": {
+          "first_client_complete_before_last_send_end": true,
+          "first_client_complete_before_last_send_start": true,
+          "first_client_complete_to_last_send_end_ms": 1.75601,
+          "first_client_complete_to_last_send_start_ms": 1.736813,
+          "first_send_spread_ms": 7.167265,
+          "first_to_second_send_gap_ms": 0.183696,
+          "io_error_count": 0,
+          "would_block_count": 0
+        },
+        "client_peak": 9,
+        "client_users_at_peak": 9,
+        "level": 10,
+        "raw": {
+          "bytes": 360747,
+          "path": "wave-00661/raw.ndjson",
+          "sha256": "be1c6cced65e5d0070dc310e607261d38d56371c39d2400527702a883cda060c"
+        },
+        "raw_report_match_index": true,
+        "report": {
+          "bytes": 13857,
+          "path": "wave-00661/report.json",
+          "sha256": "8a3b8a8b8c88b93d24e0dd10f0971b9ac97aefd1d026e9c9207b2e8c4211eb58"
+        },
+        "server_only": {
+          "all_readers_installed_before_ack": true,
+          "all_received_after_ack": true,
+          "clock": "server perf_counter_ns only",
+          "first_completion_after_first_received_ms": 4.296105,
+          "last_received_actor": "actor-d0-009",
+          "last_received_after_first_completion_ms": 14.330604,
+          "read_wrapper_start_after_ack": 0,
+          "read_wrapper_start_before_or_at_ack": 10,
+          "received_spread_ms": 18.626709,
+          "recv_return_to_received_max_ms": 4.316639
+        },
+        "server_peak": 9,
+        "server_users_at_peak": 9,
+        "wave_id": "wave-00661"
+      },
+      {
+        "client_only": {
+          "first_client_complete_before_last_send_end": false,
+          "first_client_complete_before_last_send_start": false,
+          "first_client_complete_to_last_send_end_ms": -14.082807,
+          "first_client_complete_to_last_send_start_ms": -14.256484,
+          "first_send_spread_ms": 0.827649,
+          "first_to_second_send_gap_ms": 0.149972,
+          "io_error_count": 0,
+          "would_block_count": 0
+        },
+        "client_peak": 10,
+        "client_users_at_peak": 10,
+        "level": 10,
+        "raw": {
+          "bytes": 352295,
+          "path": "wave-00780/raw.ndjson",
+          "sha256": "a20472063e087ddfc2f210bfb64d57ab3925a54dfc1ef50fc431b24767e77c42"
+        },
+        "raw_report_match_index": true,
+        "report": {
+          "bytes": 14025,
+          "path": "wave-00780/report.json",
+          "sha256": "dc0be573c869fd7e3d127c68a46394b640cfe86a0f762672bcb6752fff532d1f"
+        },
+        "server_only": {
+          "all_readers_installed_before_ack": true,
+          "all_received_after_ack": true,
+          "clock": "server perf_counter_ns only",
+          "first_completion_after_first_received_ms": 13.74739,
+          "last_received_actor": "actor-d0-009",
+          "last_received_after_first_completion_ms": 1.457056,
+          "read_wrapper_start_after_ack": 0,
+          "read_wrapper_start_before_or_at_ack": 10,
+          "received_spread_ms": 15.204446,
+          "recv_return_to_received_max_ms": 5.487209
+        },
+        "server_peak": 9,
+        "server_users_at_peak": 9,
+        "wave_id": "wave-00780"
+      },
+      {
+        "client_only": {
+          "first_client_complete_before_last_send_end": false,
+          "first_client_complete_before_last_send_start": false,
+          "first_client_complete_to_last_send_end_ms": -11.293777,
+          "first_client_complete_to_last_send_start_ms": -11.357667,
+          "first_send_spread_ms": 6.236932,
+          "first_to_second_send_gap_ms": 0.14306,
+          "io_error_count": 0,
+          "would_block_count": 0
+        },
+        "client_peak": 50,
+        "client_users_at_peak": 50,
+        "level": 50,
+        "raw": {
+          "bytes": 1749203,
+          "path": "wave-00070/raw.ndjson",
+          "sha256": "161d46095903bafc218ca7b993b10c3589d14705ed5396380c925cd202bdbb52"
+        },
+        "raw_report_match_index": true,
+        "report": {
+          "bytes": 30602,
+          "path": "wave-00070/report.json",
+          "sha256": "0feb7bc5a385b8d4ad4296bed25f95e390b1257509d8d400ebb64c2ac0135fae"
+        },
+        "server_only": {
+          "all_readers_installed_before_ack": true,
+          "all_received_after_ack": true,
+          "clock": "server perf_counter_ns only",
+          "first_completion_after_first_received_ms": 16.983832,
+          "last_received_actor": "actor-d0-008",
+          "last_received_after_first_completion_ms": 9.02707,
+          "read_wrapper_start_after_ack": 0,
+          "read_wrapper_start_before_or_at_ack": 50,
+          "received_spread_ms": 26.010902,
+          "recv_return_to_received_max_ms": 4.76622
+        },
+        "server_peak": 49,
+        "server_users_at_peak": 49,
+        "wave_id": "wave-00070"
+      }
+    ]
+  },
+  "scope": "D0 only; six one-attempt observations, 10/50 users, each >=60 effective seconds, all-wave AND unchanged; no server response hold",
+  "total_main_http_errors": 0,
+  "total_main_requests": 45510,
+  "total_main_waves": 2903,
+  "whitelist_builder_sha256": "692e14597cd604c3063019d15ad48346f35c1e588ad0bc3d71c7d84452412106"
+}
