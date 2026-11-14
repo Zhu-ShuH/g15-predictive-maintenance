@@ -24,7 +24,10 @@ def _wait_for(predicate, *, timeout=12):
     pytest.fail("live child service did not become ready")
 
 
-def test_live_cli_serves_real_health_and_stops_without_browser_credentials(tmp_path):
+@pytest.mark.parametrize("laboratory_enabled", [False, True])
+def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
+    tmp_path, laboratory_enabled
+):
     root = Path(__file__).resolve().parents[2]
     output = tmp_path / "runtime"
     stop_file = tmp_path / "stop.request"
@@ -57,6 +60,11 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(tmp_p
             "0",
             "--stop-file",
             str(stop_file),
+            *(
+                ["--laboratory-root", str(tmp_path / "laboratory")]
+                if laboratory_enabled
+                else []
+            ),
         ],
         cwd=tmp_path,
         env=environment,
@@ -91,6 +99,18 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(tmp_p
             )
         )
         assert status["status"] == "running"
+        workbench = get("/api/workbench")
+        assert workbench["available"] is True and len(workbench["runs"]) == 2
+        identities = [row["id"] for row in workbench["runs"]]
+        replay = get("/api/workbench/run?id=" + identities[0])
+        assert replay["windows"] and replay["complete"] is True
+        assert replay["latency"]["kind"] == "capture_to_commit"
+        assert replay["latency"]["mean_seconds"] > 0
+        compared = get("/api/workbench/compare?ids=" + ",".join(identities))
+        assert len(compared["runs"]) == 2
+        assert compared["alignment"] == "elapsed_seconds"
+        replay_wave = get("/api/workbench/waveform?id=" + identities[0] + "&count=256")
+        assert replay_wave["integrity"]["status"] == "sha256_verified"
         for row in catalog["devices"]:
             health = get(
                 f'/api/health?run_id={row["run_id"]}&device_id={row["device_id"]}'
@@ -104,6 +124,11 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(tmp_p
             assert report["run_id"] == row["run_id"]
             assert report["device_id"] == row["device_id"]
             assert report["verifiable"] is False and report["passed"] is None
+            waveform = get(
+                f'/api/waveform?run_id={row["run_id"]}&device_id={row["device_id"]}&count=256'
+            )
+            assert waveform["integrity"]["status"] == "sha256_verified"
+            assert waveform["count"] == 256
             with pytest.raises(HTTPError) as unauthorized:
                 opener.open(
                     ready["query_url"]
@@ -116,6 +141,47 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(tmp_p
         with pytest.raises(HTTPError) as rejected:
             opener.open(Request(base + "/api/live", data=b"write"), timeout=5)
         assert rejected.value.code == 405
+        if laboratory_enabled:
+            overview = get("/api/laboratory")
+            assert overview["available"] is True
+            request = Request(
+                base + "/api/laboratory/experiments",
+                data=json.dumps(overview["presets"][0]).encode(),
+                headers={
+                    "Origin": base,
+                    "Content-Type": "application/json",
+                    "X-G15-Console-Action": "laboratory",
+                },
+            )
+            with opener.open(request, timeout=5) as response:
+                assert response.status == 202
+                identity = json.loads(response.read())["experiment"]["id"]
+            detail = _wait_for(
+                lambda: (
+                    value
+                    if (value := get("/api/laboratory/experiment?id=" + identity))[
+                        "experiment"
+                    ]["status"]
+                    in ("completed", "failed")
+                    else None
+                )
+            )
+            assert detail["experiment"]["status"] == "completed"
+            assert detail["results"]["summary"]["total_points"] == 8192
+            assert len(get("/api/catalog")["devices"]) == 2
+            experiment_wave = get(
+                "/api/laboratory/waveform?id=" + identity + "&count=256"
+            )
+            assert experiment_wave["count"] == 256
+            assert experiment_wave["integrity"]["status"] == "sha256_verified"
+            saved = get("/api/workbench/run?id=experiment:" + identity)
+            assert saved["configuration"]["parameters"] == overview["presets"][0]
+            assert len(saved["windows"]) == 32
+            assert saved["latency"]["kind"] == "experiment_elapsed"
+        else:
+            with pytest.raises(HTTPError) as unavailable:
+                opener.open(base + "/api/laboratory", timeout=5)
+            assert unavailable.value.code == 503
         stop_file.write_text("stop\n", encoding="utf-8")
         stdout, stderr = child.communicate(timeout=15)
         assert child.returncode == 0, stderr

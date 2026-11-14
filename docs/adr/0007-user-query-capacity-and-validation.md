@@ -203,7 +203,7 @@ subjects:
 - cursor 是不可信输入且必须具备完整性保护；编码、长度和目的隔离 key 的来源仍待 C4 复核。每页授权重查不可由 cursor 替代。
 - 候选 `page_size` 默认 50、最大 100，待 C4 复核。
 - 版本来源必须逐项具名：`manifest_schema_version` 来自目标数据库 `runs.schema_version` 的实际持久化值，不得硬编码；当前写端为 2.0，兼容读入可能为 1.0。`features_version` 来自每条 `features_json`；`state_schema_version` 来自 `state_json` 信封；`scoring_version` 与 `rule_id` 不是 Schema 版本。配置版本没有可追溯持久化来源时必须省略，不得硬编码 `1.0` 或从 Manifest 推断。
-- 健康查询可返回契约允许的窗口/告警业务字段；状态部分只能从 `state_json.state` 做允许列表投影并附获准版本字段。不得返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json`、自由文本 `reason` 或 `private_truth`。
+- 健康查询可返回契约允许的窗口/告警业务字段；状态部分只能从 `state_json.state` 做允许列表投影并附获准版本字段。不得返回原始 `state_json`、`reset_event`、`reset_history`、`previous_state_json`、自由文本 `reason` 或 `private_truth`。2026-11-12 的五维候选仅新增窗口 `risk_dimensions` 五个固定键，版本 1 返回 `null`，版本 2 校验 `[0,1]`/`null`；它来自评分时已有风险分组，不返回原始审计字段、不重算历史分数，也不改变容量门禁。
 - 新鲜度只依据当前只读事务可见的已提交序号/状态/持久化时间；服务观察时间不得冒充数据生成时间。
 
 **#162双流选择候选（2026-11-13）**：精确外部shape及错误顺序见[interface §17](../interface.md#17-双流显式选择与发送前准备1622026-11-13-候选)。不传`streams`仍为query_contract_version`"1"`原shape/原行为；显式`both/windows/alarms`为`"2"`，两个分页对象各增严格bool`omitted`。未选流`items=[]`、cursor和对应流/顶层高水位null，仍保留sort/page_size；omitted不是无数据。状态和其提交高水位照实读取，未选windows时返回窗口版本集合为空。未选流带任何非None cursor均400；认证401/资源隐藏404仍先于可选参数校验。选中流维持原签名scope和高水位，旧v1 cursor可按相同scope继续v2选择；不重新采快照来替换旧cursor。遍历在一流耗尽后只请求另一个流，D0目标raw100窗/1告警、discard0，独立oracle先验证全部原始条目与请求期望，再验证跨页完整性。此为产品query候选，须真实非作者Review，不改变旧T17710/1/9事实，也不宣告Gate0通过。

@@ -178,7 +178,7 @@ def test_consumed_windows_carry_the_manifest_device_and_contiguous_positions(
         assert end_seq == start_seq + 64
         assert 0.0 <= score <= 100.0
         payload = json.loads(features_json)
-        assert payload["features_version"] == "1"
+        assert payload["features_version"] == "2"
         assert payload["sample_count"] == 64
         assert payload["window_start_seq"] == start_seq
         assert set(payload["features"]) == {
@@ -191,6 +191,17 @@ def test_consumed_windows_carry_the_manifest_device_and_contiguous_positions(
             "dominant_freq_hz",
             "zero_crossing_rate",
         }
+        assert set(payload["risk_dimensions"]) == {
+            "level_offset",
+            "vibration_strength",
+            "variability",
+            "impact",
+            "spectral",
+        }
+        assert all(
+            value is not None and 0.0 <= value <= 1.0
+            for value in payload["risk_dimensions"].values()
+        )
 
 
 # --------------------------------------------------------------------------

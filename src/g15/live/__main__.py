@@ -18,7 +18,16 @@ import sys
 import threading
 
 from g15.console.server import create_console_server
+from g15.console.laboratory import LaboratoryController
+from g15.console.archive import LiveHistoryRegistry
+from g15.console.operations import OperationsController
+from g15.console.notifications import (
+    EmailNotificationController,
+    NotificationController,
+)
+from g15.live.notification_snapshot import read_notification_snapshot
 from g15.live import LiveConfig, LiveRuntime
+from g15.live.runtime import _WriterLock
 from g15.live.schema import atomic_json
 from g15.live.reporting import render_live_report
 from g15.query.application import HealthQueryApplication
@@ -66,6 +75,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--health-rules", type=Path, required=True)
+    parser.add_argument("--laboratory-root", type=Path)
+    parser.add_argument("--operations-root", type=Path)
     parser.add_argument("--devices", type=int, default=10)
     parser.add_argument("--sample-rate-hz", type=int, default=256)
     parser.add_argument("--window-points", type=int, default=256)
@@ -81,6 +92,34 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _finish_live_services(runtime, notifications, email_notifications=None) -> bool:
+    """Drain commits and durably observe the final snapshot before shutdown."""
+    failed = False
+    if runtime is not None:
+        try:
+            final = runtime.stop(timeout=30)
+            final["observed_at_utc"] = _utc_now()
+            _write_json(runtime.session_root / "service-status.json", final)
+            failed = final["status"] in ("error", "stopping")
+        except Exception:  # pylint: disable=broad-exception-caught
+            logging.exception("live session failed to stop cleanly")
+            failed = True
+    for control in (notifications, email_notifications):
+        if control is None:
+            continue
+        try:
+            control.scan_once()
+        except Exception:  # pylint: disable=broad-exception-caught
+            logging.error("final notification snapshot failed")
+            failed = True
+        try:
+            control.close()
+        except Exception:  # pylint: disable=broad-exception-caught
+            logging.error("notification service failed to stop cleanly")
+            failed = True
+    return failed
+
+
 def main(argv: list[str] | None = None) -> int:
     """Start one bounded capture session; retain readable state after it stops."""
     parser = _parser()
@@ -90,6 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     stopped = threading.Event()
     servers, threads = [], []
     runtime = None
+    notifications = None
+    email_notifications = None
+    notification_lock = None
+    laboratory = None
+    operations = None
     prior_handlers = {}
     result_code = 0
 
@@ -161,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
                 live_status=runtime.status_snapshot()["status"],
             )
 
+        if args.laboratory_root is not None:
+            laboratory = LaboratoryController(args.laboratory_root, args.health_rules)
         console = create_console_server(
             runtime.catalog_path,
             runtime.runs_root,
@@ -170,8 +216,45 @@ def main(argv: list[str] | None = None) -> int:
             live_status_provider=runtime.status_snapshot,
             credential_provider=credential,
             live_report_provider=live_report,
+            live_control_provider=runtime.control_capture,
+            laboratory_provider=laboratory,
         )
         servers.append(console)
+        history = LiveHistoryRegistry(
+            args.output_root, current_session=runtime.session_id
+        )
+        operations = OperationsController(
+            args.operations_root or args.output_root / "workbench",
+            runs_root=runtime.runs_root,
+            catalog_provider=lambda: console.application.devices,
+            authorize=console.application.authorize_operation,
+            laboratory=laboratory,
+            live_status_provider=runtime.status_snapshot,
+            history_provider=history,
+        )
+        console.application.operations = operations
+        notification_lock = _WriterLock(args.output_root / "notifications.writer.lock")
+        notification_lock.acquire()
+        notifications = NotificationController(
+            console.application,
+            lambda pair: read_notification_snapshot(
+                runtime.runs_root,
+                *pair,
+                live_status=runtime.status_snapshot()["status"],
+            ),
+            args.output_root / "notifications.sqlite",
+        )
+        console.application.notifications = notifications
+        email_notifications = EmailNotificationController(
+            console.application,
+            lambda pair: read_notification_snapshot(
+                runtime.runs_root,
+                *pair,
+                live_status=runtime.status_snapshot()["status"],
+            ),
+            args.output_root / "email-notifications.sqlite",
+        )
+        console.application.email_notifications = email_notifications
         for server in servers:
             thread = threading.Thread(
                 target=server.serve_forever,
@@ -181,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
             thread.start()
             threads.append(thread)
         runtime.start()
+        notifications.start()
+        email_notifications.start()
         stop_file = args.stop_file or runtime.session_root / "stop.request"
         ready = {
             "schema_version": "1",
@@ -231,16 +316,8 @@ def main(argv: list[str] | None = None) -> int:
         logging.exception("local live service failed: %s", type(exc).__name__)
         result_code = 1
     finally:
-        if runtime is not None:
-            try:
-                final = runtime.stop(timeout=30)
-                final["observed_at_utc"] = _utc_now()
-                _write_json(runtime.session_root / "service-status.json", final)
-                if final["status"] in ("error", "stopping"):
-                    result_code = 1
-            except Exception:  # pylint: disable=broad-exception-caught
-                logging.exception("live session failed to stop cleanly")
-                result_code = 1
+        if _finish_live_services(runtime, notifications, email_notifications):
+            result_code = 1
         for index, server in enumerate(servers):
             if index < len(threads):
                 server.shutdown()
@@ -248,6 +325,20 @@ def main(argv: list[str] | None = None) -> int:
                 if threads[index].is_alive():
                     result_code = 1
             server.server_close()
+        if laboratory is not None:
+            try:
+                laboratory.close(wait=True)
+            except Exception:  # pylint: disable=broad-exception-caught
+                logging.error("laboratory service failed to stop cleanly")
+                result_code = 1
+        if operations is not None:
+            try:
+                operations.close()
+            except Exception:  # pylint: disable=broad-exception-caught
+                logging.error("workbench service failed to stop cleanly")
+                result_code = 1
+        if notification_lock is not None:
+            notification_lock.release()
         for number, handler in prior_handlers.items():
             signal.signal(number, handler)
     return result_code

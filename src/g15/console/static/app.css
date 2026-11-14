@@ -1588,3 +1588,24 @@ main {
   .live-update p{font-size:11px}.live-update .button{flex-shrink:0;font-size:11px}
   .device-list[data-live=true]{max-height:none;overflow-y:hidden}
 }
+
+.maintenance-list {display:grid;gap:16px;margin-top:20px}
+.maintenance-card {padding:20px 22px;border:1px solid var(--line);border-left:3px solid var(--yellow);border-radius:var(--radius);background:var(--surface)}
+.maintenance-card[data-level=red] {border-left-color:var(--red)}
+.maintenance-card-heading,.maintenance-labels,.maintenance-card-footer {display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.maintenance-card-heading,.maintenance-card-footer {justify-content:space-between}
+.maintenance-activity {color:var(--muted);font-size:11px}
+.maintenance-urgency {color:var(--yellow);font-size:13px}
+.maintenance-card[data-level=red] .maintenance-urgency {color:var(--red)}
+.maintenance-source {margin-top:15px;color:var(--ink);font-size:12px;overflow-wrap:anywhere}
+.maintenance-basis {margin-top:10px;color:var(--muted);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.maintenance-drivers {margin-top:12px;color:var(--faint);font-size:11px;overflow-wrap:anywhere}
+.maintenance-actions {margin:14px 0 18px;padding-left:20px;color:var(--ink);font-size:12px;line-height:1.8}
+.maintenance-actions li+li {margin-top:6px}
+.maintenance-card-footer {padding-top:14px;border-top:1px solid var(--line)}
+.maintenance-confirmation {color:var(--muted);font-size:11px}
+@media(max-width:650px) {
+  .maintenance-card {padding:17px}
+  .maintenance-card-heading {align-items:flex-start}
+  .maintenance-card-footer {align-items:flex-start;gap:10px}
+}

@@ -29,3 +29,13 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 ## Verification
 
 Desktop1440, mobile390 and actual browser width. Device switch/refresh, window paging, alarm filters/search/detail, report null/false-alarm truth, downloads, loading/empty/error, keyboard/focus/reduced-motion. No invented records, report claims or external runtime assets.
+
+## Related fleet surfaces
+
+`/screen` is the dark fleet cockpit and `/operations` is the light operations view. Both reuse the same authorized read-only state and link back to device details. Health distribution, matrix, KPI cards, trends and device rows preserve actual counts, unknown/error states and selected-resource identity; no tenant, work-order or device-action controls are implied.
+
+`/diagnosis` is the light single-device workbench. It links the current stored score and rule identity to five stored risk groups and recent alarm evidence. Radar/risk graphics use only the latest committed window; legacy, partial or unknown dimensions remain explicit. Historical alarm evidence never becomes a current-state substitute. No temperature/current fabrication, online diagnosis, SLA, consultation or device control is implied.
+
+## Final shared visual layer
+
+All surfaces load `cyber-wafuu.css` last. The user-selected palette is #FEFFEF base, #28313C boards, #010101 glass components, #A5CD2E/#D32529/#5796D3 data, and #80D8CF/#133E34/#FF8A00/#FF4400 button states. Cyber Wafuu grid, restrained steampunk rivets, glass panels and JRPG clipped buttons share the same semantic status labels. Mobile navigation wraps instead of widening the page; contrast fixes were browser-checked on actual data.

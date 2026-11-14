@@ -228,6 +228,44 @@ def test_drivers_are_empty_when_nothing_is_above_baseline() -> None:
     assert "no feature above baseline" in result.explain()
 
 
+def test_five_risk_dimensions_group_existing_features_without_rescoring() -> None:
+    """Five display dimensions use the existing risks, never a second score."""
+    rules = load_health_rules(RULES_PATH)
+    result = score_health(
+        make_features(
+            mean=1.5,
+            rms=1.5025,
+            std=0.65,
+            ptp=2.782,
+            kurtosis_excess=3.0,
+            crest_factor=2.27,
+            dominant_freq_hz=50.0,
+            zero_crossing_rate=1.0,
+        ),
+        rules,
+    )
+    assert set(result.risk_dimensions) == {
+        "level_offset",
+        "vibration_strength",
+        "variability",
+        "impact",
+        "spectral",
+    }
+    assert all(value == 1.0 for value in result.risk_dimensions.values())
+    healthy = score_health(make_features(), rules)
+    assert all(value == 0.0 for value in healthy.risk_dimensions.values())
+    assert healthy.health_score > rules.yellow_threshold
+
+
+def test_partial_rule_sets_mark_unknown_risk_dimensions() -> None:
+    """An unconfigured feature group is null, not a fabricated zero risk."""
+    rules = parse_health_rules(make_document())
+    result = score_health(make_features(), rules)
+    assert result.risk_dimensions["vibration_strength"] == pytest.approx(0.005)
+    assert result.risk_dimensions["level_offset"] is None
+    assert result.risk_dimensions["impact"] is None
+
+
 def test_missing_feature_fails_loudly() -> None:
     """A rule naming a feature the record cannot provide must not score 100."""
 

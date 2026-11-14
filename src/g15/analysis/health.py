@@ -41,6 +41,7 @@ from g15.analysis.features import FEATURE_NAMES, FeatureRecord
 __all__ = [
     "DIRECTIONS",
     "SCHEMA_VERSION",
+    "RISK_DIMENSION_NAMES",
     "HealthResult",
     "HealthRules",
     "HealthRulesError",
@@ -56,6 +57,21 @@ SCHEMA_VERSION: Final[str] = "1.0"
 
 #: Allowed ``direction`` values of a feature rule.
 DIRECTIONS: Final[tuple[str, ...]] = ("increase", "decrease", "two_sided")
+
+RISK_DIMENSION_NAMES: Final[tuple[str, ...]] = (
+    "level_offset",
+    "vibration_strength",
+    "variability",
+    "impact",
+    "spectral",
+)
+_RISK_DIMENSION_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
+    ("level_offset", ("mean",)),
+    ("vibration_strength", ("rms",)),
+    ("variability", ("std",)),
+    ("impact", ("ptp", "kurtosis_excess", "crest_factor")),
+    ("spectral", ("dominant_freq_hz", "zero_crossing_rate")),
+)
 
 #: Tolerance accepted when checking that the weights sum to one.
 WEIGHT_SUM_TOLERANCE: Final[float] = 1e-6
@@ -199,6 +215,24 @@ class HealthResult:
     rule_id: str
     window_start_seq: int | None
     contributions: tuple[RiskContribution, ...]
+
+    @property
+    def risk_dimensions(self) -> dict[str, float | None]:
+        """Return five explanatory groups of the existing unweighted risks.
+
+        Multi-feature groups use the maximum member risk. A group containing an
+        unconfigured feature is ``None`` rather than an inferred healthy value.
+        These dimensions do not enter or reconstruct ``health_score``.
+        """
+        by_name = {item.name: item.risk for item in self.contributions}
+        result: dict[str, float | None] = {}
+        for name, members in _RISK_DIMENSION_GROUPS:
+            result[name] = (
+                max(by_name[member] for member in members)
+                if all(member in by_name for member in members)
+                else None
+            )
+        return result
 
     @property
     def drivers(self) -> tuple[str, ...]:

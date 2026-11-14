@@ -423,7 +423,7 @@ True；而 `mode=ro` 连接在**无第二持有者**的情况下写库，同样�
 
 ```json
 {
-  "features_version": "1",
+  "features_version": "2",
   "features": {
     "mean": 0.5025257714598995,
     "std": 0.048115327971037396,
@@ -439,19 +439,27 @@ True；而 `mode=ro` 连接在**无第二持有者**的情况下写库，同样�
   "window_start_seq": 0,
   "scoring_version": "heuristic-v1",
   "rule_id": "health_heuristic",
-  "health_explain": "health 99.68; drivers: mean=0.5025 (risk 0.00), rms=0.5048 (risk 0.00)"
+  "health_explain": "health 99.68; drivers: mean=0.5025 (risk 0.00), rms=0.5048 (risk 0.00)",
+  "risk_dimensions": {
+    "level_offset": 0.0025257714598995,
+    "vibration_strength": 0.0023239651275757,
+    "variability": 0.0,
+    "impact": 0.0245552212339881,
+    "spectral": 0.703125
+  }
 }
 ```
 
 | 内容 | 位置 | 理由 |
 |---|---|---|
 | 8 个特征值 | `features` | 键名与 `FEATURE_NAMES` 一致，`as_mapping()` 直接落库 |
-| `FEATURES_VERSION` | `features_version` | 每行的版本追溯，不新增列 |
+| `FEATURES_SCHEMA_VERSION` | `features_version` | 新写为 2；读取兼容 1，旧行五维为未知，不新增列 |
 | `sample_count` / `sample_rate_hz` | 独立键 | §9 表里没有这两列，但报告复算需要窗口样本数 |
 | `window_start_seq` | 独立键 | 与表列 `start_seq` 冗余一致，便于单文件复原整窗上下文 |
 | `scoring_version` / `rule_id` | 独立键 | **窗口级**规则身份；`runs` 表只有 run 级 `scoring_version` |
 | `drivers` 与解释文本 | `health_explain` | §9 的 `feature_windows` 只有 `health_score` 列（带 `CHECK (0..100)`） |
-| `HealthResult.contributions` | **不落库** | 8 个特征的完整分解，可由 `features` + 规则文件重算，避免 JSON 膨胀 |
+| `HealthResult.risk_dimensions` | `risk_dimensions` | 五个现有风险分组仅作解释；组内缺特征为 `null`，不改变健康总分 |
+| `HealthResult.contributions` | **不直接落库** | 原特征和五维分组分别保存；完整贡献可由对应规则复核，不在查询时换规则重算 |
 
 ---
 

@@ -1,0 +1,59 @@
+[
+  {
+    "file": "g15-display.woff2",
+    "family": "G15 Display",
+    "weight": 900,
+    "bytes": 1497816,
+    "sha256": "c191b8eb56da09b63331dc9e4193a1aa09bf5f60b2513be3083d6cac835b008b",
+    "source_file": "SourceHanSansSC-Heavy.otf",
+    "source_sha256": "4a8b2ee4f041fa56c7a5561f36e13ed6780eec66161c30274fc90b0c5ba7cea2",
+    "source_metadata": {
+      "0": "© 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.",
+      "1": "Source Han Sans SC Heavy",
+      "2": "Regular",
+      "5": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+      "14": "http://scripts.sil.org/OFL"
+    },
+    "codepoints": 7871,
+    "reference_text_missing": []
+  },
+  {
+    "file": "g15-instrument.woff2",
+    "family": "G15 Instrument",
+    "weight": 700,
+    "bytes": 1471484,
+    "sha256": "a828668227db27ba9684f95e6c9d35c07fe83b2937915676f0195e753d55a382",
+    "source_file": "SourceHanSansSC-Bold.otf",
+    "source_sha256": "3baae4d7da5af78133c2db849814e1c0ca962e490f681714922cc499c6aeb355",
+    "source_metadata": {
+      "0": "© 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.",
+      "1": "Source Han Sans SC",
+      "2": "Bold",
+      "5": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+      "14": "http://scripts.sil.org/OFL"
+    },
+    "codepoints": 7871,
+    "reference_text_missing": []
+  },
+  {
+    "file": "g15-ui.woff2",
+    "family": "G15 UI",
+    "weight": 700,
+    "bytes": 1935188,
+    "sha256": "33b0ce2be11b5f8ed7c261a98598292a952bf739f88f31e941e1709a04dc4394",
+    "source_file": "思源宋体 CN Heavy.otf",
+    "source_sha256": "78101f93fb76951da79728a7ece95a974fb8f95f2024fa50792bc79627951a07",
+    "source_metadata": {
+      "0": "Copyright © 2017 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name 'Source'.",
+      "1": "Source Han Serif CN Heavy",
+      "2": "Regular",
+      "5": "Version 1.000;PS 1;hotconv 16.6.53;makeotf.lib2.5.65590",
+      "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+      "14": "http://scripts.sil.org/OFL"
+    },
+    "codepoints": 7871,
+    "reference_text_missing": []
+  }
+]

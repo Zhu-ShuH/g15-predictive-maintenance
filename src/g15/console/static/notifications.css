@@ -1,0 +1,94 @@
+@charset "UTF-8";
+.notification-workspace {
+  color:var(--ink);background:var(--surface);border:4px solid var(--cw-gold);padding:25px;
+  min-width:0;box-shadow:inset 0 0 0 1px #010101,0 2px 0 #010101
+}
+.notification-heading,.notification-section-heading {display:flex;align-items:center;justify-content:space-between;gap:16px}
+.notification-heading {padding-bottom:22px;border-bottom:1px solid var(--line)}
+.notification-heading h2 {font-size:21px}
+.notification-heading p,.notification-note,.notification-section-heading>span {color:var(--muted);font-size:13px;line-height:1.7}
+.notification-heading p {margin-top:10px}
+.notification-columns {display:grid;grid-template-columns:minmax(260px,.95fr) minmax(280px,1.05fr);gap:32px;margin-top:26px}
+.notification-settings,.notification-composer {min-width:0}
+.notification-toggle {display:flex;gap:12px;align-items:flex-start;margin:22px 0;cursor:pointer}
+.notification-toggle input {width:19px;height:19px;margin:2px 0;flex-shrink:0}
+.notification-toggle strong {font-size:14px;line-height:1.6}
+.notification-toggle small {display:block;font-size:12px;color:var(--muted);line-height:1.65;margin-top:3px}
+.notification-fields {display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.notification-fields>label,.notification-token-label,.notification-device-label {display:flex;flex-direction:column;gap:9px;font-size:13px;line-height:1.5}
+.notification-input-unit {display:flex;align-items:center;gap:9px;min-width:0}
+.notification-input-unit>span {color:var(--muted);font-size:12px;white-space:nowrap}
+.notification-workspace input[type=number],.notification-workspace input[type=password],.notification-workspace input[type=email],.notification-workspace select {
+  min-width:0;width:100%;height:40px;border:1px solid var(--cw-silver);border-radius:0;padding:8px 10px;
+  background:#010101;color:var(--ink);caret-color:var(--cw-mint);font:inherit
+}
+.notification-workspace input::placeholder {color:var(--muted)}
+.notification-workspace input:focus,.notification-workspace select:focus {border-color:var(--cw-orange)}
+.notification-workspace input[type=number] {font-variant-numeric:tabular-nums}
+.notification-fields+.notification-note {margin-top:15px;max-width:70ch}
+.notification-channel {margin-top:27px;padding-top:24px;border-top:1px solid var(--line)}
+.notification-channel>.notification-note {margin-top:10px}
+.notification-token-label {margin-top:17px}
+.notification-actions {display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:20px}
+#notification-checked {margin-top:13px}
+.notification-device-label {margin-top:23px}
+.notification-preview {margin-top:20px;padding:18px;background:#010101;border:1px solid var(--cw-silver)}
+.notification-preview h4 {font-size:14px;line-height:1.65;margin:0;overflow-wrap:anywhere}
+.notification-preview .notification-note {margin-top:8px}
+.notification-preview pre {white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.8 "Segoe UI","Microsoft YaHei UI",sans-serif;max-height:440px;overflow-y:auto;overscroll-behavior-y:contain;margin:16px 0 0;color:var(--ink)}
+.notification-empty {color:var(--muted);font-size:13px;line-height:1.8;padding:22px 0;max-width:70ch}
+.notification-test-actions {margin-top:23px;padding-top:20px;border-top:1px solid var(--line)}
+.notification-test-actions p {margin-top:10px}
+.notification-records {margin-top:30px;padding-top:24px;border-top:1px solid var(--line)}
+.notification-records>.notification-section-heading {margin-bottom:15px}
+.notification-table {font-variant-numeric:tabular-nums;font-size:12px}
+.notification-table td {vertical-align:top}
+.notification-table td:first-child {min-width:160px;max-width:290px;overflow-wrap:anywhere}
+.notification-table td:last-child {min-width:160px}
+.notification-run,.notification-history-error {display:block;font-size:11px;line-height:1.65;color:var(--muted);margin-top:5px}
+.notification-table [data-state=accepted],.notification-table [data-state=provider_accepted] {color:var(--cw-lime)}
+.notification-table [data-state=failed] {color:#FF8A00}
+.notification-workspace>.message,.notification-feedback {margin-top:20px}
+.notification-feedback {padding:13px 16px;background:#133E34;border:1px solid #80D8CF;color:#FEFFEF;font-size:13px;line-height:1.7}
+@media(max-width:1100px) {
+  .notification-columns {grid-template-columns:minmax(0,1fr);gap:28px}
+  .notification-composer {border-top:1px solid var(--line);padding-top:24px}
+}
+@media(max-width:650px) {
+  .notification-workspace {padding:18px 15px}
+  .notification-heading,.notification-records>.notification-section-heading {align-items:flex-start;flex-direction:column;gap:12px}
+  .notification-heading h2 {font-size:19px}
+  .notification-fields {grid-template-columns:1fr;gap:18px}
+  .notification-input-unit input {max-width:180px}
+  .notification-table {min-width:620px}
+  .notification-actions .button,.notification-test-actions .button {min-height:44px}
+}
+@media(max-width:600px) {
+  .main-shell:has(#notifications-view:not([hidden])) .page-heading {flex-direction:column;gap:14px}
+  .main-shell:has(#notifications-view:not([hidden])) .page-heading h1 {white-space:nowrap}
+  .main-shell:has(#notifications-view:not([hidden])) .refresh-group {
+    width:100%;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding-top:0
+  }
+  .main-shell:has(#notifications-view:not([hidden])) .update-time {flex:1 1 180px;white-space:normal}
+  .main-shell:has(#notifications-view:not([hidden])) .refresh-group .button {flex-shrink:0}
+}
+
+.notification-delivery-choice {display:flex;align-items:flex-end;gap:20px;margin-top:22px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.notification-delivery-choice>label {display:flex;flex-direction:column;gap:9px;font-size:13px;line-height:1.5;flex:0 1 220px;min-width:150px}
+.notification-delivery-choice>.notification-note {flex:1;max-width:58ch}
+#notification-email-fields>.notification-note,#notification-pushplus-fields>.notification-note {margin-top:12px}
+#notification-attachments {color:var(--cw-mint)}
+@media(max-width:650px) {
+  .notification-delivery-choice {align-items:stretch;flex-direction:column;gap:12px}
+  .notification-delivery-choice>label {flex-basis:auto}
+  .notification-delivery-choice select,.notification-workspace input[type=email],.notification-workspace input[type=password] {min-height:44px}
+}
+
+.notification-maintenance-actions {margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+.notification-maintenance-actions>.notification-note {margin-top:10px}
+.notification-workspace .notification-danger {color:#FFBEA8;border-color:#D88770}
+.notification-workspace .notification-danger:not(:disabled):hover {color:#FFF3ED;background:#5B302D;border-color:#FFBEA8}
+.notification-confirmation {margin-top:18px;padding:17px 0;border-top:1px solid #D88770;border-bottom:1px solid var(--line)}
+.notification-confirmation h4 {font-size:14px;line-height:1.6;margin:0 0 8px;color:#FFBEA8}
+.notification-confirmation .notification-actions {margin-top:14px}
+.notification-table [data-state=cancelled] {color:var(--muted)}

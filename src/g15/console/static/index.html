@@ -6,7 +6,11 @@
   <meta name="color-scheme" content="dark">
   <title>G15 · 设备健康控制台</title>
   <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/cyber-wafuu.css">
+  <link rel="stylesheet" href="/assets/notifications.css">
   <script type="module" src="/assets/app.js"></script>
+  <link rel="stylesheet" href="/assets/industrial.css">
+  <script type="module" src="/assets/shell.js"></script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -18,57 +22,124 @@
     </a>
     <nav class="main-nav" aria-label="控制台功能">
       <button id="nav-health" class="nav-item" data-view="health" aria-current="page"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg><span>设备健康</span></button>
+      <a class="nav-item" href="/diagnosis"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg><span>诊断工作台</span></a>
       <button id="nav-alarms" class="nav-item" data-view="alarms"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4l7 15v2H3v-2zM12 8v5m0 3v.1"/></svg><span>告警中心</span></button>
+      <button id="nav-maintenance" class="nav-item" data-view="maintenance"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4-4 4 4-4 4M3 21l9-9m-4 4 4 4m-7-2-2 2 4 4 2-2"/></svg><span>维护建议</span></button>
       <button id="nav-reports" class="nav-item" data-view="reports"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7m-7 4h7"/></svg><span>运行报告</span></button>
+      <a class="nav-item" href="/operations"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg><span>运营看板</span></a>
+      <a class="nav-item" href="/screen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v13H3zM8 21h8m-4-4v4"/></svg><span>大屏驾驶舱</span></a>
+      <button id="nav-notifications" class="nav-item" data-view="notifications"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v20H7zM10 5h4m-3 14h2M4 8v7m16-7v7"/></svg><span>手机通知</span></button>
     </nav>
-    <div class="sidebar-footer"><span class="read-only"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10h12v11H6zM8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></svg>本机只读</span><p>公开仿真场景<br>查看分析，不控制设备</p></div>
+
   </aside>
   <div class="main-shell">
     <header class="topbar"><div class="breadcrumb">工作台 <span>/</span> 设备监测</div><div class="connection"><span class="connection-dot" aria-hidden="true"></span><span id="connection-status" role="status">正在连接查询服务</span></div></header>
     <main id="main-content" tabindex="-1">
-      <header class="page-heading"><div><h1 id="view-title">设备健康</h1><p id="view-description">从最近的健康窗口，了解每台设备的当前状态。</p></div><div class="refresh-group"><span id="last-updated" class="update-time">尚未更新</span><button id="refresh-button" class="button button-secondary"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M19 11a7 7 0 0 0-12-5L4 9m16 6-3 3a7 7 0 0 1-12-5"/></svg>刷新数据</button></div></header>
+      <header class="page-heading"><div><h1 id="view-title">设备健康</h1></div><div class="refresh-group"><span id="last-updated" class="update-time">尚未更新</span><button id="refresh-button" class="button button-secondary"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M19 11a7 7 0 0 0-12-5L4 9m16 6-3 3a7 7 0 0 1-12-5"/></svg>刷新数据</button></div></header>
       <section id="live-monitor" class="live-monitor" aria-labelledby="live-title" hidden>
-        <div class="live-heading"><div><h2 id="live-title">仿真持续采集</h2><p id="live-source" class="muted">数据来自本机仿真采集与已提交分析结果。</p></div><span id="live-status" class="status-badge" data-level="unknown" role="status">正在读取持续状态</span></div>
+        <div class="live-heading"><div><h2 id="live-title">仿真持续采集</h2><p id="live-source" class="muted">正在读取会话参数</p></div><span id="live-status" class="status-badge" data-level="unknown" role="status">正在读取持续状态</span></div>
         <dl id="live-totals" class="live-totals"></dl>
-        <p id="live-note" class="section-note">状态与概览按轮次读取，等待本轮完成后再更新。</p>
+        <p id="live-note" class="section-note">尚未更新</p>
       </section>
       <div id="global-message" class="message" role="status" hidden></div>
-      <div class="workspace">
+      <div class="workspace" id="analysis-workspace">
         <aside class="device-roster" aria-label="选择设备">
           <div class="roster-heading"><h2>设备列表</h2><span id="catalog-count" class="count-label">—</span></div>
           <label class="search-field"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span class="sr-only">搜索设备或场景</span><input id="device-search" type="search" placeholder="搜索设备或场景" autocomplete="off"></label>
           <ul id="device-list" class="device-list"><li class="empty-state">正在读取设备目录…</li></ul>
-          <p id="roster-scroll-hint" class="roster-scroll-hint" hidden>左右滑动，选择其他设备</p>
-          <p class="roster-note">状态来自已提交的分析结果，<br>不表示物理设备联网状态。</p>
+
+
         </aside>
         <div class="device-workspace">
           <header class="device-heading"><div class="device-identity"><div class="device-title-line"><h2 id="selected-title">选择设备</h2><span id="selected-status" class="status-badge" data-level="unknown">等待数据</span></div><p id="selected-scenario" class="muted">正在读取公开场景</p></div><span class="run-reference" title="运行标识"><span>运行</span><span id="selected-run" class="mono">—</span></span></header>
           <p id="selected-live-meta" class="selected-live-meta" hidden></p>
-          <div id="live-update" class="live-update" hidden><p>有新数据；已保留当前历史或报告位置。</p><button id="show-latest-button" class="button button-secondary">回到最新</button></div>
+          <div id="live-update" class="live-update" hidden><p>有新数据</p><button id="show-latest-button" class="button button-secondary">回到最新</button></div>
           <section id="health-view" class="view" aria-label="设备健康分析">
-            <div class="health-summary"><div class="score-block"><span id="health-score-label" class="field-label">最新窗口健康分</span><div class="score-reading"><strong id="health-score">—</strong><span>/ 100</span></div></div><div class="health-context"><span class="field-label">最近已提交窗口</span><p id="health-window">等待查询结果</p><span class="muted">健康分越高，当前窗口表现越接近健康基线。</span></div></div>
-            <section class="chart-section" aria-labelledby="chart-title"><div class="section-heading"><div><h3 id="chart-title">健康趋势</h3><p id="chart-range" class="muted">正在加载真实窗口</p></div><div class="chart-inspection" id="chart-inspector" aria-live="polite">移动到曲线，查看窗口健康分</div></div><div id="health-chart" class="health-chart" aria-busy="true"></div><div id="chart-legend" class="chart-legend" aria-label="历史告警标记" hidden><span id="legend-red" data-level="red">红色历史告警</span><span id="legend-yellow" data-level="yellow">黄色历史告警</span></div><div class="chart-controls"><label class="window-slider"><span class="sr-only">选择健康窗口</span><input id="health-window-slider" type="range" min="0" max="0" value="0" aria-label="选择健康窗口" disabled></label><div class="chart-actions"><button id="load-all-windows-button" class="button button-quiet" disabled>全程趋势</button><button id="reset-chart-button" class="button button-quiet" disabled>最近窗口</button><button id="load-older-button" class="button button-secondary" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5-7 7 7 7m-6-7h19"/></svg>加载更早窗口</button></div></div><p id="chart-description" class="section-note">曲线仅展示已加载窗口；可继续加载更早的数据。</p></section>
-            <section class="recent-section" aria-labelledby="recent-title"><div class="section-heading"><div><h3 id="recent-title">最近告警</h3><p class="muted">历史告警记录与当前活动状态分别显示。</p></div><button id="show-all-alarms" class="text-button">查看全部告警 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button></div><div id="recent-alarms" class="recent-alarms"><p class="empty-state">正在读取告警…</p></div></section>
+            <div class="health-summary"><div class="score-block"><span id="health-score-label" class="field-label">最新窗口健康分</span><div class="score-reading"><strong id="health-score">—</strong><span>/ 100</span></div></div><div class="health-context"><span class="field-label">最近已提交窗口</span><p id="health-window">等待查询结果</p></div></div>
+            <section class="chart-section" aria-labelledby="chart-title"><div class="section-heading"><div><h3 id="chart-title">健康趋势</h3><p id="chart-range" class="muted">正在加载真实窗口</p></div><div class="chart-inspection" id="chart-inspector" aria-live="polite">暂无窗口</div></div><div id="health-chart" class="health-chart" aria-busy="true"></div><div id="chart-legend" class="chart-legend" aria-label="历史告警标记" hidden><span id="legend-red" data-level="red">红色历史告警</span><span id="legend-yellow" data-level="yellow">黄色历史告警</span></div><div class="chart-controls"><label class="window-slider"><span class="sr-only">选择健康窗口</span><input id="health-window-slider" type="range" min="0" max="0" value="0" aria-label="选择健康窗口" disabled></label><div class="chart-actions"><button id="load-all-windows-button" class="button button-quiet" disabled>全程趋势</button><button id="reset-chart-button" class="button button-quiet" disabled>最近窗口</button><button id="load-older-button" class="button button-secondary" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5-7 7 7 7m-6-7h19"/></svg>加载更早窗口</button></div></div></section>
+            <section class="recent-section" aria-labelledby="recent-title"><div class="section-heading"><div><h3 id="recent-title">最近告警</h3></div><button id="show-all-alarms" class="text-button">查看全部告警 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button></div><div id="recent-alarms" class="recent-alarms"><p class="empty-state">正在读取告警…</p></div></section>
           </section>
           <section id="alarms-view" class="view" aria-label="告警记录" hidden>
             <div class="section-heading"><div><h3>告警记录</h3><p id="alarm-count" class="muted">尚未加载</p></div></div>
             <div class="filter-bar"><label class="select-field"><span>告警级别</span><select id="alarm-level-filter"><option value="all">全部级别</option><option value="red">红色告警</option><option value="yellow">黄色告警</option></select></label><label class="search-field alarm-search"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span class="sr-only">搜索规则或告警原因</span><input id="alarm-search" type="search" placeholder="搜索规则或告警原因" autocomplete="off"></label></div>
-            <div class="table-scroll alarm-scroll" role="region" aria-label="告警记录详情"><table class="data-table alarm-table" role="table"><caption class="sr-only">所选设备的告警记录</caption><thead><tr><th scope="col">级别</th><th scope="col">仿真位置</th><th scope="col">规则</th><th scope="col">记录时间（北京时间）</th><th scope="col">原因</th></tr></thead><tbody id="alarm-table-body"></tbody></table></div><p id="alarm-empty" class="empty-state" hidden>没有告警记录</p><div class="section-footer"><p class="section-note">记录时间为告警写入时间，发生窗口以采样点位置表示。</p><button id="load-more-alarms" class="button button-secondary" disabled>加载更多告警</button></div>
+            <div class="table-scroll alarm-scroll" role="region" aria-label="告警记录详情"><table class="data-table alarm-table" role="table"><caption class="sr-only">所选设备的告警记录</caption><thead><tr><th scope="col">级别</th><th scope="col">仿真位置</th><th scope="col">规则</th><th scope="col">记录时间（北京时间）</th><th scope="col">原因</th></tr></thead><tbody id="alarm-table-body"></tbody></table></div><p id="alarm-empty" class="empty-state" hidden>没有告警记录</p><div class="section-footer"><button id="load-more-alarms" class="button button-secondary" disabled>加载更多告警</button></div>
+          </section>
+          <section id="maintenance-view" class="view" aria-label="维护建议" hidden>
+            <div class="section-heading"><div><h3>维护建议</h3><p id="maintenance-summary" class="muted">正在读取告警</p></div><span class="status-badge" data-level="unknown">需人工确认</span></div>
+            <div id="maintenance-warning" class="message" role="status" hidden></div>
+            <div id="maintenance-list" class="maintenance-list"><p class="empty-state">尚未选择设备</p></div>
+            <p id="maintenance-scope" class="section-note">已加载 0 条告警</p>
+
           </section>
           <section id="reports-view" class="view" aria-label="运行分析报告" hidden>
-            <div class="section-heading"><div><h3 id="report-title">运行分析报告</h3><p id="report-description" class="muted">由报告模块从同一运行的数据与分析结果生成。</p></div><div class="download-actions"><a id="report-download-json" class="button button-quiet" aria-disabled="true">下载 JSON</a><a id="report-download-markdown" class="button button-secondary" aria-disabled="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>下载报告</a></div></div>
+            <div class="section-heading"><div><h3 id="report-title">运行分析报告</h3></div><div class="download-actions"><a id="report-download-json" class="button button-quiet" aria-disabled="true">下载 JSON</a><a id="report-download-markdown" class="button button-secondary" aria-disabled="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>下载报告</a></div></div>
             <div id="report-error" class="message" role="alert" hidden></div><button id="retry-report-button" class="button button-secondary" hidden>重新读取报告</button>
-            <div id="report-state" class="report-verdict" data-result="unverifiable">请选择设备后读取报告</div><p id="report-scope" class="section-note">报告结论与设备当前健康状态不是同一指标。</p>
+            <div id="report-state" class="report-verdict" data-result="unverifiable">请选择设备后读取报告</div>
             <dl id="report-metrics" class="metrics-grid"></dl>
             <ul id="report-reasons" class="report-reasons"></ul>
-            <section id="report-events-section" class="report-events" hidden><div class="section-heading"><h3>受控事件匹配</h3></div><div class="table-scroll"><table class="data-table"><caption class="sr-only">受控故障事件的报告匹配结果</caption><thead><tr><th scope="col">事件</th><th scope="col">类型</th><th scope="col">事件采样区间</th><th scope="col">检出结果</th><th scope="col">匹配时延（采样点）</th></tr></thead><tbody id="report-events-body"></tbody></table></div><p class="section-note">匹配时延为告警窗口起点减事件结束位置；负值不代表提前预测。</p></section>
+            <section id="report-events-section" class="report-events" hidden><div class="section-heading"><h3>受控事件匹配</h3></div><div class="table-scroll"><table class="data-table"><caption class="sr-only">受控故障事件的报告匹配结果</caption><thead><tr><th scope="col">事件</th><th scope="col">类型</th><th scope="col">事件采样区间</th><th scope="col">检出结果</th><th scope="col">匹配时延（采样点）</th></tr></thead><tbody id="report-events-body"></tbody></table></div></section>
           </section>
         </div>
       </div>
-      <footer class="page-footer"><span>G15 预测性维护场景沙盘</span><span>数据来自公开仿真配置与本机已提交结果</span></footer>
+      <section id="notifications-view" class="notification-workspace" aria-label="手机通知设置" hidden>
+        <header class="notification-heading"><div><h2 id="notification-title">红色告警 · 邮件提醒</h2></div><span id="notification-status" class="status-badge" data-level="unknown" role="status">正在读取设置</span></header>
+        <div id="notification-error" class="message" data-level="error" role="alert" hidden></div>
+        <div id="notification-feedback" class="notification-feedback" role="status" hidden></div>
+        <div class="notification-delivery-choice"><label for="notification-channel-choice">接收渠道<select id="notification-channel-choice"><option value="smtp163" selected>163 邮箱</option><option value="pushplus">PushPlus · 微信</option></select></label></div>
+        <div class="notification-columns">
+          <form id="notification-form" class="notification-settings">
+            <h3>提醒规则</h3>
+            <label class="notification-toggle"><input id="notification-enabled" type="checkbox"><span><strong>启用手机通知</strong></span></label>
+            <div class="notification-fields">
+              <label for="notification-threshold">触发阈值<span class="notification-input-unit"><input id="notification-threshold" name="threshold" type="number" inputmode="numeric" min="1" max="1000000" step="1" value="1" required><span>条红色事件</span></span></label>
+              <label for="notification-cooldown">最短提醒间隔<span class="notification-input-unit"><input id="notification-cooldown" name="cooldown_seconds" type="number" inputmode="numeric" min="0" max="86400" step="1" value="600" required><span>秒</span></span></label>
+            </div>
+
+            <div class="notification-channel">
+              <div class="notification-section-heading"><h3>渠道设置</h3><span id="notification-channel-name">163 邮箱</span></div>
+              <p id="notification-channel-status" class="notification-note">尚未配置邮件授权码</p>
+              <div id="notification-pushplus-fields" hidden>
+              <label class="notification-token-label" for="notification-token">PushPlus Token<input id="notification-token" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="8192" ></label>
+
+              </div>
+              <div id="notification-email-fields">
+                <label class="notification-token-label" for="notification-email-sender">发件邮箱<input id="notification-email-sender" type="email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254"  required></label>
+                <label class="notification-token-label" for="notification-email-recipient">收件邮箱<input id="notification-email-recipient" type="email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="254"  required></label>
+                <label class="notification-token-label" for="notification-email-auth">163 客户端授权码<input id="notification-email-auth" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="8192" ></label>
+
+
+              </div>
+            </div>
+            <div class="notification-actions"><button id="notification-save" class="button button-secondary" type="submit" disabled>保存通知设置</button><button id="notification-refresh" class="button button-quiet" type="button">刷新通知状态</button></div>
+            <div class="notification-maintenance-actions">
+              <div class="notification-actions"><button id="notification-cancel-pending" class="button button-quiet" type="button" aria-controls="notification-confirmation" aria-expanded="false" disabled>取消待发邮件</button><button id="notification-delete-settings" class="button button-quiet notification-danger" type="button" aria-controls="notification-confirmation" aria-expanded="false" disabled>删除通知设置</button></div>
+
+              <div id="notification-confirmation" class="notification-confirmation" role="group" aria-labelledby="notification-confirm-title" aria-describedby="notification-confirm-description" hidden>
+                <h4 id="notification-confirm-title"></h4><p id="notification-confirm-description" class="notification-note"></p>
+                <div class="notification-actions"><button id="notification-confirm-dismiss" class="button button-quiet" type="button">返回，不作更改</button><button id="notification-confirm-action" class="button button-quiet notification-danger" type="button">确认删除设置</button></div>
+              </div>
+            </div>
+            <p id="notification-checked" class="notification-note">最近检查：尚无记录</p>
+          </form>
+          <section class="notification-composer" aria-labelledby="notification-composer-title">
+            <h3 id="notification-composer-title">核对发送内容</h3>
+            <label class="notification-device-label" for="notification-device">预览设备<select id="notification-device" disabled><option>正在读取设备</option></select></label>
+            <div class="notification-actions"><button id="notification-preview-button" class="button button-secondary" type="button" disabled>预览建议与报告</button></div>
+            <p id="notification-preview-empty" class="notification-empty">暂无预览</p>
+            <div id="notification-preview" class="notification-preview" hidden><h4 id="notification-preview-title"></h4><p id="notification-preview-meta" class="notification-note"></p><p id="notification-attachments" class="notification-note" hidden></p><pre id="notification-preview-body"></pre></div>
+            <div class="notification-test-actions"><button id="notification-test" class="button button-quiet" type="button" disabled>发送测试邮件</button></div>
+          </section>
+        </div>
+        <section class="notification-records" aria-labelledby="notification-history-title">
+          <div class="notification-section-heading"><h3 id="notification-history-title">通知记录</h3></div>
+          <div class="table-scroll" role="region" aria-label="通知发送记录" tabindex="0"><table class="data-table notification-table"><caption class="sr-only">红色告警提醒与手动测试的发送状态</caption><thead><tr><th scope="col">设备 / 运行</th><th scope="col">红色事件</th><th scope="col">发送状态</th><th scope="col">尝试次数</th><th scope="col">创建时间（北京时间）</th></tr></thead><tbody id="notification-history"></tbody></table></div>
+          <p id="notification-history-empty" class="notification-empty">暂无通知记录</p>
+        </section>
+      </section>
+      <footer class="page-footer"><span>G15 预测性维护场景沙盘</span></footer>
     </main>
   </div>
 </div>
-<noscript><p class="noscript-notice">控制台需要 JavaScript 读取查询结果。请启用 JavaScript 后刷新页面。</p></noscript>
+<noscript><p class="noscript-notice">JavaScript 未启用</p></noscript>
 </body>
 </html>

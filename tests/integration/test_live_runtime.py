@@ -54,6 +54,73 @@ def _db(runtime, device):
     )
 
 
+def test_capture_pause_is_per_device_drains_and_resumes_without_sequence_reset(
+    tmp_path,
+):
+    runtime = _runtime(tmp_path, devices=2, max_duration_seconds=8)
+    runtime.start()
+    try:
+        first = _wait_for(runtime, lambda s: s["devices"][0]["processed_samples"] >= 16)
+        pair = tuple(first["devices"][0][key] for key in ("run_id", "device_id"))
+        runtime.control_capture("pause", pair)
+        paused = runtime.status_snapshot()
+        captured = paused["devices"][0]["captured_samples"]
+        other = paused["devices"][1]["captured_samples"]
+        drained = _wait_for(
+            runtime,
+            lambda s: s["devices"][0]["processed_samples"] == captured
+            and s["devices"][1]["captured_samples"] >= other + 32,
+        )
+        assert drained["devices"][0]["captured_samples"] == captured
+        assert drained["devices"][0]["capture_paused"] is True
+        assert drained["devices"][1]["capture_paused"] is False
+        runtime.control_capture("resume", pair)
+        resumed = _wait_for(
+            runtime, lambda s: s["devices"][0]["processed_samples"] > captured
+        )
+        assert resumed["devices"][0]["run_id"] == pair[0]
+        assert resumed["devices"][0]["capture_paused"] is False
+        runtime.control_capture("pause")
+        frozen = runtime.status_snapshot()
+        time.sleep(0.25)
+        assert [
+            d["captured_samples"] for d in runtime.status_snapshot()["devices"]
+        ] == [d["captured_samples"] for d in frozen["devices"]]
+        runtime.control_capture("resume")
+        assert all(
+            not d["capture_paused"] for d in runtime.status_snapshot()["devices"]
+        )
+    finally:
+        final = runtime.stop()
+    for device in final["devices"]:
+        assert device["captured_samples"] == device["processed_samples"]
+        parts = sorted((runtime.runs_root / device["run_id"] / "raw").glob("*.npz"))
+        sequences = []
+        for path in parts:
+            with np.load(path, allow_pickle=False) as data:
+                sequences.extend(data["seq"].tolist())
+        assert sequences == list(range(device["captured_samples"]))
+    with pytest.raises(RuntimeError):
+        runtime.control_capture("resume")
+
+
+def test_paused_capture_still_obeys_wall_clock_limit_and_validates_actions(tmp_path):
+    runtime = _runtime(tmp_path, max_duration_seconds=0.4)
+    with pytest.raises(RuntimeError):
+        runtime.control_capture("pause")
+    runtime.start()
+    try:
+        with pytest.raises(ValueError):
+            runtime.control_capture("reset")
+        with pytest.raises(ValueError):
+            runtime.control_capture("pause", ("missing", "missing"))
+        runtime.control_capture("pause")
+        assert runtime.wait(5)
+        assert runtime.status_snapshot()["status"] == "limit_reached"
+    finally:
+        runtime.stop()
+
+
 @pytest.mark.parametrize(
     "changes",
     [

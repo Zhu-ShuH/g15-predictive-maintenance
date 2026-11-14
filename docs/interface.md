@@ -548,8 +548,8 @@ CREATE TABLE audit_events (
 上述五张业务表、字段、主键和外键不因 JSON 信封新增或改变；
 `audit_events` 是独立只增表，不属于分片消费结果：
 
-- `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
-- 当前 `features_version="1"` 是 storage 的信封编码版本（`FEATURES_SCHEMA_VERSION`）；analysis 的 `FEATURES_VERSION` 是另一个常量（当前主线值为 `1.2`，随算法接受域演进）。两者含义不同，不能用前者宣称每行已记录算法版本。算法/规则内容的完整追溯标识仍是 #57 的开放决定，不在本 PR 新增未实现字段。
+- `features_json` 采用 `features_version/features/sample_count/sample_rate_hz/window_start_seq/scoring_version/rule_id/health_explain/risk_dimensions` 信封。`features` 是八个特征的映射，不是新增八列；`HealthResult.contributions` 不直接落库。版本 2 的 `risk_dimensions` 固定为 `level_offset/vibration_strength/variability/impact/spectral`，是评分时现有未加权风险的分组，不参与健康总分。保存的原特征须与相应规则版本一起解释，报告不能拿当前规则替代历史规则而宣称重现原评分。
+- 当前新写 `features_version="2"`，读取兼容版本 1；版本 1 在查询投影中 `risk_dimensions=null`，不得用当前规则重算历史。版本 2 的五个值须为有限 `[0,1]` 或 `null`，缺组内特征时对应维度为 `null`。storage 的 `FEATURES_SCHEMA_VERSION` 与 analysis 的 `FEATURES_VERSION`（当前为 `1.2`）含义不同，不能混用。算法/规则内容的完整追溯标识仍是 #57 的开放决定。
 - `alarms.created_at` 是消费落库 UTC RFC3339 `Z` 时间，不是数据采样时刻或真值事件时间；run/device 来源于公开 Manifest。
 - `runs.status` 镜像 Manifest 状态，不代表消费已完成；完成进度由已提交 `processed_chunks` 与 Manifest 对照。相同 run 的已记录元数据/评分版本与已有窗口宽度冲突时拒收。
 - 同片同 SHA 重放跳过分析、保留已提交状态；同 ID 异 SHA 拒收。片事务成功后才推进内存状态，失败/重启从提交态恢复，不继承未提交的计算结果。
@@ -756,23 +756,33 @@ A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次H
 
 ## 18. 本机只读网页控制台（#158 候选）
 
-本节为用户要求新增控制台后的实现候选，未替代#157/Gate0的独立评审和统计门槛。原查询响应、认证授权、分页、评分和SQLite写入契约不变。
+本节为用户要求新增控制台后的实现候选，未替代#157/Gate0的独立评审和统计门槛。原认证授权、分页和健康评分公式不变；五维诊断新增特征信封版本 2 及只读 `risk_dimensions` 投影，按 §9.1 兼容版本 1，须随最终候选接受公共接口评审。
 
 独立入口 `python -m g15.console --catalog <受控目录JSON> --runs-root <已完成运行根> --query-base-url http://127.0.0.1:<查询端口> --token-file <服务端短期token文件> --host 127.0.0.1 --port 18467`。目录是明确登记的run/device数组，页面只能选择其中资源。本机网关读取当前token，通过真实HTTP/Bearer请求现有health接口；不向页面、URL、错误或日志输出凭据，不跟随上游重定向。它不签发HTTP登录凭据，也不构成多用户生产认证。
 
 | GET/HEAD路径 | 语义 |
 |---|---|
-| `/`与显式静态资源 | 设备健康、告警与报告的原生HTML/CSS/JS；根路径可接device/run/view选择参数，不反射成HTML |
+| `/`与显式静态资源 | 设备健康、告警、维护建议与报告的原生HTML/CSS/JS；根路径可接device/run/view选择参数，不反射成HTML |
+| `/screen` | 深色大屏驾驶舱：真实健康分布、设备矩阵、趋势、维护建议和采集状态；仅接device/run选择参数 |
+| `/operations` | 浅色运营看板：真实状态指标卡、所选设备趋势与可搜索设备表；仅接device/run选择参数 |
+| `/diagnosis` | 单设备诊断工作台：已存健康分、真实告警驱动特征与证据链；仅接device/run选择参数 |
+| `/simulation` | 仿真采集控制与数据流看板：仅读取真实持续状态和计数增量；仅接device/run选择参数 |
 | `/api/catalog` | 明确登记的公开资源元数据与readonly=true；不是扫描或暴露任意运行根 |
 | `/api/health?run_id=...&device_id=...&page_size=...` | 向真实查询服务发起认证GET，保持成功响应；可转发独立windows_cursor/alarms_cursor，无任意URL/路径 |
 | `/api/report?run_id=...&device_id=...` | 先用同资源真实page_size=1查询验证权限，再读固定已生成summary.json，核对run/device归属 |
 | `/api/report/download?...&format=json或markdown` | 同样授权并核归属，仅下载summary.json或summary.md；没有任意文件下载 |
 
-未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
+除§19本机仿真采集控制、§20/§21本机通知操作及§22/§23明确列出的本机操作外，未知资源/参数、重复字段、路径逃逸、Host/Origin/Fetch-Site不符、其他写操作和非loopback绑定被拒绝；请求、并发、超时与响应字节均有上限。具体状态码和边界见docs/console.md。静态资源只按显式allowlist提供，不提供仓库、凭据、数据库或private_truth文件。
 
 页面最新健康分取最新已存窗口；活动告警取states，历史告警单列。趋势按真实序号/采样率绘制，只展示已读取范围，全程必须沿cursor读至耗尽才标完整。窗口翻页不消费告警伴随重放，告警翻页同理；切设备与刷新丢弃旧异步响应。报告passed=null、verifiable=false、detection_rate=null保留不可判定含义，不能显示0或通过；受控事件检出通过也必须保留误报计数。显示时间使用明确的Asia/Shanghai时区，原始报告下载不改写时间。
 
-本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。远程暴露、账户登录、设备控制和完整容量需另有实现与评审，当前界面不据此宣称。
+维护建议视图只从当前已读取的告警与活动状态生成规则化检查建议，保留来源规则、窗口、级别和原始原因，可跳回来源告警。已知扣分特征映射到通用检查项，不据此诊断具体零部件故障；分页未尽、来源缺失、未知和错误状态均须明示。建议需人工确认，不保存确认状态、不创建工单、不执行设备动作，也不改变既有查询响应。
+
+大屏与运营看板复用目录、预览、活动状态、窗口和可选live状态，不新增业务API。分布、矩阵、指标卡与设备表按现有deviceStatus分类，红/黄/健康/未知/失败分别计数；不得从分数另推告警级别。矩阵选择真实设备后更新趋势和建议，运营表只按公开标识搜索。链接只携带device/run及原控制台允许的view，不携带凭据；无持续会话时采集指标为null/—，未知不补零冒充实测。
+
+诊断工作台复用已存窗口、活动状态和已加载告警。窗口新增只读 `risk_dimensions`：五个固定键 `level_offset/vibration_strength/variability/impact/spectral`，分别对应 mean、rms、std、冲击三项和频谱两项；多特征组取最大未加权风险，组内缺特征则该维度为null。此分解不参与或重算健康总分，不改变告警阈值。版本2写入并投影五维，版本1返回null且不拿当前规则重算历史。五维均有效时才绘制雷达，否则逐项显示风险/未知。证据链最多展示最近五条已加载记录并保留分页边界，可跳回报告和维护建议，不触发在线诊断、SLA、会诊或设备动作。
+
+本模块只读生成报告，不读取真值源文件、重算阈值、执行reset或写业务数据库。§19仅控制本机仿真采集；远程暴露、账户登录、物理设备控制和完整容量需另有实现与评审，当前界面不据此宣称。
 
 
 ## 19. 持续仿真会话增量（#160，候选）
@@ -783,4 +793,71 @@ A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次H
 
 控制台可选GET/HEAD `/api/live`，无运行时为404；公开schema_version、session_id、status、started_at_utc/updated_at_utc、sample_rate_hz/window_points/interval_seconds与每设备采集/处理样本、窗口/告警、待分析批次、最近采集/提交和固定安全错误。路径/凭据及任意运行时字段不投影。浏览器无Bearer，内嵌服务在内存按请求签发短期凭据。
 
+用户直接要求的本机仿真启停候选增加 `POST /api/live/control`：JSON 严格为 `{"session_id":"当前会话","action":"pause或resume"}`，单设备操作另加成对 `run_id/device_id`，省略 pair 表示全体。要求精确同源 Origin、`X-G15-Console-Action: live-control`、JSON Content-Type，正文不超过4096字节；不接受重复字段、未知字段、Transfer-Encoding或Expect。成功200返回完整公开状态；400参数错误、403来源不符、404未注册pair、409 `live_session_changed`/`live_not_running`、503 `live_control_unavailable`。未显式配置控制提供者的独立控制台不能控制采集。
+
+启用控制时 `/api/live` 增加 `controls_available=true`；具备本增量的运行时每设备增加严格布尔 `capture_paused`。服务整体 `status=running` 表示会话仍运行，不能据此忽略单设备暂停。暂停确认后不再新增该设备样本；已接受批次继续分析排空。恢复沿原run、样本序号、评分状态继续，不清空历史、重置统计或补生成暂停期间样本；时长/磁盘保护仍生效，终态不可恢复。本增量不改变严格 `live-session.json` 字段、查询主服务或物理设备接口。
+
+数据流看板另投影运行时已有的真实观测：设备 `pending_samples` 必须等于采集减提交样本数；会话 `backpressure_events/late_cycles` 为非负整数，`limit_reason` 仅为null、duration_limit或disk_limit。`latency` 只公开 `recent_count`（0–2048）与 `recent_p95_seconds`；无提交时二者为0/null，有观测时延迟必须有限非负，表示样本生成开始到SQLite提交返回的近2048条P95，不是硬件延迟。缺失的旧提供者字段保持缺失，不补零；自由文本、路径与资源进程信息不投影。
+
 持续报告只描述实际提交的运行统计，verifiable=false，passed/detection_rate及无真值支持的指标为null；不计独立检出率。原离线报告路径与身份校验继续保留。详细生命周期、停止、资源保护与首次实测口径见[持续采集说明](live.md)。该候选需真实非作者Review，不改变#136 Gate0。
+
+
+## 20. 手机通知增量（用户直接要求，候选待评审）
+
+最新版控制台增加手机通知视图。业务数据继续只读；仅新增本机通知配置与显式测试动作，不修改健康评分、红黄阈值、采集/存储业务事务或Gate0判据。
+
+- 触发口径：每个登记run/device，本次运行真实`alarms.level=red`事件累计数达到`threshold`，且相比已入队来源有新红色事件时入队。红色是边沿事件，不按异常窗口数/持续秒数/浏览器已加载条数代替；同事件不因轮询重复提醒。
+- `threshold`为1..1000000整数（不接受bool），`cooldown_seconds`为0..86400整数；默认enabled=false、threshold=1、cooldown_seconds=600。间隔内新事件原子保存为唯一未尝试延迟任务，可合并最新完整快照，到期后直接发送；不同run/device独立。重试、发送中、不确定及已接收内容不被改写；策略修改只影响后续新触发。
+- GET/HEAD `/api/notifications`只返回非敏感配置、configured、监测状态和有界通知历史；日期为ISO UTC，页面转换北京时间。`provider_accepted`仅代表渠道确认收到请求，不能写成手机已送达。不确定超时/部分请求须明示，不能冒充已失败或已送达。
+- GET/HEAD `/api/notifications/preview?run_id=...&device_id=...`先通过现有真实HTTP授权和资源归属检查，再从单一只读SQLite事务生成红色计数、来源、建议及完整JSON/Markdown报告；预览不入队、不发送，不读private_truth。来源过多/损坏/身份不符直接失败，不用分页前100条代替全计数。
+- POST `/api/notifications/settings`接受enabled/threshold/cooldown_seconds及可选token、channel=pushplus。必须有唯一同源Origin、自定义`X-G15-Console-Action: notifications`、application/json、唯一有界Content-Length；不接受Transfer-Encoding、Expect、重复JSON键、未知键或超限正文。
+- POST `/api/notifications/test`只接受精确run_id/device_id，具同样写入边界；需配置渠道且用户显式点击，使用真实报告，不消耗自动去重/冷却。未授权资源不读取快照、不发送。
+- Token只在服务进程内存或启动环境`G15_PUSHPLUS_TOKEN`提供，不写SQLite、日志、静态资源、URL或返回体。配置在数据目录的独立notifications.sqlite持久化，同一输出目录只允许一个通知发送进程；进程重启需重新填写Token或使用本机环境变量。
+- 后台监测独立于浏览器与分析线程。只处理近期真实提交，停止/过期/失败/来源不完整不显示正常监测。每设备快照一致，不宣称跨设备原子事务。
+- outbox在单独事务内原子保存来源游标与完整消息快照；固定HTTPS PushPlus微信接口，禁止重定向，正文/响应/重试/队列有界。内容超限明确失败而不截断报告。TLS验证；DNS迟返不继续POST，至多一个请求worker，未闭合停机报错。
+- 重启恢复与响应丢失可能造成至少一次重复尝试，不承诺严格仅一次手机送达。通知记录保留当时阈值、尝试数及不确定标记；自动通知关闭时暂停自动任务，但显式测试仍可发送。
+
+使用和限制见[手机通知说明](notifications.md)。该增量需真实非作者Review，不能以内部测试或手机消息替代独立故障/容量验收。
+
+
+## 21. 163 邮箱通知增量（用户直接要求，候选待评审）
+
+邮箱渠道与§20的PushPlus配置、来源游标和队列独立，原微信默认行为不变。它使用固定`smtp.163.com:465`和证书/主机名验证的TLS，通过本人163邮箱客户端授权码提交完整邮件。邮件服务器接收不代表收件箱或手机送达；`delivery_scope=smtp_accepted_not_handset_delivery`，实际收件需本人确认。该功能不开放远程网页登录、不执行设备动作、不改变评分、告警阈值、真值规则或Gate0门槛。
+
+- GET/HEAD `/api/email-notifications`仅返回非秘密设置、configured、监测状态与有界通知历史；授权码、内部凭据句柄和邮件正文不回显。默认关闭、阈值1条、间隔600秒，未提供邮箱时sender/recipient为空字符串。
+- GET/HEAD `/api/email-notifications/preview?run_id=...&device_id=...`先通过原真实HTTP查询授权和精确资源归属检查，再使用同一完整只读快照生成title、markdown、advice、red_count、报告时间及attachments元数据；附件每项为filename/content_type/bytes。预览不入队、不发送，不读private_truth。正文含全部建议和完整报告；附件为summary.md及summary.json，分别保留原Markdown UTF-8字节和同快照JSON的完整规范序列化字节。
+- POST `/api/email-notifications/settings`必填enabled/threshold/cooldown_seconds/sender/recipient，可选auth_code/channel；channel仅允许smtp163，sender必须为单个ASCII @163.com邮箱，recipient为单个ASCII邮箱，拒绝显示名、多地址、换行及自定义邮件头。策略数值范围与§20相同。auth_code仅在内存保存：缺省只保留同一sender的现有授权码，空字符串清除，换sender不继承旧授权码；更换已有sender而省略授权码时拒绝保存，明确空串且关闭自动提醒时可保存未配置的新地址。响应不回显。
+- POST `/api/email-notifications/test`仅接受精确run_id/device_id，渠道已配置、来源获授权且完整任务持久入队后才返回202；未配置、源失败、超限和队列满均明确报错，不误报已发送。测试不消耗自动去重或冷却，自动开关关闭时仍可显式测试。
+- 邮箱设置、测试、删除与取消POST继承本机Host/Origin/Fetch-Site与严格请求边界：唯一同源Origin、`X-G15-Console-Action: notifications`、application/json、唯一非零且至多4096字节的Content-Length；拒绝Transfer-Encoding、Expect、重复JSON键、未知字段和重复参数。其他写入不开放。
+- POST `/api/email-notifications/settings/delete`与微信独立的POST `/api/notifications/settings/delete`只接受空对象`{}`。原子恢复关闭/1条/600秒默认策略，清除当前渠道内存凭据及SMTP持久邮箱地址；取消当前渠道全部未尝试queued任务，保留历史、来源游标及其他渠道。返回原安全状态及`deleted=true/cancelled_count`。UI须先显示影响并显式二次确认，成功后清本渠道未保存更改及密码输入，不保留秘密。微信删除同时持久标记停止装载旧环境Token；重启也不会复活，直至本人明确保存非空新Token。
+- POST `/api/email-notifications/pending/cancel`只接受空对象`{}`且须策略已关闭；只取消automatic/queued/attempts=0邮件，保留当前邮箱配置、凭据与历史，不启用自动提醒。返回原安全状态及`cancelled_count`。策略开启时409 `notification_enabled`；两种破坏性操作遇sending/retry_wait/已尝试queued或未闭合传输请求均409 `notification_busy`且不修改。取消后的记录为failed/notification_cancelled、attempts仍0，页面明确显示“已取消 · 未发送”，不得冒充投递失败或送达。
+- 每个run/device累计真实红色边沿事件达到阈值且出现新事件时触发。独立email-notifications.sqlite原子保存来源游标与冻结任务；同一输出目录发送进程互斥。邮箱任务不合并，冷却仅延迟；已入队sender、recipient、正文、附件与Message-ID在重试和重启后保持不变。换recipient不重路由旧任务，当前没有原sender凭据时明确失败，不能用新账号发送旧邮件；同sender授权码可轮换。
+- 授权码不写SQLite、日志、报告、URL、静态资源、localStorage或返回体。进程重启保留非秘密配置与任务，但须本人重新配置授权码才能继续发信。后台监测和发送独立于浏览器及采集分析线程；不宣称跨设备事务。
+- 传输主机/端口固定、TLS校验不可关闭，正文/MIME/响应/队列/重试/worker均有界。绝对期限覆盖DNS、TLS、认证和DATA阶段；迟返DNS不能继续发送，至多一个在途请求worker，未闭合不能声称停机完成。DATA后断线或确认丢失须标记uncertain；默认至多3次有界退避重试，不承诺严格仅一次或手机送达。报告超限整封失败，不截断或只发本机链接。
+
+配置、实测确认与故障边界见[163邮箱通知](smtp_notifications.md)。假SMTP和内部复核不能代替真实邮箱/手机收件及独立故障或容量验收。
+
+## 22. 本机波形与独立实验扩展（2026-11-14）
+
+用户授权本机控制台新增 `/laboratory`，沿用 loopback 与现有资源身份边界；本地实现与验证不代替正式接口 Review 或项目验收。
+
+- `GET /api/waveform`：精确 `run_id/device_id` 必须在控制台已登记目录中；可选十进制 `start_seq` 和 `count`，单次 2–4096 点。只读已提交、SHA 校验通过的原始四数组，不读取真值。纳秒时间戳为字符串，相对秒数为图表时间轴。
+- `GET /api/laboratory`：公开实验预设、服务限额和本机历史。
+- `POST /api/laboratory/experiments`：接受 profile、seed、total_points、noise_std、degradation_rate_per_sample、fault_amplitude 六项；故障场景可同时增加 fault_type、fault_start_seq、fault_duration_points 三项，复用 spike／step／burst。旧六项请求与历史保持兼容。唯一同源 Origin、`X-G15-Console-Action: laboratory` 和严格至多 4096 字节 JSON，202 表示接收而非完成。实验服务须通过 `--laboratory-root` 显式启用。
+- `GET /api/laboratory/experiment?id=...`：公开实验状态、参数及真实分析结果；`GET /api/laboratory/waveform?id=...`：服务拥有的独立实验样本，支持相同有界区间参数。浏览器不提交路径，实验资源不加入持续设备目录。
+- 采样率 256 Hz、窗口 256 点、8192–65536 点／实验、单并发、最多 20 条实验、128 MiB 独立预算；达到上限拒绝，不自动删记录。真值仅由原有报告层读取；温度和显示频谱不改变现有评分公式。
+
+更完整语义、错误边界和运行说明见 [波形与实验台](laboratory.md)。
+
+## 23. 本机回放、比较及告警处置扩展（2026-11-14）
+
+用户直接授权新增 `/workbench`，共用当前精确授权资源、明确配置的本地结束会话目录及独立实验目录；现有业务查询协议、分析表结构、评分公式和告警状态机不变。新增写入仅限独立处置库，不将确认状态写回分析库。
+
+- `OperationsController(root, *, runs_root, catalog_provider, authorize, laboratory=None, live_status_provider=None, history_provider=None)`；公开方法 `overview/detail/compare/dispositions/record_disposition/resolve_waveform/close`。当前数据每次读写前验证真实上游授权；历史来源由服务端明确注册，不能通过请求提交路径。
+- GET `/api/workbench`、`/api/workbench/run?id=...`、`/api/workbench/compare?ids=...`、`/api/workbench/dispositions?id=...`、`/api/workbench/waveform?id=...&start_seq=...&count=...`。ID 为服务端目录内的 `live:<run_id>` 或 `experiment:<lab_id>`，比较最多四项。样本读取复用完整 SHA、身份、有界数组及共享并发检查。
+- 回放详情读取真实已提交窗口、历史告警及沿用既有映射的事件建议。完整快照上限8192窗、4096告警，超限413，不静默裁切。比较按相对样本秒对齐；延迟对象以kind区分capture_to_commit、experiment_elapsed和unavailable，未知值为null。
+- POST `/api/workbench/dispositions` 严格字段为 id、alarm_key、action、operator、note、request_id。action仅acknowledge/note，记录绑定实际告警的run/device/rule/start复合身份；当前资源先认证再读原始数据及写独立记录。唯一同源Origin、`X-G15-Console-Action: workbench`、JSON正文至多16384字节；其他既有POST上限不变。处理人≤80字符，备注≤2000字符，拒绝重复字段、非有限值和未知字段。
+- 处置记录只追加，保存UTC时间、序号与摘要链，重启验证并保留；同request_id和同正文重试返回同记录，正文冲突409，同告警重复确认409。确认不清除真实告警，不宣称执行维修；本机自填处理人不是认证账户。
+- 新增live CLI可选 `--operations-root`，缺省 `<output-root>/workbench`；启动时注册有界、已结束的本机历史会话。服务停止关闭处置写入锁，异常不跳过其他清理。
+
+具体字段、限额、导出与验收边界见[回放与运行对比](workbench.md)。本地自动复核不代替正式接口Review、用户整体体验验收或项目Gate0结论。

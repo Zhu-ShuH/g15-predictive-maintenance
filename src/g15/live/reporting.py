@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import math
 from pathlib import Path
+import sqlite3
 import stat
+from typing import Iterator, Mapping
 
 from g15.storage.database import connect_readonly
 from .schema import STATES, load_live_session, utc_now
@@ -27,6 +30,18 @@ def render_live_report(
     """
     if extension not in {"json", "md"}:
         raise ValueError("unsupported live report format")
+    with _live_report_transaction(runs_root, run_id, device_id) as (live, connection):
+        report = _read_live_report(
+            connection, live, run_id, device_id, live_status=live_status
+        )
+    return _format_live_report(report, extension)
+
+
+@contextmanager
+def _live_report_transaction(
+    runs_root: Path | str, run_id: str, device_id: str
+) -> Iterator[tuple[dict[str, object], sqlite3.Connection]]:
+    """Validate an exact live resource and retain one public read transaction."""
     root = Path(runs_root).resolve(strict=True)
     directory = root / run_id
     resolved = directory.resolve(strict=True)
@@ -57,22 +72,34 @@ def render_live_report(
         )
         if row is None or tuple(row) != expected:
             raise ValueError("live report database identity mismatch")
-        count, processed, minimum, maximum, mean = connection.execute(
-            "SELECT COUNT(*),COALESCE(SUM(end_seq_exclusive-start_seq),0),"
-            "MIN(health_score),MAX(health_score),AVG(health_score) "
-            "FROM feature_windows WHERE run_id=? AND device_id=?",
-            (run_id, device_id),
-        ).fetchone()
-        alarms = connection.execute(
-            "SELECT COUNT(*) FROM alarms WHERE run_id=? AND device_id=?",
-            (run_id, device_id),
-        ).fetchone()[0]
+        yield live, connection
         connection.commit()
     except BaseException:
         connection.rollback()
         raise
     finally:
         connection.close()
+
+
+def _read_live_report(
+    connection: sqlite3.Connection,
+    live: Mapping[str, object],
+    run_id: str,
+    device_id: str,
+    *,
+    live_status: str | None = None,
+) -> dict[str, object]:
+    """Read all report counts from an already validated live transaction."""
+    count, processed, minimum, maximum, mean = connection.execute(
+        "SELECT COUNT(*),COALESCE(SUM(end_seq_exclusive-start_seq),0),"
+        "MIN(health_score),MAX(health_score),AVG(health_score) "
+        "FROM feature_windows WHERE run_id=? AND device_id=?",
+        (run_id, device_id),
+    ).fetchone()
+    alarms = connection.execute(
+        "SELECT COUNT(*) FROM alarms WHERE run_id=? AND device_id=?",
+        (run_id, device_id),
+    ).fetchone()[0]
     if any(
         value is not None and not math.isfinite(value)
         for value in (minimum, maximum, mean)
@@ -81,7 +108,7 @@ def render_live_report(
     status = live["status"] if live_status is None else live_status
     if status not in STATES:
         raise ValueError("invalid live report state")
-    report = {
+    return {
         "report_schema_version": "live-1",
         "run_id": run_id,
         "device_id": device_id,
@@ -119,21 +146,32 @@ def render_live_report(
             "Live simulation has no independent truth or held-out acceptance evidence."
         ],
     }
+
+
+def _format_live_report(report: Mapping[str, object], extension: str) -> bytes:
+    """Format the same report object as JSON or the established Markdown form."""
     if extension == "json":
         return (
             json.dumps(report, ensure_ascii=True, sort_keys=True, allow_nan=False)
             + "\n"
         ).encode("utf-8")
+    if extension != "md":
+        raise ValueError("unsupported live report format")
     lines = [
         "# Live session snapshot",
         "",
-        f"| run_id | `{run_id}` |",
-        f"| device_id | `{device_id}` |",
+        f"| run_id | `{report['run_id']}` |",
+        f"| device_id | `{report['device_id']}` |",
         "",
-        "verifiable: false; passed: null; detection_rate: null; false_alarm_count: null.",
+        "verifiable: false; passed: null; detection_rate: null; "
+        "false_alarm_count: null.",
         "",
-        f"Committed windows: {count}; alarms: {alarms}; processed samples: {processed}.",
-        f"Health score minimum: {minimum}; maximum: {maximum}; mean: {mean}.",
+        f"Committed windows: {report['feature_windows']}; "
+        f"alarms: {report['alarm_count']}; "
+        f"processed samples: {report['processed_samples']}.",
+        f"Health score minimum: {report['health_score_min']}; "
+        f"maximum: {report['health_score_max']}; "
+        f"mean: {report['health_score_mean']}.",
         "",
         "No independent truth or formal detection claim.",
     ]

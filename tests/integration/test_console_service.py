@@ -129,7 +129,29 @@ def _service(tmp_path, public_runs):
     )
     assets = tmp_path / "test-assets"
     assets.mkdir()
-    for name in ("index.html", "app.js", "app.css", "state.js"):
+    for name in (
+        "index.html",
+        "screen.html",
+        "operations.html",
+        "diagnosis.html",
+        "simulation.html",
+        "simulation.js",
+        "simulation.css",
+        "laboratory.html",
+        "laboratory.js",
+        "laboratory.css",
+        "industrial.css",
+        "shell.js",
+        "g15-logo.png",
+        "app.js",
+        "app.css",
+        "state.js",
+        "fleet.js",
+        "fleet.css",
+        "diagnosis.js",
+        "diagnosis.css",
+        "cyber-wafuu.css",
+    ):
         (assets / name).write_text("console-fixture", encoding="utf-8")
     (assets / "secret.txt").write_text("private-static-file", encoding="utf-8")
     server.application.asset_root = assets
@@ -164,11 +186,11 @@ def _service(tmp_path, public_runs):
         assert not thread.is_alive() and not upstream_thread.is_alive()
 
 
-def _request(service, path, *, method="GET", headers=None):
+def _request(service, path, *, method="GET", headers=None, body=None):
     host, port = service.server.server_address[:2]
     connection = http.client.HTTPConnection(host, port, timeout=5)
     try:
-        connection.request(method, path, headers=headers or {})
+        connection.request(method, path, headers=headers or {}, body=body)
         response = connection.getresponse()
         return response.status, dict(response.getheaders()), response.read()
     finally:
@@ -192,7 +214,26 @@ def test_catalog_assets_head_and_secret_redaction(service, caplog):
     assert "script-src 'self'" in headers["Content-Security-Policy"]
     assert headers["Cache-Control"] == "no-store"
     assert "Access-Control-Allow-Origin" not in headers
-    for route in ("/", "/assets/app.css", "/assets/app.js", "/assets/state.js"):
+    for route in (
+        "/",
+        "/screen",
+        "/operations",
+        "/diagnosis",
+        "/simulation",
+        "/assets/simulation.js",
+        "/assets/simulation.css",
+        "/assets/industrial.css",
+        "/assets/shell.js",
+        "/assets/g15-logo.png",
+        "/assets/app.css",
+        "/assets/app.js",
+        "/assets/state.js",
+        "/assets/fleet.css",
+        "/assets/fleet.js",
+        "/assets/diagnosis.css",
+        "/assets/diagnosis.js",
+        "/assets/cyber-wafuu.css",
+    ):
         assert _request(service, route)[0] == 200
         code, head_headers, body = _request(service, route, method="HEAD")
         assert code == 200 and body == b""
@@ -211,6 +252,24 @@ def test_catalog_assets_head_and_secret_redaction(service, caplog):
         "private-static-file",
     ):
         assert secret not in payload.decode() + caplog.text
+
+
+def test_fonts_are_explicit_nested_assets_with_font_mime_and_no_arbitrary_files(
+    service,
+):
+    fonts = service.server.application.asset_root / "fonts"
+    fonts.mkdir()
+    for name in ("g15-display.woff2", "g15-instrument.woff2", "g15-ui.woff2"):
+        (fonts / name).write_bytes(b"font-fixture")
+        route = "/assets/fonts/" + name
+        status, headers, body = _request(service, route)
+        assert status == 200 and body == b"font-fixture"
+        assert headers["Content-Type"] == "font/woff2"
+        assert _request(service, route, method="HEAD")[2] == b""
+        assert _request(service, route + "?file=secret")[0] == 400
+    (fonts / "private.txt").write_text("not-public", encoding="utf-8")
+    assert _request(service, "/assets/fonts/private.txt")[0] == 404
+    assert service.calls == []
 
 
 def test_health_is_exact_real_http_json_with_server_side_bearer(service):
@@ -587,11 +646,17 @@ def test_explicit_ui_deep_link_can_reload_without_reflecting_its_values(service)
         ),
     )
     assert status == 200 and payload == b"console-fixture"
-    for query in ("view=alarms", "view=reports"):
+    for query in ("view=alarms", "view=maintenance", "view=reports"):
         assert _request(service, "/?" + query)[0] == 200
     assert _request(service, "/?unknown=x")[0] == 400
     assert _request(service, "/?view=invalid")[0] == 400
     assert _request(service, "/assets/app.js?view=health")[0] == 400
+    fleet_query = urlencode(
+        {"device": service.pair["device_id"], "run": service.pair["run_id"]}
+    )
+    for route in ("/screen", "/operations", "/diagnosis", "/simulation"):
+        assert _request(service, route + "?" + fleet_query)[0] == 200
+        assert _request(service, route + "?unknown=x")[0] == 400
     assert service.calls == []
 
 
@@ -635,6 +700,103 @@ def _live_public_status(service):
         ],
         "error": None,
     }
+
+
+def _control_request(service, payload, *, headers=None):
+    host, port = service.server.server_address[:2]
+    return _request(
+        service,
+        "/api/live/control",
+        method="POST",
+        body=json.dumps(payload),
+        headers={
+            "Origin": f"http://{host}:{port}",
+            "X-G15-Console-Action": "live-control",
+            "Content-Type": "application/json",
+            **(headers or {}),
+        },
+    )
+
+
+def test_live_control_is_opt_in_origin_checked_and_bound_to_session_and_resource(
+    service,
+):
+    raw = _live_public_status(service)
+    raw["devices"][0]["capture_paused"] = False
+    application = service.server.application
+    application.live_status_provider = lambda: raw
+    payload = {"session_id": raw["session_id"], "action": "pause", **service.pair}
+    assert _control_request(service, payload)[0] == 503
+    calls = []
+
+    def control(action, pair):
+        calls.append((action, pair))
+        raw["devices"][0]["capture_paused"] = action == "pause"
+
+    application.live_control_provider = control
+    for change in (
+        {"Origin": "https://untrusted.invalid"},
+        {"X-G15-Console-Action": "notifications"},
+        {"Sec-Fetch-Site": "cross-site"},
+    ):
+        assert _control_request(service, payload, headers=change)[0] == 403
+    assert _control_request(service, {**payload, "session_id": "old-session"})[0] == 409
+    assert _control_request(service, {**payload, "device_id": "unknown"})[0] == 404
+    assert calls == []
+    status, _headers, body = _control_request(service, payload)
+    assert status == 200
+    result = json.loads(body)
+    assert result["devices"][0]["capture_paused"] is True
+    assert result["controls_available"] is True
+    assert calls == [("pause", (service.pair["run_id"], service.pair["device_id"]))]
+    assert (
+        _control_request(
+            service, {"session_id": raw["session_id"], "action": "resume"}
+        )[0]
+        == 200
+    )
+    assert calls[-1] == ("resume", None)
+    raw["status"] = "stopped"
+    assert _control_request(service, payload)[0] == 409
+    assert len(calls) == 2
+    assert service.calls == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"session_id": "live-console-test", "action": "reset"},
+        {"session_id": False, "action": "pause"},
+        {"session_id": "live-console-test", "action": "pause", "run_id": "a"},
+        {"session_id": "live-console-test", "action": "pause", "path": "a"},
+        {"session_id": "live-console-test", "action": "pause", "device_id": "a"},
+    ],
+)
+def test_live_control_invalid_payload_never_reaches_runtime(service, payload):
+    application = service.server.application
+    application.live_status_provider = lambda: _live_public_status(service)
+    calls = []
+    application.live_control_provider = lambda *args: calls.append(args)
+    assert _control_request(service, payload)[0] == 400
+    assert calls == []
+
+
+def test_live_control_concurrent_stop_returns_conflict_without_error_disclosure(
+    service,
+):
+    application = service.server.application
+    application.live_status_provider = lambda: _live_public_status(service)
+
+    def stopped(*_args):
+        raise RuntimeError("private-runtime-path")
+
+    application.live_control_provider = stopped
+    status, _, body = _control_request(
+        service, {"session_id": "live-console-test", "action": "pause"}
+    )
+    assert status == 409
+    assert json.loads(body) == {"error": "live_not_running"}
 
 
 def test_live_status_is_optional_and_projects_only_registered_public_fields(service):
@@ -697,6 +859,60 @@ def test_live_status_interval_is_a_finite_bounded_number(service, interval):
     assert _request(service, "/api/live")[0] == 503
 
 
+def test_live_flow_metrics_are_projected_without_private_runtime_values(service):
+    raw = _live_public_status(service)
+    raw["devices"][0]["pending_samples"] = 256
+    raw.update(
+        latency={
+            "recent_count": 12,
+            "recent_p95_seconds": 0.125,
+            "basis": "private-metadata-not-public",
+        },
+        backpressure_events=2,
+        late_cycles=3,
+        limit_reason=None,
+        resources={"private": "not-public"},
+    )
+    service.server.application.live_status_provider = lambda: raw
+    status, _, payload = _request(service, "/api/live")
+    public = json.loads(payload)
+    assert status == 200
+    assert public["devices"][0]["pending_samples"] == 256
+    assert public["latency"] == {"recent_count": 12, "recent_p95_seconds": 0.125}
+    assert public["backpressure_events"] == 2
+    assert public["late_cycles"] == 3
+    assert public["limit_reason"] is None
+    assert "private" not in payload.decode() and "resources" not in public
+    raw["latency"] = {"recent_count": 0, "recent_p95_seconds": None}
+    assert _request(service, "/api/live")[0] == 200
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"backpressure_events": -1},
+        {"late_cycles": True},
+        {"limit_reason": "private-runtime-path"},
+        {"latency": {"recent_count": 0, "recent_p95_seconds": 0}},
+        {"latency": {"recent_count": 1, "recent_p95_seconds": None}},
+        {"latency": {"recent_count": 1, "recent_p95_seconds": float("nan")}},
+        {"latency": {"recent_count": 1, "recent_p95_seconds": True}},
+        {"latency": {"recent_count": 2049, "recent_p95_seconds": 1}},
+    ],
+)
+def test_live_flow_metrics_reject_invalid_values(service, updates):
+    raw = {**_live_public_status(service), **updates}
+    service.server.application.live_status_provider = lambda: raw
+    assert _request(service, "/api/live")[0] == 503
+
+
+def test_live_pending_samples_must_match_real_capture_and_commit_counters(service):
+    raw = _live_public_status(service)
+    raw["devices"][0]["pending_samples"] = 255
+    service.server.application.live_status_provider = lambda: raw
+    assert _request(service, "/api/live")[0] == 503
+
+
 def test_embedded_credential_provider_uses_no_browser_or_token_file(service):
     service.server.application.token_file = None
     service.server.application.credential_provider = lambda: service.token
@@ -706,3 +922,157 @@ def test_embedded_credential_provider_uses_no_browser_or_token_file(service):
     service.server.application.credential_provider = lambda: "expired-token"
     status, _headers, payload = _request(service, _path(service, "/api/health"))
     assert status == 401 and "expired-token" not in payload.decode()
+
+
+def test_laboratory_assets_are_allowlisted_and_parameters_are_bounded(service):
+    for route in ("/laboratory", "/assets/laboratory.js", "/assets/laboratory.css"):
+        assert _request(service, route)[0] == 200
+    assert _request(service, "/laboratory?device=DEV-001&run=sample")[0] == 200
+    assert _request(service, "/laboratory?path=secret")[0] == 400
+    assert _request(service, "/assets/laboratory.js?run=sample")[0] == 400
+
+
+def test_waveform_uses_registered_identity_and_rejects_extra_parameters(
+    service, monkeypatch
+):
+    calls = []
+
+    def read(root, run_id, device_id, **kwargs):
+        calls.append((root, run_id, device_id, kwargs))
+        return {"run_id": run_id, "device_id": device_id, "count": 0}
+
+    monkeypatch.setattr(console, "read_waveform", read)
+    route = _path(service, "/api/waveform")
+    status, _, payload = _request(service, route + "&count=2048&start_seq=0")
+    assert status == 200 and json.loads(payload)["count"] == 0
+    assert calls[0] == (
+        service.server.application.runs_root,
+        service.pair["run_id"],
+        service.pair["device_id"],
+        {"start_seq": 0, "count": 2048},
+    )
+    for suffix in ("&path=private_truth", "&count=true", "&start_seq=-1"):
+        assert _request(service, route + suffix)[0] == 400
+    assert _request(service, "/api/waveform?run_id=foreign&device_id=foreign")[0] == 404
+    assert len(calls) == 1
+
+
+def test_waveform_errors_keep_public_code_without_disclosing_paths(
+    service, monkeypatch
+):
+    def broken(*_args, **_kwargs):
+        raise console.WaveformRequestError(409, "waveform_unavailable")
+
+    monkeypatch.setattr(console, "read_waveform", broken)
+    status, _, payload = _request(service, _path(service, "/api/waveform"))
+    assert status == 409 and json.loads(payload) == {"error": "waveform_unavailable"}
+
+
+def test_waveform_parallel_budget_rejects_overload_and_recovers(service, monkeypatch):
+    slots = (
+        service.server.application._waveform_slots
+    )  # pylint: disable=protected-access
+    monkeypatch.setattr(
+        console, "read_waveform", lambda *_args, **_kwargs: {"count": 0}
+    )
+    assert slots.acquire(blocking=False) and slots.acquire(blocking=False)
+    try:
+        status, _, payload = _request(service, _path(service, "/api/waveform"))
+        assert status == 503 and json.loads(payload) == {"error": "waveform_busy"}
+    finally:
+        slots.release()
+        slots.release()
+    assert _request(service, _path(service, "/api/waveform"))[0] == 200
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 503])
+def test_waveform_checks_current_upstream_authorization_before_raw_read(
+    service, monkeypatch, status
+):
+    calls = []
+    monkeypatch.setattr(
+        service.server.application,
+        "upstream_get",
+        lambda *_args: (status, b'{"error":"unavailable"}'),
+    )
+    monkeypatch.setattr(console, "read_waveform", lambda *args: calls.append(args))
+    actual, headers, payload = _request(service, _path(service, "/api/waveform"))
+    assert actual == status and calls == []
+    assert "error" in json.loads(payload)
+    if status == 401:
+        assert headers["WWW-Authenticate"] == "Bearer"
+
+
+def _laboratory_request(service, payload, *, headers=None):
+    host, port = service.server.server_address[:2]
+    return _request(
+        service,
+        "/api/laboratory/experiments",
+        method="POST",
+        body=json.dumps(payload),
+        headers={
+            "Origin": f"http://{host}:{port}",
+            "X-G15-Console-Action": "laboratory",
+            "Content-Type": "application/json",
+            **(headers or {}),
+        },
+    )
+
+
+def test_laboratory_is_opt_in_and_actions_require_own_same_origin_header(service):
+    assert _request(service, "/api/laboratory")[0] == 503
+    assert _laboratory_request(service, {})[0] == 503
+    calls = []
+    service.server.application.laboratory = SimpleNamespace(
+        create=lambda payload: calls.append(payload) or {"experiment": {"id": "lab-1"}},
+        overview=lambda: {"available": True, "experiments": []},
+    )
+    for headers in (
+        {"Origin": "https://untrusted.invalid"},
+        {"X-G15-Console-Action": "notifications"},
+        {"X-G15-Console-Action": "live-control"},
+    ):
+        assert _laboratory_request(service, {"seed": 42}, headers=headers)[0] == 403
+    assert calls == []
+    status, _, payload = _laboratory_request(service, {"seed": 42})
+    assert status == 202 and json.loads(payload)["experiment"]["id"] == "lab-1"
+    assert calls == [{"seed": 42}]
+    assert _request(service, "/api/laboratory")[0] == 200
+    assert _request(service, "/api/laboratory?id=lab-1")[0] == 400
+
+
+def test_laboratory_detail_and_waveform_resolve_only_controller_owned_run(
+    service, tmp_path, monkeypatch
+):
+    calls = []
+    run = tmp_path / "runs" / "lab-1"
+
+    def directory(experiment_id):
+        if experiment_id != "lab-1":
+            raise console.LaboratoryRequestError(404, "not_found")
+        return run, "LAB-001"
+
+    service.server.application.laboratory = SimpleNamespace(
+        detail=lambda name: {"experiment": {"id": name}}, run_directory=directory
+    )
+    monkeypatch.setattr(
+        console,
+        "read_waveform",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or {"count": 0},
+    )
+    assert _request(service, "/api/laboratory/experiment?id=lab-1")[0] == 200
+    assert _request(service, "/api/laboratory/experiment?id=lab-1&count=2")[0] == 400
+    assert _request(service, "/api/laboratory/waveform?id=lab-1&count=256")[0] == 200
+    assert calls == [((run.parent, "lab-1", "LAB-001"), {"count": 256})]
+    assert _request(service, "/api/laboratory/waveform?id=foreign")[0] == 404
+    assert _request(service, "/api/laboratory/waveform?id=../lab-1")[0] == 400
+    assert _request(service, "/api/laboratory/waveform?id=lab-1&run_id=other")[0] == 400
+
+
+def test_laboratory_capacity_errors_are_visible_without_becoming_success(service):
+    def busy(_payload):
+        raise console.LaboratoryRequestError(409, "laboratory_busy")
+
+    service.server.application.laboratory = SimpleNamespace(create=busy)
+    status, _, payload = _laboratory_request(service, {})
+    assert status == 409 and json.loads(payload) == {"error": "laboratory_busy"}
