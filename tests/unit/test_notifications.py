@@ -627,3 +627,226 @@ def test_old_notification_database_without_preferences_keeps_environment_loading
         assert control.service.policy == NotificationPolicy()
     finally:
         control.close()
+
+
+class _WriterFaultConnection:
+    """A real WAL handle with controlled errors at open/transaction boundaries."""
+
+    def __init__(
+        self,
+        connection,
+        code=None,
+        *,
+        once=False,
+        fail_begin=None,
+        rollback_code=None,
+        restore_code=None,
+    ):
+        self.connection = connection
+        self.code = code
+        self.once = once
+        self.fail_begin = fail_begin
+        self.rollback_code = rollback_code
+        self.restore_code = restore_code
+        self.closed = False
+        self.statements = []
+        self.begin_timeouts = []
+
+    @staticmethod
+    def refusal(code):
+        error = sqlite3.OperationalError("synthetic private storage detail")
+        error.sqlite_errorcode = code
+        return error
+
+    def execute(self, statement, *args):
+        self.statements.append(statement)
+        if statement == "BEGIN IMMEDIATE":
+            timeout = self.connection.execute("PRAGMA busy_timeout").fetchone()[0]
+            self.begin_timeouts.append(timeout)
+            if self.code is not None and (
+                self.fail_begin is None or len(self.begin_timeouts) == self.fail_begin
+            ):
+                code = self.code
+                if self.once:
+                    self.code = None
+                raise self.refusal(code)
+        if (
+            statement.startswith("PRAGMA busy_timeout=")
+            and statement != "PRAGMA busy_timeout=0"
+            and self.restore_code is not None
+        ):
+            raise self.refusal(self.restore_code)
+        return self.connection.execute(statement, *args)
+
+    def rollback(self):
+        if self.rollback_code is not None:
+            raise self.refusal(self.rollback_code)
+        return self.connection.rollback()
+
+    def close(self):
+        self.closed = True
+        self.connection.close()
+
+    def __getattr__(self, name):
+        return getattr(self.connection, name)
+
+
+@pytest.mark.parametrize(
+    "code", [sqlite3.SQLITE_READONLY, sqlite3.SQLITE_READONLY | 0x300]
+)
+def test_observe_reopens_degraded_wal_writer_before_transaction(
+    tmp_path, monkeypatch, code
+):
+    engine = service(tmp_path)
+    connect = engine._connect
+    opened = []
+
+    def open_connection():
+        if opened:
+            assert opened[-1].closed, "the degraded handle must close before reopening"
+        connection = _WriterFaultConnection(connect(), code if not opened else None)
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(engine, "_connect", open_connection)
+    assert engine.observe(snapshot())["decision"] == "queued"
+    assert len(opened) == 2
+    assert opened[0].closed
+    assert not any("INSERT" in sql or "UPDATE" in sql for sql in opened[0].statements)
+    assert engine.observe(snapshot())["decision"] == "already_queued"
+    assert engine.status()["counts"] == {"queued": 1}
+
+
+def _inject_writer_connections(monkeypatch, engine, **faults):
+    connect = engine._connect
+    opened = []
+
+    def open_connection():
+        connection = _WriterFaultConnection(connect(), **faults)
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(engine, "_connect", open_connection)
+    return opened
+
+
+def test_permanent_readonly_writer_is_bounded_and_leaves_no_source(
+    tmp_path, monkeypatch
+):
+    from g15.notifications import service as notification_service
+
+    engine = service(tmp_path)
+    opened = _inject_writer_connections(
+        monkeypatch, engine, code=sqlite3.SQLITE_READONLY
+    )
+    with pytest.raises(NotificationStorageError, match="^notification_storage_error$"):
+        engine.observe(snapshot())
+    assert len(opened) == notification_service._WRITER_OPEN_ATTEMPTS
+    assert all(connection.closed for connection in opened)
+    assert not any(
+        "INSERT" in sql or "UPDATE" in sql
+        for connection in opened
+        for sql in connection.statements
+    )
+    assert engine.status()["counts"] == {}
+
+
+@pytest.mark.parametrize("code", [sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED])
+def test_busy_writer_probe_preserves_connection_and_original_wait(
+    tmp_path, monkeypatch, code
+):
+    engine = service(tmp_path)
+    opened = _inject_writer_connections(monkeypatch, engine, code=code, once=True)
+    assert engine.observe(snapshot())["decision"] == "queued"
+    assert len(opened) == 1, "ordinary contention must not reopen the connection"
+    assert opened[0].begin_timeouts == [0, 1000]
+    assert opened[0].closed
+
+
+@pytest.mark.parametrize(
+    "code", [sqlite3.SQLITE_ERROR, sqlite3.SQLITE_NOTADB, sqlite3.SQLITE_IOERR]
+)
+def test_other_writer_probe_errors_are_not_retried(tmp_path, monkeypatch, code):
+    engine = service(tmp_path)
+    opened = _inject_writer_connections(monkeypatch, engine, code=code)
+    with pytest.raises(NotificationStorageError, match="^notification_storage_error$"):
+        engine.observe(snapshot())
+    assert len(opened) == 1
+    assert opened[0].closed
+    assert engine.status()["counts"] == {}
+
+
+@pytest.mark.parametrize("fault", ["rollback_code", "restore_code"])
+def test_writer_probe_cleanup_error_is_not_retried(tmp_path, monkeypatch, fault):
+    engine = service(tmp_path)
+    opened = _inject_writer_connections(
+        monkeypatch, engine, **{fault: sqlite3.SQLITE_READONLY}
+    )
+    with pytest.raises(NotificationStorageError, match="^notification_storage_error$"):
+        engine.observe(snapshot())
+    assert len(opened) == 1
+    assert opened[0].closed
+    assert engine.status()["counts"] == {}
+
+
+def test_business_begin_readonly_is_not_retried(tmp_path, monkeypatch):
+    engine = service(tmp_path)
+    opened = _inject_writer_connections(
+        monkeypatch, engine, code=sqlite3.SQLITE_READONLY, fail_begin=2
+    )
+    with pytest.raises(NotificationStorageError, match="^notification_storage_error$"):
+        engine.observe(snapshot())
+    assert len(opened) == 1
+    assert opened[0].closed
+    assert engine.status()["counts"] == {}
+
+
+def test_notification_status_does_not_probe_or_acquire_write_lock(
+    tmp_path, monkeypatch
+):
+    engine = service(tmp_path)
+    opened = _inject_writer_connections(
+        monkeypatch, engine, code=sqlite3.SQLITE_READONLY
+    )
+    assert engine.status()["counts"] == {}
+    assert len(opened) == 1
+    assert opened[0].begin_timeouts == []
+    assert opened[0].closed
+
+
+def test_writer_waits_for_existing_transaction_after_probe(tmp_path, monkeypatch):
+    from g15.notifications import service as notification_service
+
+    engine = service(tmp_path)
+    holder = engine._connect()
+    holder.execute("BEGIN IMMEDIATE")
+    probed = threading.Event()
+    probe = notification_service._readonly_writer_refusal
+    decisions, errors = [], []
+
+    def report_probe(connection):
+        result = probe(connection)
+        probed.set()
+        return result
+
+    def observe():
+        try:
+            decisions.append(engine.observe(snapshot())["decision"])
+        except NotificationStorageError as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(notification_service, "_readonly_writer_refusal", report_probe)
+    worker = threading.Thread(target=observe)
+    worker.start()
+    try:
+        assert probed.wait(
+            3
+        ), "the no-wait probe must complete while a writer holds the lock"
+    finally:
+        holder.rollback()
+        holder.close()
+    worker.join(3)
+    assert not worker.is_alive()
+    assert errors == []
+    assert decisions == ["queued"]
+    assert engine.status()["counts"] == {"queued": 1}

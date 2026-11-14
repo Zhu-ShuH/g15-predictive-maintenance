@@ -24,6 +24,37 @@ class NotificationStorageError(Exception):
     """Safe storage failure code, with no local path or SQL error details."""
 
 
+_WRITER_OPEN_ATTEMPTS = 12
+_WRITER_OPEN_RETRY_SECONDS = 0.05
+
+
+def _readonly_writer_refusal(connection: sqlite3.Connection) -> sqlite3.Error | None:
+    """Probe before business SQL; preserve the caller's normal lock wait.
+
+    Windows can cache a read-only WAL handle on an otherwise writable database.
+    Only a READONLY refusal of this no-write BEGIN identifies that handle. Busy
+    or locked probes are ordinary contention: the original transaction keeps
+    its existing timeout. Rollback/timeout-restoration failures are not retried.
+    """
+    timeout = int(connection.execute("PRAGMA busy_timeout").fetchone()[0])
+    try:
+        connection.execute("PRAGMA busy_timeout=0")
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            code = getattr(exc, "sqlite_errorcode", None)
+            primary = code & 0xFF if isinstance(code, int) else None
+            if primary == sqlite3.SQLITE_READONLY:
+                return exc
+            if primary in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                return None
+            raise
+        connection.rollback()
+        return None
+    finally:
+        connection.execute(f"PRAGMA busy_timeout={timeout}")
+
+
 def compose_message(
     snapshot: AlertSnapshot, threshold: int, *, test: bool = False
 ) -> dict:
@@ -81,7 +112,7 @@ class NotificationService:
         self._background_error: str | None = None
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            with closing(self._connect()) as connection:
+            with closing(self._connect_writer()) as connection:
                 connection.execute("PRAGMA journal_mode=WAL")
                 connection.execute("PRAGMA synchronous=FULL")
                 connection.executescript("""
@@ -165,6 +196,24 @@ class NotificationService:
         connection.row_factory = sqlite3.Row
         return connection
 
+    def _connect_writer(self) -> sqlite3.Connection:
+        """Reopen degraded handles before, never during, a business transaction."""
+        attempt = 1
+        while True:
+            connection = self._connect()
+            try:
+                refusal = _readonly_writer_refusal(connection)
+            except sqlite3.Error:
+                connection.close()
+                raise
+            if refusal is None:
+                return connection
+            connection.close()
+            if attempt >= _WRITER_OPEN_ATTEMPTS:
+                raise refusal
+            attempt += 1
+            time.sleep(_WRITER_OPEN_RETRY_SECONDS)
+
     @property
     def policy(self) -> NotificationPolicy:
         """Return the immutable non-secret current policy."""
@@ -185,7 +234,7 @@ class NotificationService:
             validate_token(token)
         with self._lock:
             try:
-                with closing(self._connect()) as connection:
+                with closing(self._connect_writer()) as connection:
                     connection.execute("BEGIN IMMEDIATE")
                     connection.execute(
                         "UPDATE notification_settings SET policy_json=? WHERE singleton=1",
@@ -245,7 +294,7 @@ class NotificationService:
                 policy = NotificationPolicy()
                 now = require_time(self._clock())
                 try:
-                    with closing(self._connect()) as connection:
+                    with closing(self._connect_writer()) as connection:
                         connection.execute("BEGIN IMMEDIATE")
                         self._check_control_idle(connection)
                         cancelled = self._cancel_unattempted(connection, now)
@@ -281,7 +330,7 @@ class NotificationService:
                     raise NotificationControlError("notification_enabled")
                 now = require_time(self._clock())
                 try:
-                    with closing(self._connect()) as connection:
+                    with closing(self._connect_writer()) as connection:
                         connection.execute("BEGIN IMMEDIATE")
                         self._check_control_idle(connection)
                         cancelled = self._cancel_unattempted(
@@ -318,7 +367,7 @@ class NotificationService:
                 }
             now = require_time(self._clock())
             try:
-                with closing(self._connect()) as connection:
+                with closing(self._connect_writer()) as connection:
                     connection.execute("BEGIN IMMEDIATE")
                     source = connection.execute(
                         "SELECT * FROM notification_sources WHERE run_id=? AND device_id=?",
@@ -444,7 +493,7 @@ class NotificationService:
                     "error_code": "notification_content_too_large",
                 }
             try:
-                with closing(self._connect()) as connection:
+                with closing(self._connect_writer()) as connection:
                     connection.execute("BEGIN IMMEDIATE")
                     result = self._insert(
                         connection,
@@ -512,7 +561,7 @@ class NotificationService:
                 return {"decision": "token_missing"}
             now = require_time(self._clock())
             try:
-                with closing(self._connect()) as connection:
+                with closing(self._connect_writer()) as connection:
                     connection.execute("BEGIN IMMEDIATE")
                     # A disabled policy pauses automatic jobs but still permits explicit tests.
                     job = connection.execute(
@@ -555,7 +604,7 @@ class NotificationService:
         attempt = job["attempts"] + 1
         with self._lock:
             try:
-                with closing(self._connect()) as connection:
+                with closing(self._connect_writer()) as connection:
                     if failure is None:
                         reference = receipt.reference
                         if reference and token in reference:
