@@ -27,6 +27,7 @@ from g15.analysis.features import extract_features
 from g15.analysis.health import load_health_rules, score_health
 from g15.analysis.alarms import AlarmState, evaluate_alarm
 from g15.simulation.engine import simulate_chunk
+from g15.simulation.faults import inject_faults
 from g15.storage.database import connect, initialize_database, transaction
 from g15.storage.repository import (
     ConsumptionRepository,
@@ -34,6 +35,7 @@ from g15.storage.repository import (
     encode_state_json,
 )
 from .schema import SCHEMA_VERSION, SCENARIO_ID, atomic_json, atomic_replace, utc_now
+from .risk import LiveRiskPlans
 
 
 @dataclass(frozen=True)
@@ -308,6 +310,12 @@ class LiveRuntime:
             directory = self.runs_root / device.run_id
             for name in ("raw", "artifacts", "reports"):
                 (directory / name).mkdir(parents=True)
+        self._risks = LiveRiskPlans(
+            self.session_root / "risk-ledger.json",
+            self.session_id,
+            self._devices,
+            self.config.sample_rate_hz,
+        )
         atomic_json(self.catalog_path, self.catalog())
         atomic_json(
             self.session_root / "capture-config.json",
@@ -373,6 +381,7 @@ class LiveRuntime:
             atomic_json(
                 self.session_root / "session-status.json", self.status_snapshot()
             )
+            atomic_json(self.session_root / "risk-status.json", self.risk_snapshot())
 
     def status_snapshot(self) -> dict:
         """Read a coherent status; counters represent actual capture and commits."""
@@ -519,6 +528,28 @@ class LiveRuntime:
             self._persist_all()
         return self.status_snapshot()
 
+    def risk_snapshot(self) -> dict:
+        """Return public injection plans with actual capture/commit progress."""
+        with self._lock:
+            return self._risks.snapshot(
+                self._devices,
+                self._state,
+                self._state == "running" and not self._stop.is_set(),
+                self._updated_at,
+            )
+
+    def control_risk(self, request: dict) -> dict:
+        """Apply one durable command before the next not-yet-admitted batch."""
+        with self._control_lock, self._lock:
+            receipt = self._risks.control(
+                request,
+                self._devices,
+                self._state,
+                self._state == "running" and not self._stop.is_set(),
+                self._updated_at,
+            )
+            return {**self.risk_snapshot(), "request": receipt}
+
     def _fail(self, code, exc=None, index=None):
         if exc is not None:
             self._record_error(code, exc)
@@ -656,6 +687,7 @@ class LiveRuntime:
         device = self._devices[index]
         with self._lock:
             start = device.captured_samples
+            mode, event = self._risks.plan(device)
         began = time.perf_counter_ns()
         captured_at = utc_now()
         arrays = {
@@ -668,7 +700,7 @@ class LiveRuntime:
                 % self.config.cycle_windows
                 / self.config.cycle_windows
             )
-            if phase < 0.25 or phase >= 0.75:
+            if mode == "normal" or phase < 0.25 or phase >= 0.75:
                 baseline, noise = 0.5, 0.05
             elif phase < 0.5:
                 baseline, noise = 0.5 + (phase - 0.25) * 4, 0.05 + (phase - 0.25) * 0.4
@@ -698,6 +730,33 @@ class LiveRuntime:
                 },
             }
             chunk = simulate_chunk(params, position, self.config.window_points)
+            if event is not None and event["cancel_seq"] is None:
+                # The event's full absolute interval is independent of this
+                # batch's finite generator horizon; crossing a batch preserves
+                # spike decay and burst phase. Only actual raw samples change.
+                chunk, _ = inject_faults(
+                    chunk,
+                    {
+                        "scenario": {
+                            "sample_rate_hz": self.config.sample_rate_hz,
+                            "device_id": device.device_id,
+                            "total_points": None,
+                        },
+                        "fault_generation": {
+                            "mode": "manual",
+                            "stochastic_probability_per_window": 0.0,
+                            "events": [
+                                {
+                                    "event_id": event["event_id"],
+                                    "type": event["fault_type"],
+                                    "start_seq": event["start_seq"],
+                                    "duration_points": event["duration_points"],
+                                    "amplitude": event["amplitude"],
+                                }
+                            ],
+                        },
+                    },
+                )
             for key in arrays:
                 arrays[key].append(getattr(chunk, key))
         path = (

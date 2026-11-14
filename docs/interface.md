@@ -797,6 +797,16 @@ A在#162/#136登记的后续工具候选以纯`selectors`单loop调度主波次H
 
 启用控制时 `/api/live` 增加 `controls_available=true`；具备本增量的运行时每设备增加严格布尔 `capture_paused`。服务整体 `status=running` 表示会话仍运行，不能据此忽略单设备暂停。暂停确认后不再新增该设备样本；已接受批次继续分析排空。恢复沿原run、样本序号、评分状态继续，不清空历史、重置统计或补生成暂停期间样本；已配置的有限时长/磁盘保护仍生效，终态不可恢复。本增量不改变严格 `live-session.json` 字段、查询主服务或物理设备接口。
 
+用户直接要求的指定设备风险增量增加 `GET/HEAD /api/live/risk`（不接受查询参数）和 `POST /api/live/risk`。服务必须显式装配读取与控制提供者；未配置时读取404、写入503 `live_risk_unavailable`。读取只投影当前已登记设备的风险计划和有界操作记录，浏览器不接收 Bearer。每次写入，包括请求重放，均核对登记 pair 并使用既有真实查询授权；授权失败不调用运行时。
+
+POST 使用精确同源 Origin、JSON Content-Type 和 `X-G15-Console-Action: live-risk`，复用4096字节正文上限及拒绝重复头/键、未知字段、Transfer-Encoding、Expect、非有限数值的规则。所有动作必须具有 `session_id/run_id/device_id/request_id/action`，不允许省略设备而操作全体；`action` 仅为 `inject|clear|automatic`。`inject` 还必须具有 `fault_type/amplitude/delay_seconds/duration_seconds`：类型为既有 `spike|step|burst`，振幅单位 g 且在 `(0,10]`，延后时间 `[0,300]` 秒，持续时间 `(0,300]` 秒；布尔值不作为数值接收。按采样率向上取整为整数样本，burst至少3点。
+
+控制在与采集一致的锁顺序内再次校验会话、精确设备和终态，以下一未采样序号确定计划；同一设备最多一个未完成计划。`inject` 立即令该设备的后续样本使用正常基线，至 `start_seq` 叠加既有振动模型，至 `end_seq_exclusive` 停止叠加并继续正常基线。`clear` 取消未来扰动并保持正常基线；`automatic` 取消未来扰动并恢复原有自动场景轮转。暂停允许安排计划，计划随采集序号冻结；其他设备不变，温度/时间戳/seq及下游评分、告警规则不变。取消不重写既有NPZ或分析结果，也不缩短原事件公式使用的完整区间。
+
+响应 `schema_version="1"`，含 `session_id/status/version/controls_available/limits/devices/history/history_count`。设备记录含精确pair、`mode=auto|normal`、布尔 `capture_paused` 与可空 `event`。事件含 `event_id/fault_type/amplitude/delay_seconds/duration_seconds/start_seq/end_seq_exclusive/duration_points/created_at_utc/status/captured_points/processed_points/cancel_seq/cancelled_at_utc/cancel_reason`；history附带设备pair。事件状态为 `scheduled`（尚未采集风险）、`active`（正在采集）、`recovering`（已采集完整区间、等待分析完成）、`completed`（全部已处理）、`cancelled`（取消或会话中止）。`recovering/completed` 不代表设备健康恢复，健康与活动告警必须读取已提交分析结果。`cancel_reason` 为 null、`cleared`、`automatic`、`session_stopped`，终态未完整执行的计划不得标为 completed。
+
+POST 200 另带 `request={request_id,action,event_id,replayed}`。同会话相同ID与正文只施加一次，重放返回当前投影及原操作身份；同ID不同正文409。幂等回读先于对新动作的终态拒绝，但每次仍重新核验授权；客户端不自动重试不确定写入。计划、模式、版本与接受命令先原子落盘，成功后才发布内存；落盘失败503且不应用新风险。每会话最多256个事件和1024条命令，达到上限拒新命令而不淘汰已接受ID。记录为公开仿真输入，保存于独立风险操作文件，不进入 `private_truth`，分析器不读取它来生成答案，不声明受控检出率。
+
 持续入口 `--duration-seconds 0` 显式取消时间截止，映射为 `LiveConfig.max_duration_seconds=None`；省略仍默认3600秒，有限值保持大于0且不超过86400秒。配置、`active.json` 与启动输出的时限使用JSON null，不序列化Infinity；bool、NaN、Infinity和负数仍拒绝。工作台参数投影保留显式 `max_duration_seconds:null` 并显示“无时限”，缺字段仍表示未记录。无时限模式保留磁盘/剩余空间/队列/反压保护、手动暂停恢复、正常停止排空及既有历史完整读取上限；不自动清理历史，不改变离线仿真总点数或Manifest契约。
 
 数据流看板另投影运行时已有的真实观测：设备 `pending_samples` 必须等于采集减提交样本数；会话 `backpressure_events/late_cycles` 为非负整数，`limit_reason` 仅为null、duration_limit或disk_limit。`latency` 只公开 `recent_count`（0–2048）与 `recent_p95_seconds`；无提交时二者为0/null，有观测时延迟必须有限非负，表示样本生成开始到SQLite提交返回的近2048条P95，不是硬件延迟。缺失的旧提供者字段保持缺失，不补零；自由文本、路径与资源进程信息不投影。

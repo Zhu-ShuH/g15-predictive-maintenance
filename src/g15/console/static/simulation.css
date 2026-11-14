@@ -62,6 +62,56 @@
 .stream-device-status[data-state=error] {color:#ffb19b}
 .stream-empty {color:#b9c8d6;font-size:13px;padding:30px 8px;text-align:center;line-height:1.65}
 .simulation-page .status-badge[data-level=error] {color:#ffd8c8;border-color:#ff8a63;background:#38251e}
+.stream-risk {border-color:var(--cw-silver,#b9c1c9)}
+.risk-workspace {display:grid;grid-template-columns:minmax(290px,.85fr) minmax(0,1.5fr);gap:32px}
+.risk-form {display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-content:start;min-width:0}
+.risk-field {display:flex;flex-direction:column;gap:9px;min-width:0;font-size:13px;color:#d5dfdf}
+.risk-field input,.risk-field select {width:100%;min-width:0;min-height:42px;border:1px solid #89979f;border-radius:0;background:#141d25;color:#feffef;padding:9px 10px;font:inherit;line-height:1.5;caret-color:#80d8cf;font-variant-numeric:tabular-nums}
+.risk-field input:focus-visible,.risk-field select:focus-visible {outline:2px solid #ff8a00;outline-offset:3px}
+.risk-field input:disabled,.risk-field select:disabled {opacity:.6;cursor:not-allowed}
+.risk-field input::selection {background:#80d8cf;color:#010101}
+.risk-parameters {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.risk-actions {display:flex;gap:10px;flex-wrap:wrap;margin-top:5px}
+.risk-actions .button,.risk-form>.button {min-height:42px;padding:10px 13px;font-size:13px;line-height:1.45}
+.risk-actions .button:first-child {flex:1 0 100%}
+.risk-actions .button:not(:first-child) {flex:1 1 auto}
+.risk-observation {min-width:0;border-left:1px solid #52616d;padding-left:32px}
+.risk-current {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:20px}
+.risk-current>span:last-child {color:#b9c8d6;font-size:12px}
+.risk-measurements {display:grid;grid-template-columns:.85fr 1.6fr 1fr;gap:16px;margin:0 0 24px}
+.risk-measurements>div {min-width:0}
+.risk-measurements dt {font-size:12px;color:#b9c8d6;line-height:1.5;margin-bottom:10px}
+.risk-measurements dd {margin:0;font-size:24px;line-height:1.4;color:#feffef;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.risk-measurements #risk-alarm {font-size:16px;padding-top:5px}
+#risk-alarm[data-level=healthy] {color:#b9f4d8}
+#risk-alarm[data-level=yellow] {color:#f3c77a}
+#risk-alarm[data-level=red],.risk-message {color:#ffd8c8}
+#risk-alarm[data-level=unknown] {color:#b9c8d6}
+.risk-trend-heading {display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+.risk-trend-heading h3 {font-size:15px;line-height:1.5}
+.risk-trend-heading span {font-size:11px;color:#b9c8d6;line-height:1.6}
+.risk-health-chart {height:190px;min-width:0;width:100%;margin-top:10px;display:grid;place-items:center}
+.risk-health-chart svg {width:100%;height:100%;overflow:visible}
+.risk-health-chart text {font:11px var(--font-instrument,"G15 Instrument",sans-serif);fill:#b9c8d6}
+.risk-health-chart .risk-grid {stroke:#52616d;stroke-width:.7;stroke-dasharray:3 5}
+.risk-health-line {fill:none;stroke:#80d8cf;stroke-width:2;vector-effect:non-scaling-stroke}
+.risk-health-point {fill:#80d8cf}
+.risk-event-marker {fill:none;stroke:#f3c77a;stroke-width:1;stroke-dasharray:4 4;vector-effect:non-scaling-stroke}
+.risk-health-chart text.risk-marker-label {fill:#f3c77a;paint-order:stroke;stroke:#28313c;stroke-width:3px;stroke-linejoin:round}
+.risk-event {margin-top:14px;padding-top:15px;border-top:1px solid #52616d;line-height:1.6}
+.risk-event>div {display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.risk-event strong {font-size:13px;font-weight:700;color:#feffef}
+.risk-event span,.risk-event p {font-size:12px;color:#b9c8d6;margin:5px 0 0}
+.risk-event progress {width:100%;height:6px;display:block;margin:11px 0 8px;border:0;border-radius:0;appearance:none;background:#141d25;accent-color:#80d8cf}
+.risk-event progress::-webkit-progress-bar {background:#141d25}
+.risk-event progress::-webkit-progress-value {background:#80d8cf}
+.risk-event progress::-moz-progress-bar {background:#80d8cf}
+.risk-message {margin:0;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.risk-feedback {color:#b9f4d8}
+.risk-event progress[hidden],.risk-form [hidden] {display:none}
+@media(max-width:1050px) {.risk-workspace {grid-template-columns:minmax(250px,.85fr) minmax(0,1.15fr);gap:22px}.risk-observation {padding-left:22px}.risk-measurements {gap:10px}.risk-measurements dd {font-size:21px}}
+@media(max-width:800px) {.risk-workspace {grid-template-columns:minmax(0,1fr);gap:26px}.risk-observation {border-left:0;border-top:1px solid #52616d;padding:24px 0 0}.risk-actions .button:first-child {flex:1 1 auto}.risk-health-chart {height:200px}}
+@media(max-width:430px) {.risk-parameters {grid-template-columns:repeat(2,minmax(0,1fr))}.risk-parameters .risk-field:last-child {grid-column:1/-1}.risk-actions .button:first-child {flex-basis:100%}.risk-measurements {grid-template-columns:1fr 1.4fr;gap:17px 12px}.risk-measurements>div:last-child {grid-column:1/-1;display:flex;align-items:baseline;gap:14px}.risk-measurements>div:last-child dt {margin:0}.risk-measurements dd {font-size:23px}.risk-health-chart {height:190px}}
 @media(min-width:901px) and (max-width:1200px) {.stream-panel {padding:20px}.pipeline-stations {grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr) 24px minmax(0,1fr) 24px minmax(0,1fr)}.pipeline-station {padding:14px 10px}.station-label {gap:6px}.station-label .icon {width:15px}.stream-analysis-grid {grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr)}}
 @media(max-width:900px) {.stream-control {align-items:flex-start;flex-wrap:wrap}.stream-control-actions {align-items:flex-start;flex-direction:row;align-items:center;justify-content:space-between;width:100%}.stream-analysis-grid {grid-template-columns:minmax(0,1fr)}.stream-observation dl {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}.pipeline-stations {grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr) 28px minmax(0,1fr) 28px minmax(0,1fr)}.pipeline-station {padding:14px 9px}.station-label {gap:5px}.station-label .icon {width:15px}.station-label h3 {font-size:14px}}
 @media(max-width:650px) {.stream-panel {padding:19px 15px;margin-bottom:18px}.stream-control-actions {align-items:flex-start;flex-direction:column}.stream-action-pair {width:100%}.stream-action-pair .button {flex:1;justify-content:center}.stream-panel-heading {align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:18px}.pipeline-stations {grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:16px 0}.pipeline-connector:nth-of-type(4) {display:none}.pipeline-station {padding:15px 10px}.pipeline-station strong {font-size:25px}.station-label {margin-bottom:17px}.station-label h3 {font-size:14px}.stream-legend {width:100%;margin-top:4px}.stream-analysis-grid {gap:0}.stream-rate-chart {height:210px}.stream-observation dl {grid-template-columns:minmax(0,1fr)}.stream-table th {font-size:11px}.stream-table td {padding-top:14px;padding-bottom:14px}.stream-table-scroll {margin-right:-3px}.stream-control h2 {font-size:18px}}

@@ -224,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
             credential_provider=credential,
             live_report_provider=live_report,
             live_control_provider=runtime.control_capture,
+            live_risk_provider=runtime.risk_snapshot,
+            live_risk_control_provider=runtime.control_risk,
             laboratory_provider=laboratory,
         )
         servers.append(console)

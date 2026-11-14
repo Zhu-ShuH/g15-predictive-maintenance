@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
+from g15.live.risk import LiveRiskError
+
 _LOGGER = logging.getLogger(__name__)
 from .notifications import NotificationRequestError
 from .laboratory import LaboratoryController, LaboratoryRequestError
@@ -52,6 +54,7 @@ ASSETS = {
     "/assets/laboratory.js": ("laboratory.js", "text/javascript; charset=utf-8"),
     "/assets/laboratory.css": ("laboratory.css", "text/css; charset=utf-8"),
     "/assets/simulation.js": ("simulation.js", "text/javascript; charset=utf-8"),
+    "/assets/live-risk.js": ("live-risk.js", "text/javascript; charset=utf-8"),
     "/assets/simulation.css": ("simulation.css", "text/css; charset=utf-8"),
     "/assets/industrial.css": ("industrial.css", "text/css; charset=utf-8"),
     "/assets/shell.js": ("shell.js", "text/javascript; charset=utf-8"),
@@ -184,6 +187,10 @@ class ConsoleApplication:
         live_control_provider: (
             Callable[[str, tuple[str, str] | None], None] | None
         ) = None,
+        live_risk_provider: Callable[[], Mapping[str, Any]] | None = None,
+        live_risk_control_provider: (
+            Callable[[dict[str, Any]], Mapping[str, Any]] | None
+        ) = None,
         laboratory_provider: LaboratoryController | None = None,
         operations_provider: OperationsController | None = None,
     ) -> None:
@@ -193,6 +200,11 @@ class ConsoleApplication:
         if live_control_provider is not None and not callable(live_control_provider):
             raise ValueError("live control provider must be callable")
         self.live_control_provider = live_control_provider
+        for provider in (live_risk_provider, live_risk_control_provider):
+            if provider is not None and not callable(provider):
+                raise ValueError("live risk provider must be callable")
+        self.live_risk_provider = live_risk_provider
+        self.live_risk_control_provider = live_risk_control_provider
         self.laboratory = laboratory_provider
         self.operations = operations_provider
         self._waveform_slots = threading.BoundedSemaphore(2)
@@ -420,6 +432,230 @@ class ConsoleApplication:
         if pair not in self.allowed:
             raise ConsoleError(404, "not_found")
         return pair
+
+    def _project_live_risk(self, source: Mapping[str, Any]) -> dict[str, Any]:
+        """Validate and project only the bounded public injection control state."""
+
+        def counter(value):
+            if type(value) is not int or value < 0:
+                raise ValueError("invalid risk counter")
+            return value
+
+        def number(value, lower, upper, *, positive=False):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or not lower <= value <= upper
+                or (positive and value == 0)
+            ):
+                raise ValueError("invalid risk number")
+            return value
+
+        def stamp(value, *, optional=False):
+            if value is None and optional:
+                return None
+            if not isinstance(value, str) or len(value) > 40:
+                raise ValueError("invalid risk timestamp")
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(
+                parsed
+            ):
+                raise ValueError("invalid risk timestamp")
+            return value
+
+        def event(value):
+            if value["fault_type"] not in ("spike", "step", "burst") or value[
+                "status"
+            ] not in ("scheduled", "active", "recovering", "completed", "cancelled"):
+                raise ValueError("invalid risk event")
+            if value["cancel_reason"] not in (
+                None,
+                "cleared",
+                "automatic",
+                "session_stopped",
+            ):
+                raise ValueError("invalid risk cancellation")
+            result = {
+                "event_id": _identifier(value["event_id"]),
+                "fault_type": value["fault_type"],
+                "status": value["status"],
+                "amplitude": number(value["amplitude"], 0, 10, positive=True),
+                "delay_seconds": number(value["delay_seconds"], 0, 300),
+                "duration_seconds": number(
+                    value["duration_seconds"], 0, 300, positive=True
+                ),
+                "created_at_utc": stamp(value["created_at_utc"]),
+                "cancelled_at_utc": stamp(value["cancelled_at_utc"], optional=True),
+                "cancel_reason": value["cancel_reason"],
+                "cancel_seq": (
+                    None
+                    if value["cancel_seq"] is None
+                    else counter(value["cancel_seq"])
+                ),
+            }
+            for name in (
+                "start_seq",
+                "end_seq_exclusive",
+                "duration_points",
+                "captured_points",
+                "processed_points",
+            ):
+                result[name] = counter(value[name])
+            if (
+                result["duration_points"]
+                < (3 if result["fault_type"] == "burst" else 1)
+                or result["end_seq_exclusive"] - result["start_seq"]
+                != result["duration_points"]
+                or not 0
+                <= result["processed_points"]
+                <= result["captured_points"]
+                <= result["duration_points"]
+            ):
+                raise ValueError("invalid risk event progress")
+            return result
+
+        if source["schema_version"] != "1" or source["status"] not in (
+            "starting",
+            "running",
+            "stopping",
+            "stopped",
+            "error",
+            "limit_reached",
+        ):
+            raise ValueError("invalid risk state")
+        if type(source["controls_available"]) is not bool:
+            raise ValueError("invalid risk controls state")
+        limits = source["limits"]
+        expected_limits = {
+            "fault_types": ["spike", "step", "burst"],
+            "max_amplitude": 10,
+            "max_delay_seconds": 300,
+            "max_duration_seconds": 300,
+            "min_duration_points": {"spike": 1, "step": 1, "burst": 3},
+            "max_history": 256,
+            "max_requests": 1024,
+        }
+        if any(limits[key] != value for key, value in expected_limits.items()):
+            raise ValueError("invalid risk limits")
+        rows, history = source["devices"], source["history"]
+        if (
+            not isinstance(rows, list)
+            or len(rows) != len(self.allowed)
+            or not isinstance(history, list)
+            or len(history) > 256
+            or counter(source["history_count"]) != len(history)
+        ):
+            raise ValueError("invalid risk resources")
+        devices, seen = [], set()
+        for row in rows:
+            pair = (_identifier(row["run_id"]), _identifier(row["device_id"]))
+            if (
+                pair not in self.allowed
+                or pair in seen
+                or row["mode"] not in ("auto", "normal")
+                or type(row["capture_paused"]) is not bool
+            ):
+                raise ValueError("invalid risk resource")
+            seen.add(pair)
+            devices.append(
+                {
+                    "run_id": pair[0],
+                    "device_id": pair[1],
+                    "mode": row["mode"],
+                    "capture_paused": row["capture_paused"],
+                    "event": None if row["event"] is None else event(row["event"]),
+                }
+            )
+        events = []
+        for row in history:
+            pair = (_identifier(row["run_id"]), _identifier(row["device_id"]))
+            if pair not in self.allowed:
+                raise ValueError("invalid risk event resource")
+            events.append({"run_id": pair[0], "device_id": pair[1], **event(row)})
+        return {
+            "schema_version": "1",
+            "session_id": _identifier(source["session_id"]),
+            "status": source["status"],
+            "version": counter(source["version"]),
+            "controls_available": source["controls_available"]
+            and self.live_risk_control_provider is not None,
+            "limits": expected_limits,
+            "devices": devices,
+            "history": events,
+            "history_count": len(events),
+        }
+
+    def live_risk(self) -> dict[str, Any]:
+        """Read public risk configuration for the registered current session."""
+        if self.live_risk_provider is None:
+            raise ConsoleError(404, "not_found")
+        try:
+            return self._project_live_risk(self.live_risk_provider())
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            raise ConsoleError(503, "live_risk_unavailable") from exc
+
+    def live_risk_control(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Authorize one device before the runtime atomically applies or replays it."""
+        if self.live_risk_control_provider is None or self.live_risk_provider is None:
+            raise ConsoleError(503, "live_risk_unavailable")
+        required = {"session_id", "run_id", "device_id", "request_id", "action"}
+        if payload.get("action") == "inject":
+            required |= {"fault_type", "amplitude", "delay_seconds", "duration_seconds"}
+        if set(payload) != required or payload.get("action") not in (
+            "inject",
+            "clear",
+            "automatic",
+        ):
+            raise ConsoleError(400, "invalid_live_risk_request")
+        try:
+            for name in ("session_id", "run_id", "device_id", "request_id"):
+                _identifier(payload[name])
+        except ValueError as exc:
+            raise ConsoleError(400, "invalid_live_risk_request") from exc
+        pair = self.resource(payload)
+        try:
+            self.authorize_operation(pair)
+        except ConsoleError as exc:
+            raise ConsoleError(exc.status, "live_risk_access_denied") from exc
+        try:
+            source = self.live_risk_control_provider(payload)
+            result = self._project_live_risk(source)
+            request = source["request"]
+            if (
+                result["session_id"] != payload["session_id"]
+                or request["request_id"] != payload["request_id"]
+                or request["action"] != payload["action"]
+                or type(request["replayed"]) is not bool
+            ):
+                raise ValueError("invalid risk request receipt")
+            result["request"] = {
+                "request_id": payload["request_id"],
+                "action": payload["action"],
+                "event_id": (
+                    None
+                    if request["event_id"] is None
+                    else _identifier(request["event_id"])
+                ),
+                "replayed": request["replayed"],
+            }
+            return result
+        except LiveRiskError as exc:
+            public_errors = {
+                (400, "invalid_live_risk_request"),
+                (404, "live_risk_device_not_found"),
+                (409, "live_risk_session_changed"),
+                (409, "live_risk_not_running"),
+                (409, "live_risk_busy"),
+                (409, "live_risk_request_conflict"),
+                (409, "live_risk_history_full"),
+                (503, "live_risk_persistence_failed"),
+            }
+            if (exc.status, exc.code) in public_errors:
+                raise ConsoleError(exc.status, exc.code) from exc
+            raise ConsoleError(503, "live_risk_unavailable") from exc
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            raise ConsoleError(503, "live_risk_unavailable") from exc
 
     def waveform(self, parameters: dict[str, str]) -> dict:
         """Read verified bounded samples only for a registered public resource."""
@@ -828,6 +1064,7 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
         """Allow explicit same-origin notification or simulated capture actions."""
         if self.path not in (
             "/api/live/control",
+            "/api/live/risk",
             "/api/laboratory/experiments",
             "/api/workbench/dispositions",
             "/api/notifications/settings",
@@ -845,6 +1082,7 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             self._check_origin()
             action_header = {
                 "/api/live/control": "live-control",
+                "/api/live/risk": "live-risk",
                 "/api/laboratory/experiments": "laboratory",
                 "/api/workbench/dispositions": "workbench",
             }.get(self.path, "notifications")
@@ -888,6 +1126,11 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             if self.path == "/api/live/control":
                 result = self.server.application.live_control(payload)
                 self._send(200, _json_bytes(result))
+                return
+            if self.path == "/api/live/risk":
+                self._send(
+                    200, _json_bytes(self.server.application.live_risk_control(payload))
+                )
                 return
             if self.path == "/api/laboratory/experiments":
                 laboratory = self.server.application.laboratory
@@ -1154,6 +1397,10 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             if parameters:
                 raise ConsoleError(400, "invalid_request")
             return 200, _json_bytes(application.live_status()), content_type, extra
+        if path == "/api/live/risk":
+            if parameters:
+                raise ConsoleError(400, "invalid_request")
+            return 200, _json_bytes(application.live_risk()), content_type, extra
         if path == "/api/catalog":
             if parameters:
                 raise ConsoleError(400, "invalid_request")
@@ -1240,6 +1487,10 @@ def create_console_server(
     credential_provider: Callable[[], str] | None = None,
     live_report_provider: Callable[[tuple[str, str], str], bytes] | None = None,
     live_control_provider: Callable[[str, tuple[str, str] | None], None] | None = None,
+    live_risk_provider: Callable[[], Mapping[str, Any]] | None = None,
+    live_risk_control_provider: (
+        Callable[[dict[str, Any]], Mapping[str, Any]] | None
+    ) = None,
     laboratory_provider: LaboratoryController | None = None,
     operations_provider: OperationsController | None = None,
 ) -> ConsoleHTTPServer:
@@ -1254,6 +1505,8 @@ def create_console_server(
         credential_provider=credential_provider,
         live_report_provider=live_report_provider,
         live_control_provider=live_control_provider,
+        live_risk_provider=live_risk_provider,
+        live_risk_control_provider=live_risk_control_provider,
         laboratory_provider=laboratory_provider,
         operations_provider=operations_provider,
     )
