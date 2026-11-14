@@ -82,7 +82,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--window-points", type=int, default=256)
     parser.add_argument("--interval-seconds", type=float, default=1.0)
     parser.add_argument("--queue-capacity", type=int, default=20)
-    parser.add_argument("--duration-seconds", type=float, default=3600.0)
+    parser.add_argument(
+        "--duration-seconds",
+        type=float,
+        default=3600.0,
+        help="Capture time limit in seconds; 0 disables the time limit (default: 3600).",
+    )
     parser.add_argument("--max-disk-mib", type=int, default=512)
     parser.add_argument("--seed", type=int, default=160)
     parser.add_argument("--console-port", type=int, default=18468)
@@ -147,7 +152,9 @@ def main(argv: list[str] | None = None) -> int:
             window_points=args.window_points,
             interval_seconds=args.interval_seconds,
             queue_capacity=args.queue_capacity,
-            max_duration_seconds=args.duration_seconds,
+            max_duration_seconds=(
+                None if args.duration_seconds == 0 else args.duration_seconds
+            ),
             max_disk_bytes=args.max_disk_mib * 1024 * 1024,
             seed=args.seed,
         )
@@ -217,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
             credential_provider=credential,
             live_report_provider=live_report,
             live_control_provider=runtime.control_capture,
+            live_risk_provider=runtime.risk_snapshot,
+            live_risk_control_provider=runtime.control_risk,
             laboratory_provider=laboratory,
         )
         servers.append(console)
@@ -292,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
                     "console_url": ready["console_url"],
                     "devices": len(catalog),
                     "session_id": runtime.session_id,
-                    "duration_limit_seconds": args.duration_seconds,
+                    "duration_limit_seconds": config.max_duration_seconds,
                 }
             ),
             flush=True,

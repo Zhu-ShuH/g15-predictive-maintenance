@@ -54,10 +54,12 @@ def _db(runtime, device):
     )
 
 
+@pytest.mark.parametrize("max_duration_seconds", [8, None])
 def test_capture_pause_is_per_device_drains_and_resumes_without_sequence_reset(
     tmp_path,
+    max_duration_seconds,
 ):
-    runtime = _runtime(tmp_path, devices=2, max_duration_seconds=8)
+    runtime = _runtime(tmp_path, devices=2, max_duration_seconds=max_duration_seconds)
     runtime.start()
     try:
         first = _wait_for(runtime, lambda s: s["devices"][0]["processed_samples"] >= 16)
@@ -92,8 +94,11 @@ def test_capture_pause_is_per_device_drains_and_resumes_without_sequence_reset(
         )
     finally:
         final = runtime.stop()
+    assert final["status"] == "stopped"
+    assert final["limit_reason"] is None
     for device in final["devices"]:
         assert device["captured_samples"] == device["processed_samples"]
+        assert device["pending_samples"] == device["queue_depth"] == 0
         parts = sorted((runtime.runs_root / device["run_id"] / "raw").glob("*.npz"))
         sequences = []
         for path in parts:
@@ -102,6 +107,47 @@ def test_capture_pause_is_per_device_drains_and_resumes_without_sequence_reset(
         assert sequences == list(range(device["captured_samples"]))
     with pytest.raises(RuntimeError):
         runtime.control_capture("resume")
+
+
+@pytest.mark.parametrize("duration", [86400, None])
+def test_capture_duration_policy_after_a_day_without_a_day_long_wait(
+    tmp_path, monkeypatch, duration
+):
+    runtime = _runtime(tmp_path, max_duration_seconds=duration)
+    capture = runtime._capture
+
+    def capture_after_elapsed_day():
+        # Exercise the elapsed-time branch while still generating real batches.
+        runtime._origin -= 86401
+        capture()
+
+    monkeypatch.setattr(runtime, "_capture", capture_after_elapsed_day)
+    runtime.start()
+    try:
+        if duration is None:
+            status = _wait_for(
+                runtime, lambda s: s["devices"][0]["processed_samples"] >= 48
+            )
+            assert status["status"] == "running"
+            assert status["limit_reason"] is None
+            assert not runtime.wait(0.15)
+        else:
+            assert runtime.wait(5)
+            status = runtime.status_snapshot()
+            assert status["status"] == "limit_reached"
+            assert status["limit_reason"] == "duration_limit"
+            assert status["devices"][0]["captured_samples"] == 0
+    finally:
+        final = runtime.stop()
+    if duration is None:
+        assert final["status"] == "stopped"
+        assert final["limit_reason"] is None
+        device = final["devices"][0]
+        assert device["captured_samples"] == device["processed_samples"]
+        assert device["queue_depth"] == device["pending_samples"] == 0
+        config = json.loads((runtime.session_root / "capture-config.json").read_text())
+        assert "max_duration_seconds" in config["config"]
+        assert config["config"]["max_duration_seconds"] is None
 
 
 def test_paused_capture_still_obeys_wall_clock_limit_and_validates_actions(tmp_path):
@@ -129,13 +175,20 @@ def test_paused_capture_still_obeys_wall_clock_limit_and_validates_actions(tmp_p
         {"devices": 1.5},
         {"queue_capacity": 0},
         {"max_duration_seconds": float("nan")},
+        {"max_duration_seconds": float("inf")},
+        {"max_duration_seconds": float("-inf")},
+        {"max_duration_seconds": True},
+        {"max_duration_seconds": 0},
+        {"max_duration_seconds": -1},
+        {"max_duration_seconds": 86401},
+        {"max_duration_seconds": "unlimited"},
         {"interval_seconds": float("inf")},
         {"sample_rate_hz": 160, "window_points": 17},
         {"max_disk_bytes": 1024},
         {"backpressure_timeout_seconds": 31},
     ],
 )
-def test_live_config_rejects_unbounded_or_incoherent_values(changes):
+def test_live_config_rejects_invalid_or_incoherent_values(changes):
     with pytest.raises(ValueError):
         _config(**changes)
 
@@ -221,7 +274,10 @@ def test_live_samples_are_paced_then_committed_and_reported_without_truth(tmp_pa
         runtime.start()
 
 
-def test_graceful_stop_drains_already_captured_queue(tmp_path, monkeypatch):
+@pytest.mark.parametrize("max_duration_seconds", [10, None])
+def test_graceful_stop_drains_already_captured_queue(
+    tmp_path, monkeypatch, max_duration_seconds
+):
     original = LiveRuntime._process_task
     entered = threading.Event()
     release = threading.Event()
@@ -232,7 +288,9 @@ def test_graceful_stop_drains_already_captured_queue(tmp_path, monkeypatch):
         return original(self, *args)
 
     monkeypatch.setattr(LiveRuntime, "_process_task", delayed)
-    runtime = _runtime(tmp_path, queue_capacity=2, max_duration_seconds=10).start()
+    runtime = _runtime(
+        tmp_path, queue_capacity=2, max_duration_seconds=max_duration_seconds
+    ).start()
     try:
         assert entered.wait(3)
         _wait_for(runtime, lambda value: value["devices"][0]["queue_depth"] >= 1)
@@ -311,7 +369,10 @@ def test_analysis_failure_rolls_back_whole_batch_and_preserves_raw(
         runtime.stop()
 
 
-def test_backpressure_is_bounded_and_failure_still_drains_raw(tmp_path, monkeypatch):
+@pytest.mark.parametrize("max_duration_seconds", [10, None])
+def test_backpressure_is_bounded_and_failure_still_drains_raw(
+    tmp_path, monkeypatch, max_duration_seconds
+):
     original = LiveRuntime._process_task
 
     def slow(self, *args):
@@ -323,7 +384,7 @@ def test_backpressure_is_bounded_and_failure_still_drains_raw(tmp_path, monkeypa
         tmp_path,
         devices=2,
         queue_capacity=1,
-        max_duration_seconds=10,
+        max_duration_seconds=max_duration_seconds,
         backpressure_timeout_seconds=0.03,
     ).start()
     try:
@@ -358,8 +419,11 @@ def test_output_lock_excludes_second_writer_and_new_session_does_not_reset(tmp_p
         stopped.start()
 
 
-def test_disk_limit_stops_before_capturing_more_data(tmp_path, monkeypatch):
-    runtime = _runtime(tmp_path)
+@pytest.mark.parametrize("max_duration_seconds", [1, None])
+def test_disk_limit_stops_before_capturing_more_data(
+    tmp_path, monkeypatch, max_duration_seconds
+):
+    runtime = _runtime(tmp_path, max_duration_seconds=max_duration_seconds)
     monkeypatch.setattr(
         runtime, "_disk_usage_bytes", lambda: runtime.config.max_disk_bytes
     )

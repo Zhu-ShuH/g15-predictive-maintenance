@@ -593,9 +593,14 @@ class OperationsController:
                 key: value
                 for key, value in config.items()
                 if key in _CAPTURE_KEYS
-                and isinstance(value, (int, float))
-                and not isinstance(value, bool)
-                and math.isfinite(value)
+                and (
+                    (key == "max_duration_seconds" and value is None)
+                    or (
+                        isinstance(value, (int, float))
+                        and not isinstance(value, bool)
+                        and math.isfinite(value)
+                    )
+                )
             }
         return {}
 

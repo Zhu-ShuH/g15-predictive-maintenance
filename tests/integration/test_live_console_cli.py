@@ -25,8 +25,9 @@ def _wait_for(predicate, *, timeout=12):
 
 
 @pytest.mark.parametrize("laboratory_enabled", [False, True])
+@pytest.mark.parametrize("duration_seconds", ["15", "0"])
 def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
-    tmp_path, laboratory_enabled
+    tmp_path, laboratory_enabled, duration_seconds
 ):
     root = Path(__file__).resolve().parents[2]
     output = tmp_path / "runtime"
@@ -49,7 +50,7 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
             "--devices",
             "2",
             "--duration-seconds",
-            "15",
+            duration_seconds,
             "--sample-rate-hz",
             "2560",
             "--interval-seconds",
@@ -78,6 +79,14 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
         ready_path = output / "active.json"
         _wait_for(ready_path.is_file)
         ready = json.loads(ready_path.read_text(encoding="utf-8"))
+        duration_limit = None if duration_seconds == "0" else float(duration_seconds)
+        assert ready["config"]["max_duration_seconds"] == duration_limit
+        capture_config = json.loads(
+            (Path(ready["session_root"]) / "capture-config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert capture_config["config"]["max_duration_seconds"] == duration_limit
         base = ready["console_url"].rstrip("/")
 
         def get(route):
@@ -99,10 +108,111 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
             )
         )
         assert status["status"] == "running"
+
+        def post_live(route, payload, action_header):
+            request = Request(
+                base + route,
+                data=json.dumps(payload).encode(),
+                headers={
+                    "Origin": base,
+                    "Content-Type": "application/json",
+                    "X-G15-Console-Action": action_header,
+                },
+            )
+            with opener.open(request, timeout=5) as response:
+                assert response.status == 200
+                return json.loads(response.read())
+
+        risk = get("/api/live/risk")
+        assert risk["session_id"] == status["session_id"]
+        assert risk["controls_available"] is True and len(risk["devices"]) == 2
+        assert all(
+            row["mode"] == "auto" and row["event"] is None for row in risk["devices"]
+        )
+        selected = catalog["devices"][0]
+        identity = {key: selected[key] for key in ("run_id", "device_id")}
+        control = {"session_id": status["session_id"], **identity}
+        post_live("/api/live/control", {**control, "action": "pause"}, "live-control")
+        injection = {
+            **control,
+            "action": "inject",
+            "request_id": "wire-inject-1",
+            "fault_type": "step",
+            "amplitude": 8,
+            "delay_seconds": 0,
+            "duration_seconds": 0.2,
+        }
+        accepted = post_live("/api/live/risk", injection, "live-risk")
+        event_id = accepted["request"]["event_id"]
+        target = next(
+            row for row in accepted["devices"] if row["run_id"] == identity["run_id"]
+        )
+        assert target["mode"] == "normal" and target["capture_paused"] is True
+        assert target["event"]["event_id"] == event_id
+        assert target["event"]["status"] == "scheduled"
+        assert target["event"]["captured_points"] == 0
+        assert (
+            accepted["history_count"] == 1 and accepted["request"]["replayed"] is False
+        )
+        assert all(
+            row["mode"] == "auto" and row["event"] is None
+            for row in accepted["devices"]
+            if row["run_id"] != identity["run_id"]
+        )
+        replayed = post_live("/api/live/risk", injection, "live-risk")
+        assert replayed["request"]["event_id"] == event_id
+        assert (
+            replayed["request"]["replayed"] is True and replayed["history_count"] == 1
+        )
+        for changed, expected_code in (
+            ({"session_id": "old-session"}, "live_risk_session_changed"),
+            ({"amplitude": 9}, "live_risk_request_conflict"),
+        ):
+            with pytest.raises(HTTPError) as rejected_risk:
+                post_live("/api/live/risk", {**injection, **changed}, "live-risk")
+            assert rejected_risk.value.code == 409
+            assert json.loads(rejected_risk.value.read()) == {"error": expected_code}
+        post_live("/api/live/control", {**control, "action": "resume"}, "live-control")
+        completed = _wait_for(
+            lambda: (
+                current
+                if (current := get("/api/live/risk"))["history"][0]["status"]
+                == "completed"
+                else None
+            )
+        )
+        event = completed["history"][0]
+        assert event["event_id"] == event_id
+        assert (
+            event["captured_points"]
+            == event["processed_points"]
+            == event["duration_points"]
+        )
+        target = next(
+            row for row in completed["devices"] if row["run_id"] == identity["run_id"]
+        )
+        assert target["mode"] == "normal"
+        restored = post_live(
+            "/api/live/risk",
+            {**control, "action": "automatic", "request_id": "wire-automatic-1"},
+            "live-risk",
+        )
+        assert (
+            next(
+                row
+                for row in restored["devices"]
+                if row["run_id"] == identity["run_id"]
+            )["mode"]
+            == "auto"
+        )
         workbench = get("/api/workbench")
         assert workbench["available"] is True and len(workbench["runs"]) == 2
         identities = [row["id"] for row in workbench["runs"]]
         replay = get("/api/workbench/run?id=" + identities[0])
+        assert (
+            replay["configuration"]["parameters"]["max_duration_seconds"]
+            == duration_limit
+        )
         assert replay["windows"] and replay["complete"] is True
         assert replay["latency"]["kind"] == "capture_to_commit"
         assert replay["latency"]["mean_seconds"] > 0
@@ -185,6 +295,8 @@ def test_live_cli_serves_real_health_and_stops_without_browser_credentials(
         stop_file.write_text("stop\n", encoding="utf-8")
         stdout, stderr = child.communicate(timeout=15)
         assert child.returncode == 0, stderr
+        startup = json.loads(stdout.splitlines()[0])
+        assert startup["duration_limit_seconds"] == duration_limit
         final = json.loads(
             (Path(ready["session_root"]) / "service-status.json").read_text(
                 encoding="utf-8"

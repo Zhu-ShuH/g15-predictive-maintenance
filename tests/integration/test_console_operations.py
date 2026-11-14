@@ -342,7 +342,8 @@ def test_reparse_analysis_ancestor_is_rejected(experiment, monkeypatch):
     assert error.value.code == "invalid_source"
 
 
-def test_current_authorization_and_archived_identity_and_latency(tmp_path):
+@pytest.mark.parametrize("duration", [None, 5, "missing"])
+def test_current_authorization_and_archived_identity_and_latency(tmp_path, duration):
     runtime = LiveRuntime(
         tmp_path / "live",
         health_rules_path=RULES,
@@ -351,7 +352,7 @@ def test_current_authorization_and_archived_identity_and_latency(tmp_path):
             sample_rate_hz=160,
             window_points=16,
             interval_seconds=0.1,
-            max_duration_seconds=5,
+            max_duration_seconds=5 if duration == "missing" else duration,
             cycle_windows=4,
         ),
     )
@@ -361,6 +362,11 @@ def test_current_authorization_and_archived_identity_and_latency(tmp_path):
         lambda status: all(row["processed_samples"] >= 64 for row in status["devices"]),
     )
     runtime.stop()
+    if duration == "missing":
+        config_path = runtime.session_root / "capture-config.json"
+        recorded = json.loads(config_path.read_text(encoding="utf-8"))
+        recorded["config"].pop("max_duration_seconds")
+        config_path.write_text(json.dumps(recorded), encoding="utf-8")
     denied = [False]
     calls = []
 
@@ -386,6 +392,11 @@ def test_current_authorization_and_archived_identity_and_latency(tmp_path):
             assert result["latency"]["mean_seconds"] >= 0
             assert result["configuration"]["sample_rate_hz"] == 160
             assert result["configuration"]["parameters"]["seed"] == runtime.config.seed
+            parameters = result["configuration"]["parameters"]
+            if duration == "missing":
+                assert "max_duration_seconds" not in parameters
+            else:
+                assert parameters["max_duration_seconds"] == duration
             assert result["run"]["updated_at_utc"].endswith("Z")
         denied[0] = True
         for operation in (
@@ -422,6 +433,11 @@ def test_current_authorization_and_archived_identity_and_latency(tmp_path):
         result = archived.detail(identities[0])
         assert result["run"]["source_kind"] == "archive"
         assert result["latency"]["kind"] == "capture_to_commit"
+        parameters = result["configuration"]["parameters"]
+        if duration == "missing":
+            assert "max_duration_seconds" not in parameters
+        else:
+            assert parameters["max_duration_seconds"] == duration
         history[0]["session_id"] = "changed-session"
         with pytest.raises(OperationsRequestError) as error:
             archived.detail(identities[0])

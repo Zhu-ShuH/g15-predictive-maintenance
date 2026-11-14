@@ -1,3 +1,5 @@
+import { mountLiveRiskPanel } from "./live-risk.js";
+
 const POLL_MS = 2000;
 const MAX_HISTORY = 60;
 const STALE_MS = 10000;
@@ -78,6 +80,7 @@ export function startSimulationPage(documentRef = document) {
   let busy = false, reading = false, readFailed = false, destroyed = false, timer = null, request = null;
   let rates = null, history = [], rows = new Map();
   let chartWidth = 0;
+  const riskPanel = $("risk-form") ? mountLiveRiskPanel(documentRef) : null;
   const isStale = () => snapshotIsStale(snapshot, receivedAt, Date.now(), readFailed);
   const canControl = () => snapshot?.controls_available === true && snapshot.status === "running" && !snapshot.error && !busy && !reading && !isStale();
 
@@ -163,6 +166,7 @@ export function startSimulationPage(documentRef = document) {
   }
 
   function render() {
+    riskPanel?.updateLive(snapshot, { receivedAt, failed: readFailed, busy });
     $("stream-refresh").disabled = reading || busy;
     if (!snapshot) {
       text("stream-connection", readFailed ? "连接失败" : "正在连接");
@@ -264,14 +268,14 @@ export function startSimulationPage(documentRef = document) {
     } finally { busy = false; if (!destroyed) { render(); schedule(); } }
   }
 
-  $("stream-refresh").addEventListener("click", () => void refresh());
+  $("stream-refresh").addEventListener("click", () => { void refresh(); void riskPanel?.refresh(); });
   $("stream-start-all").addEventListener("click", () => void control("resume"));
   $("stream-stop-all").addEventListener("click", () => void control("pause"));
   const visibility = () => { clearTimeout(timer); if (documentRef.hidden) { if (!busy) request?.abort(); $("pipeline-stations").dataset.active = "false"; } else void refresh(); };
   documentRef.addEventListener("visibilitychange", visibility);
   const resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (Math.abs($("stream-rate-chart").clientWidth - chartWidth) > 1) renderChart(); }) : null;
   resize?.observe($("stream-rate-chart"));
-  const destroy = () => { destroyed = true; clearTimeout(timer); request?.abort(); resize?.disconnect(); documentRef.removeEventListener("visibilitychange", visibility); };
+  const destroy = () => { destroyed = true; clearTimeout(timer); request?.abort(); resize?.disconnect(); riskPanel?.destroy(); documentRef.removeEventListener("visibilitychange", visibility); };
   window.addEventListener("pagehide", destroy, { once: true });
   window.addEventListener("pageshow", (event) => { if (event.persisted) window.location.reload(); });
   void refresh();
