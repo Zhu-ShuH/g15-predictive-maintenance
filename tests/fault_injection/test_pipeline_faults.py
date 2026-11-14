@@ -16,10 +16,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import select
 import signal
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -187,13 +187,19 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
     exactly the missing shards and end with the same stored content as an
     uninterrupted run -- not merely the same row count.
 
-    The child announces itself only after the *first shard transaction has
-    committed* and the second shard is being processed, so the signal lands in
-    the middle of a real pass instead of before the consumer has read anything
-    -- a fixed sleep or a pre-call handshake can be outrun by a fast machine
-    and would prove nothing.  The handshake is observed on the database the
-    consumer itself writes (a ``processed_chunks`` row), not injected into the
-    business code, so no test-only parameter exists in production paths.
+    A test-only wrapper calls the consumer's real shard transaction context
+    manager, including its real COMMIT. After the first shard commits, an
+    independent read-only SQLite connection verifies the marker and the child
+    announces it over a pipe, then blocks on a second pipe. The parent kills
+    that blocked real consumer, so a fast machine cannot finish before the
+    handshake is observed. No sleep, watcher thread, production hook or fake
+    shard commit is involved.
+
+    This checkpoint is *between shard transactions*: after the first commit
+    and before the consumer advances to the next shard. It does not claim a
+    kill inside an uncommitted SQLite transaction. The subsequent replay runs
+    the ordinary, unwrapped consumer and compares all five comparable business
+    table contents, rather than only their row counts.
 
     The exit status is asserted to be the signal death
     (``returncode == -SIGKILL``); a pass that completed normally would report 0
@@ -212,40 +218,43 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
     )
 
     database = run_dir / "artifacts" / "results.sqlite"
-    handshake = run_dir.parent / "consumer.started"
-    script = (
-        "import sys\n"
-        "from pathlib import Path\n"
-        "from g15.config import load_consumer_config\n"
-        "from g15.pipeline.consumer import consume_run\n"
-        "from g15.storage.database import connect\n"
-        "config_path = Path(sys.argv[3])\n"
-        "config = load_consumer_config(config_path)\n"
-        "database = Path(sys.argv[2])\n"
-        "handshake = Path(sys.argv[4])\n"
-        "import threading\n"
-        "def watch():\n"
-        "    import sqlite3\n"
-        "    while True:\n"
-        "        try:\n"
-        "            connection = sqlite3.connect(str(database), timeout=1.0)\n"
-        "            try:\n"
-        "                row = connection.execute(\n"
-        "                    'SELECT COUNT(*) FROM processed_chunks'\n"
-        "                ).fetchone()\n"
-        "            finally:\n"
-        "                connection.close()\n"
-        "        except sqlite3.Error:\n"
-        "            row = None\n"
-        "        if row is not None and int(row[0]) >= 1:\n"
-        "            handshake.write_text(str(int(row[0])), encoding='utf-8')\n"
-        "            return\n"
-        "        import time as _time\n"
-        "        _time.sleep(0.002)\n"
-        "threading.Thread(target=watch, daemon=True).start()\n"
-        "consume_run(Path(sys.argv[1]), database, config)\n"
-    )
-    process = subprocess.Popen(  # pylint: disable=consider-using-with
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    expected_marker = (manifest["parts"][0]["part_id"], manifest["parts"][0]["sha256"])
+    total_parts = len(manifest["parts"])
+    assert total_parts > 1, "the public fixture must have an unprocessed suffix"
+    script = """import json, os, sqlite3, sys
+from contextlib import contextmanager
+from pathlib import Path
+from g15.config import load_consumer_config
+import g15.pipeline.consumer as consumer
+
+run_dir, database, config_path = map(Path, sys.argv[1:4])
+real_transaction = consumer.transaction
+
+@contextmanager
+def checkpoint_after_commit(connection):
+    with real_transaction(connection) as active:
+        yield active
+    assert not connection.in_transaction, 'checkpoint must follow a real COMMIT'
+    observed = sqlite3.connect(database.as_uri() + '?mode=ro', uri=True)
+    try:
+        markers = observed.execute(
+            'SELECT part_id,sha256 FROM processed_chunks ORDER BY part_id'
+        ).fetchall()
+    finally:
+        observed.close()
+    if len(markers) == 1:
+        print(json.dumps({'checkpoint': 'after_first_shard_commit',
+                          'process_id': os.getpid(),
+                          'consumer_source': str(Path(consumer.__file__).resolve()),
+                          'markers': markers, 'transaction_open': False}), flush=True)
+        if sys.stdin.buffer.read(1) != b'R':
+            raise RuntimeError('test checkpoint pipe closed before SIGKILL')
+
+consumer.transaction = checkpoint_after_commit
+consumer.consume_run(run_dir, database, load_consumer_config(config_path))
+"""
+    with subprocess.Popen(
         [
             sys.executable,
             "-c",
@@ -253,29 +262,41 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
             str(run_dir),
             str(database),
             str(CONFIGS / "consumer.yaml"),
-            str(handshake),
         ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
-        deadline = time.monotonic() + 30.0
-        while not handshake.is_file():
-            if process.poll() is not None:
-                pytest.fail(
-                    "the consumer exited before the kill -9 handshake; the "
-                    f"run is too fast to interrupt (returncode {process.returncode})"
-                )
-            if time.monotonic() > deadline:
-                pytest.fail("the consumer never reached the handshake point")
-            time.sleep(0.01)
-        assert process.poll() is None, "the consumer must still be running"
-        process.send_signal(signal.SIGKILL)
-        returncode = process.wait(timeout=30)
-    finally:
-        if process.poll() is None:  # pragma: no cover - defensive
-            process.kill()
-            process.wait(timeout=30)
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    ) as process:
+        try:
+            readable, _writable, _exceptional = select.select(
+                [process.stdout], [], [], 30
+            )
+            assert readable, "the consumer never reached the post-commit checkpoint"
+            line = process.stdout.readline()
+            assert line, (
+                "the consumer exited before the real commit checkpoint; "
+                f"returncode={process.poll()}, stderr={process.stderr.read()}"
+            )
+            checkpoint = json.loads(line)
+            assert checkpoint == {
+                "checkpoint": "after_first_shard_commit",
+                "process_id": process.pid,
+                "consumer_source": str(
+                    (REPOSITORY_ROOT / "src/g15/pipeline/consumer.py").resolve()
+                ),
+                "markers": [list(expected_marker)],
+                "transaction_open": False,
+            }
+            assert process.poll() is None, "the real consumer must still be blocked"
+            before_kill = stored_snapshot(database)
+            assert before_kill["processed_chunks"] == (expected_marker,)
+            process.send_signal(signal.SIGKILL)
+            returncode = process.wait(timeout=30)
+        finally:
+            if process.poll() is None:  # pragma: no cover - defensive
+                process.kill()
+                process.wait(timeout=30)
 
     assert returncode == -signal.SIGKILL, (
         "the child must die from SIGKILL, not finish on its own "
@@ -287,16 +308,32 @@ def test_kill_dash_nine_replay_matches_an_uninterrupted_run(tmp_path: Path) -> N
     # exercising recovery rather than a run that never started.
     partial = stored_snapshot(database)
     processed_before = partial["processed_chunks"]
-    total_parts = len(
-        json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))["parts"]
-    )
+    assert partial == before_kill, "the checkpoint must prevent further shard writes"
+    assert processed_before == (expected_marker,)
     assert len(processed_before) >= 1, "the kill must land after a committed shard"
     assert (
         len(processed_before) < total_parts
     ), "the kill must land before the last shard; the consumer finished first"
 
-    consume_run(run_dir, database, load_consumer_config(CONFIGS / "consumer.yaml"))
+    replay = consume_run(
+        run_dir, database, load_consumer_config(CONFIGS / "consumer.yaml")
+    )
+    assert replay.shards_skipped == 1
+    assert replay.shards_processed == total_parts - 1
     assert stored_snapshot(database) == stored_snapshot(reference_db)
+    print(
+        json.dumps(
+            {
+                "checkpoint": "between_shard_transactions",
+                "returncode": returncode,
+                "committed_before_kill": len(processed_before),
+                "total_shards": total_parts,
+                "replayed_shards": replay.shards_processed,
+                "all_five_business_tables_match": True,
+            },
+            sort_keys=True,
+        )
+    )
 
 
 def stored_snapshot(database: Path) -> dict[str, object]:

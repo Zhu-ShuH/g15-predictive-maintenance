@@ -59,7 +59,10 @@ def _matches_type(value: object, kind: str) -> bool:
         return type(value) in (int, float) and math.isfinite(value)
     if kind == "texts":
         return isinstance(value, list) and all(type(item) is str for item in value)
-    return type(value) is {"int": int, "text": str, "object": dict, "list": list}[kind]
+    return (
+        type(value)
+        is {"int": int, "text": str, "object": dict, "list": list, "bool": bool}[kind]
+    )
 
 
 def _fields(
@@ -80,7 +83,7 @@ def _fields(
     return True
 
 
-def _schema_problems(body: dict[str, object]) -> list[str]:
+def _schema_problems(body: dict[str, object], *, streams: str | None) -> list[str]:
     """Enforce the public projection at every level before comparing row values.
 
     Exact object fields also exclude arbitrary nested reset/truth payloads. JSON
@@ -145,6 +148,8 @@ def _schema_problems(body: dict[str, object]) -> list[str]:
         spec["high_water_start_seq" if stream == "windows" else "high_water"] = (
             "nullable_int" if stream == "windows" else "nullable_object"
         )
+        if streams is not None:
+            spec["omitted"] = "bool"
         if not _fields(section, spec, stream, problems):
             continue
         if stream == "alarms" and isinstance(section.get("high_water"), dict):
@@ -208,16 +213,20 @@ def verify_response(
     *,
     first_page: bool = False,
     first_page_streams: tuple[str, ...] = (),
+    streams: str | None = None,
 ) -> list[str]:
-    """Check rows and page shape against the independent committed store.
+    """Check projection and values against SQLite and the caller's request.
 
-    An omitted cursor requests that stream's first page, including replays
-    of an already consumed stream. Callers must supply that request context.
+    Version and omission are derived only from ``streams`` supplied by the
+    caller. A response cannot opt itself out of item, state or schema checks.
     """
-    problems = _schema_problems(body)
+    if streams not in (None, "both", "windows", "alarms"):
+        return ["invalid requested streams"]
+    selected = ("windows", "alarms") if streams in (None, "both") else (streams,)
+    problems = _schema_problems(body, streams=streams)
     if problems:
         return problems
-    if body.get("query_contract_version") != "1":
+    if body.get("query_contract_version") != ("1" if streams is None else "2"):
         problems.append("query_contract_version mismatch")
     if body.get("run_id") != run_id or body.get("device_id") != device_id:
         problems.append("response run/device identity mismatch")
@@ -230,6 +239,18 @@ def verify_response(
             problems.append(f"{stream} sort mismatch")
         if section["page_size"] != page_size:
             problems.append(f"{stream} page_size differs from request")
+        if streams is not None and section["omitted"] is not (stream not in selected):
+            problems.append(f"{stream} omitted differs from request")
+        if stream not in selected:
+            high_key = "high_water_start_seq" if stream == "windows" else "high_water"
+            if (
+                section["items"]
+                or section["next_cursor"] is not None
+                or section[high_key] is not None
+            ):
+                problems.append(
+                    f"{stream} omitted projection must be empty with null cursor/high-water"
+                )
         if not isinstance(section, dict) or not isinstance(section.get("items"), list):
             return problems + [f"{stream}.items missing or malformed"]
         if len(section["items"]) > page_size:
@@ -276,7 +297,9 @@ def verify_response(
                 "start_seq DESC, rule_id DESC",
             ),
         ):
-            if not first_page and stream not in first_page_streams:
+            if stream not in selected or (
+                not first_page and stream not in first_page_streams
+            ):
                 continue
             expected = connection.execute(
                 f"SELECT {', '.join(keys)} FROM {table} "
@@ -288,6 +311,46 @@ def verify_response(
             ]
             if actual != expected:
                 problems.append(f"{stream} first-page keys/order mismatch")
+        window_high = (
+            _row(
+                connection,
+                "SELECT MAX(start_seq) FROM feature_windows WHERE run_id = ? AND device_id = ?",
+                (run_id, device_id),
+            )[0]
+            if "windows" in selected
+            else None
+        )
+        alarm_row = (
+            _row(
+                connection,
+                "SELECT start_seq, rule_id FROM alarms WHERE run_id = ? AND device_id = ? "
+                "ORDER BY start_seq DESC, rule_id DESC LIMIT 1",
+                (run_id, device_id),
+            )
+            if "alarms" in selected
+            else None
+        )
+        alarm_high = (
+            {"start_seq": alarm_row[0], "rule_id": alarm_row[1]} if alarm_row else None
+        )
+        state_high = _row(
+            connection,
+            "SELECT MAX(last_end_seq_exclusive) FROM alarm_states WHERE run_id = ? AND device_id = ?",
+            (run_id, device_id),
+        )[0]
+        expected_high = {
+            "window_start_seq": window_high,
+            "alarm": alarm_high,
+            "state_last_end_seq_exclusive": state_high,
+        }
+        if body["committed_high_water"] != expected_high:
+            problems.append(
+                "committed_high_water differs from selected committed store"
+            )
+        if body["windows"]["high_water_start_seq"] != window_high:
+            problems.append("windows high-water differs from selected committed store")
+        if body["alarms"]["high_water"] != alarm_high:
+            problems.append("alarms high-water differs from selected committed store")
         expected_states = connection.execute(
             "SELECT rule_id FROM alarm_states WHERE run_id = ? AND device_id = ? ORDER BY rule_id",
             (run_id, device_id),

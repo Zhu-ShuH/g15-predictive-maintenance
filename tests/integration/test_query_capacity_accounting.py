@@ -57,6 +57,25 @@ def measured_d0(tmp_path_factory):
     return report, sorted((root / "runs").glob("*/artifacts/results.sqlite"))
 
 
+@pytest.fixture(scope="module")
+def legacy_d0(tmp_path_factory):
+    root = tmp_path_factory.mktemp("query-capacity-legacy")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            runner,
+            "run_paging",
+            lambda *args, **kwargs: run_paging(*args, **kwargs, legacy=True),
+        )
+        report = runner.run_measurement(root / "runs")
+    write_evidence(root / "evidence", report)
+    return report, sorted((root / "runs").glob("*/artifacts/results.sqlite"))
+
+
+def _contexts_for(report, pages):
+    contexts = {row["request_id"]: row for row in report["paging"]["request_contexts"]}
+    return [contexts[body["request_id"]] for _, body, _ in pages]
+
+
 def test_d0_fixture_shape(measured_d0) -> None:
     _report, db_paths = measured_d0
     assert len(db_paths) == D0_DEVICE_COUNT
@@ -101,13 +120,12 @@ def test_real_http_quality_and_separate_measured_target(measured_d0) -> None:
     assert report["exit_code"] == (0 if reached else 1)
     assert report["paging"]["counts"] == {
         "windows": {"raw": 100, "consumed": 100, "discarded": 0},
-        "alarms": {"raw": 10, "consumed": 1, "discarded": 9},
+        "alarms": {"raw": 1, "consumed": 1, "discarded": 0},
     }
-    assert report["paging"]["raw_duplicate_free_claim"] is False
+    assert report["paging"]["raw_duplicate_free_claim"] is True
     assert report["paging"]["consumed_coverage_problems"] == []
-    assert (
-        "paging alarms total 10 != 1" in report["paging"]["raw_coverage_observations"]
-    )
+    assert report["paging"]["raw_coverage_observations"] == []
+    assert report["checks"]["raw_coverage"] == []
 
 
 @pytest.mark.parametrize(
@@ -144,21 +162,35 @@ def test_paging_coverage_rejects_count_key_and_order_damage(
         first["alarms"]["items"].clear()
     problems = verify_paging_coverage(pages)
     assert any(expected in problem for problem in problems), problems
-    if damage in {"repeat_page", "missing_page", "missing_alarm"}:
+    if damage in {"repeat_page", "missing_page"}:
         # Individually valid pages cannot establish cross-page completeness.
-        assert verify_all(pages, db_paths) == []
+        assert (
+            verify_all(pages, db_paths, request_contexts=_contexts_for(report, pages))
+            == []
+        )
     else:
         # The row oracle also rejects duplicates/order damage within one page.
-        assert verify_all(pages, db_paths)
+        assert verify_all(
+            pages, db_paths, request_contexts=_contexts_for(report, pages)
+        )
 
 
-def test_discarded_alarm_is_checked_in_raw_response(measured_d0) -> None:
-    report, db_paths = measured_d0
+def test_legacy_replays_block_quality_even_when_consumed_coverage_passes(legacy_d0):
+    report, _paths = legacy_d0
+    assert report["checks"]["raw_oracle"] == []
+    assert report["checks"]["consumed_coverage"] == []
+    assert report["checks"]["raw_coverage"] == ["paging alarms total 10 != 1"]
+    assert report["quality_passed"] is False
+    assert report["exit_code"] == 1
+
+
+def test_discarded_alarm_is_checked_in_raw_response(legacy_d0) -> None:
+    report, db_paths = legacy_d0
     responses = deepcopy(report["paging"]["raw_responses"])
     responses[1][1]["alarms"]["items"][0]["reason"] = "fabricated replay"
     replay = iter(responses)
     client = SimpleNamespace(query=lambda *args, **kwargs: next(replay)[:2])
-    walk = run_paging(client, 0, db_paths)
+    walk = run_paging(client, 0, db_paths, legacy=True)
     assert walk.raw[1][1]["alarms"]["items"][0]["reason"] == "fabricated replay"
     assert walk.consumed[1][1]["alarms"]["items"] == []
     assert verify_all(walk.consumed, db_paths) == []
@@ -192,9 +224,9 @@ def test_cli_uses_shared_coverage_and_persists_failure(tmp_path, monkeypatch) ->
     assert saved["checks"]["raw_oracle"] == []
     assert saved["checks"]["consumed_coverage"] == ["paging alarms total 2 != 1"]
     assert saved["paging"]["counts"]["alarms"] == {
-        "raw": 10,
+        "raw": 1,
         "consumed": 2,
-        "discarded": 9,
+        "discarded": 0,
     }
     assert len(saved["accounting"]["client_records"]) == 21
     assert saved["exit_code"] == 1
@@ -397,6 +429,7 @@ def test_success_response_requires_exact_application_event_sequence(
         raw=report["paging"]["raw_responses"],
         consumed=report["paging"]["consumed_responses"],
         discards=report["paging"]["discards"],
+        request_contexts=report["paging"]["request_contexts"],
     )
     results = report["serial_responses"] + report["concurrent_responses"]
     assert runner.validate_run(results, paging, db_paths, accounting, events)[
@@ -465,6 +498,12 @@ def test_wire_paging_checks_exhausted_first_pages_and_active_keys(
     monkeypatch.setattr(
         query_application.HealthQueryApplication, "query_authorized", wrong_response
     )
+    if damage.startswith("exhausted_"):
+        monkeypatch.setattr(
+            runner,
+            "run_paging",
+            lambda *args, **kwargs: run_paging(*args, **kwargs, legacy=True),
+        )
     report = runner.run_measurement(tmp_path / "runs")
     write_evidence(tmp_path / "evidence", report)
     assert damaged
@@ -513,6 +552,7 @@ def test_response_evidence_must_match_every_accounted_request(measured_d0, damag
         raw=deepcopy(report["paging"]["raw_responses"]),
         consumed=deepcopy(report["paging"]["consumed_responses"]),
         discards=deepcopy(report["paging"]["discards"]),
+        request_contexts=deepcopy(report["paging"]["request_contexts"]),
     )
     results = deepcopy(report["serial_responses"] + report["concurrent_responses"])
     assert runner.validate_run(
@@ -545,7 +585,11 @@ def test_response_evidence_must_match_every_accounted_request(measured_d0, damag
         not in (
             {"response_accounting", "raw_oracle"}
             if damage == "changed_retained_body"
-            else {"response_accounting"}
+            else (
+                {"response_accounting", "raw_oracle", "raw_coverage"}
+                if damage == "missing_raw_page"
+                else {"response_accounting"}
+            )
         )
     )
 
@@ -617,6 +661,7 @@ def test_accounting_rejects_unmatched_or_failed_server_terminal(measured_d0, dam
         raw=report["paging"]["raw_responses"],
         consumed=report["paging"]["consumed_responses"],
         discards=report["paging"]["discards"],
+        request_contexts=report["paging"]["request_contexts"],
     )
     verdict = runner.validate_run(
         report["serial_responses"] + report["concurrent_responses"],
