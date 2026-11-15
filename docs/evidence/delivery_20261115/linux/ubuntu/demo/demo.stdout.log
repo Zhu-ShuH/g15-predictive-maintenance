@@ -1,0 +1,13 @@
+[demo 1/4] 配置验证: g15 validate --config configs/sudden_fault.yaml
+Configuration OK: configs/sudden_fault.yaml (scenario=sudden_fault_001, total_points=1000000, chunk_points=102400, events=1)
+[demo 2/4] 仿真生产: g15 simulate --config configs/sudden_fault.yaml --output-root runs
+run_dir=runs/20261115T045359Z-sudden_fault_001-5c6af5
+[demo 2/4] 运行目录: runs/20261115T045359Z-sudden_fault_001-5c6af5
+[demo 3/4] 独立消费: g15 consume --run-dir runs/20261115T045359Z-sudden_fault_001-5c6af5 --config configs/consumer.yaml
+Consumed 20261115T045359Z-sudden_fault_001-5c6af5: device=DEV-004, shards_processed=10, shards_skipped=0, windows_written=3906, windows_dropped=64, alarms_written=10
+database: runs/20261115T045359Z-sudden_fault_001-5c6af5/artifacts/results.sqlite
+[demo 4/4] 生成报告: g15 report --run-dir runs/20261115T045359Z-sudden_fault_001-5c6af5
+report_json=runs/20261115T045359Z-sudden_fault_001-5c6af5/reports/summary.json
+report_markdown=runs/20261115T045359Z-sudden_fault_001-5c6af5/reports/summary.md
+[demo] 闭环完成。报告: runs/20261115T045359Z-sudden_fault_001-5c6af5/reports/summary.json 与 summary.md
+[demo] 验收门禁请运行: bash scripts/verify.sh

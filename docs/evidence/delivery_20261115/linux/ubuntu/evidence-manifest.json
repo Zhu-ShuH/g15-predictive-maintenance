@@ -1,0 +1,223 @@
+{
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "redacted": true,
+  "redaction_policy": "Private hostnames, real IP addresses, home paths and absolute temporary job paths replaced. Loopback addresses retained as protocol evidence. Raw originals remain in VM/local Temp; no runtime directory or dataset is published. Raw/public hashes distinguish copies.",
+  "files": [
+    {
+      "file": "environment.json",
+      "raw_source": "supplement/environment-sanitized.json",
+      "raw_sha256": "2bb35ea223a5408abac45607618d3dda27409629759f0133300ce1a557bcd650",
+      "public_sha256": "2bb35ea223a5408abac45607618d3dda27409629759f0133300ce1a557bcd650",
+      "redacted": false
+    },
+    {
+      "file": "dependency-lock.json",
+      "raw_source": "lock-check.json",
+      "raw_sha256": "e11701c517f09fa238942a9ec622e8a8a8523f1c694af3f5080fe52dca2779e5",
+      "public_sha256": "e11701c517f09fa238942a9ec622e8a8a8523f1c694af3f5080fe52dca2779e5",
+      "redacted": false
+    },
+    {
+      "file": "source-identity.txt",
+      "raw_source": "source-identity.txt",
+      "raw_sha256": "4b2e3a9a2411bc40177eaed859e03cc92e8f7d498c1822a5ca34103f59c3716a",
+      "public_sha256": "4b2e3a9a2411bc40177eaed859e03cc92e8f7d498c1822a5ca34103f59c3716a",
+      "redacted": false
+    },
+    {
+      "file": "config-ab.json",
+      "raw_source": "supplement/config-ab.json",
+      "raw_sha256": "829906731b791c86994977c9c52ccfe76cd3a4ced7a5f7d4f3c9207ae6348d45",
+      "public_sha256": "61c45174dd4a816303240f7b34707a46ac80571653602f46348e466e1292494e",
+      "redacted": true
+    },
+    {
+      "file": "core-and-fault-steps.json",
+      "raw_source": "supplement/steps.json",
+      "raw_sha256": "aab90ca38679dcd46363311c2e2c14752604951ad061123dd5b87f27bd868160",
+      "public_sha256": "09040b6ec22fdabef0a67619f7ce8c5ceacf5c16211a7ca0b7053e90c39b402e",
+      "redacted": true
+    },
+    {
+      "file": "supplement-summary.json",
+      "raw_source": "supplement/summary.json",
+      "raw_sha256": "0e2914e0ffcdd4d4d3b5e6026a598602e94bda89073820c52eec277233a9e529",
+      "public_sha256": "0e2914e0ffcdd4d4d3b5e6026a598602e94bda89073820c52eec277233a9e529",
+      "redacted": false
+    },
+    {
+      "file": "isolation-child-context.json",
+      "raw_source": "supplement/isolation-context.json",
+      "raw_sha256": "23cf65b758b25d19ffaae88f125af9c598960d79cf65912c0588e6f5763cbae5",
+      "public_sha256": "23cf65b758b25d19ffaae88f125af9c598960d79cf65912c0588e6f5763cbae5",
+      "redacted": false
+    },
+    {
+      "file": "five-table-reconciliation.json",
+      "raw_source": "supplement/five-table-reconciliation.json",
+      "raw_sha256": "07f13258977df1860091317d3726c9a34b094b71ed70907c3475bb998ecbd912",
+      "public_sha256": "07f13258977df1860091317d3726c9a34b094b71ed70907c3475bb998ecbd912",
+      "redacted": false
+    },
+    {
+      "file": "corrupted-shard-evidence.json",
+      "raw_source": "supplement/corrupted-shard-evidence.json",
+      "raw_sha256": "2504df37733cd6ac422d698e3c62c204598696ebdaf0b70e73f154bfca2aca5e",
+      "public_sha256": "2504df37733cd6ac422d698e3c62c204598696ebdaf0b70e73f154bfca2aca5e",
+      "redacted": false
+    },
+    {
+      "file": "retained-fault-tests.log",
+      "raw_source": "supplement/retained-fault-tests.stdout.log",
+      "raw_sha256": "0dc0c1f7911d218272c1ac561c506aa90dbfa63f21c9ebe825ae674aa6284900",
+      "public_sha256": "0dc0c1f7911d218272c1ac561c506aa90dbfa63f21c9ebe825ae674aa6284900",
+      "redacted": false
+    },
+    {
+      "file": "reports/healthy.json",
+      "raw_source": "supplement/healthy-summary.json",
+      "raw_sha256": "19d292d71d52eeda677d99f33870715b2e56f0607496ce891e0bad0ff5064ad8",
+      "public_sha256": "19d292d71d52eeda677d99f33870715b2e56f0607496ce891e0bad0ff5064ad8",
+      "redacted": false
+    },
+    {
+      "file": "reports/degradation.json",
+      "raw_source": "supplement/degradation-summary.json",
+      "raw_sha256": "f3ea687d5b1d2cd56bbabf289cee80f134f92fb192bbe14e4d34b42a1d0414a3",
+      "public_sha256": "f3ea687d5b1d2cd56bbabf289cee80f134f92fb192bbe14e4d34b42a1d0414a3",
+      "redacted": false
+    },
+    {
+      "file": "supplement-status.json",
+      "raw_source": "supplement-status.json",
+      "raw_sha256": "c9470912bfbfa0716d72816af93c5da8545b5e0832de86e637ea67eb811c325e",
+      "public_sha256": "c9470912bfbfa0716d72816af93c5da8545b5e0832de86e637ea67eb811c325e",
+      "redacted": false
+    },
+    {
+      "file": "kernel-network-selfcheck.json",
+      "raw_source": "supplement-seccomp-selfcheck.json",
+      "raw_sha256": "22e00e936399aaa336a8a756df018382aa71f14bb8c2a70a1c835ab3de68565a",
+      "public_sha256": "22e00e936399aaa336a8a756df018382aa71f14bb8c2a70a1c835ab3de68565a",
+      "redacted": false
+    },
+    {
+      "file": "acceptance/metadata.txt",
+      "raw_source": "g15-acceptance-16d57df485d4.EGHFJ4/metadata.txt",
+      "raw_sha256": "12ec61268671fa1c9cacb3a2a4d08ed877d4dd9f30f3f35be268972108adb393",
+      "public_sha256": "12ec61268671fa1c9cacb3a2a4d08ed877d4dd9f30f3f35be268972108adb393",
+      "redacted": false
+    },
+    {
+      "file": "acceptance/steps.tsv",
+      "raw_source": "g15-acceptance-16d57df485d4.EGHFJ4/steps.tsv",
+      "raw_sha256": "4b3deb51cf7615eaa4d92aeab3783cbba1ae85ad3ed8be74a0e9eb259227855b",
+      "public_sha256": "4b3deb51cf7615eaa4d92aeab3783cbba1ae85ad3ed8be74a0e9eb259227855b",
+      "redacted": false
+    },
+    {
+      "file": "acceptance/environment.txt",
+      "raw_source": "g15-acceptance-16d57df485d4.EGHFJ4/environment.txt",
+      "raw_sha256": "8c74adf9bf0250cbf89990cfd84a0e78daee0de6e3879b372f789c8d14a537e7",
+      "public_sha256": "f989b9baa4d952046a4c4216d34d8b41e4dce04638a7d048675d04b74c4b34dd",
+      "redacted": true
+    },
+    {
+      "file": "benchmark/run1.log",
+      "raw_source": "g15-acceptance-16d57df485d4.EGHFJ4/benchmark-artifacts/benchmark_Linux-x86_64_20261115T043020Z_Rc2taY/run1.log",
+      "raw_sha256": "60c772a0f7364b50654f4ef321546b4c58de30fe595332f1b50ecd4c63d409a7",
+      "public_sha256": "60c772a0f7364b50654f4ef321546b4c58de30fe595332f1b50ecd4c63d409a7",
+      "redacted": false
+    },
+    {
+      "file": "benchmark/run2.log",
+      "raw_source": "g15-acceptance-16d57df485d4.EGHFJ4/benchmark-artifacts/benchmark_Linux-x86_64_20261115T043020Z_Rc2taY/run2.log",
+      "raw_sha256": "f3807967762e28197834542077014b00ddb127c895779d69227f00e6fd780569",
+      "public_sha256": "f3807967762e28197834542077014b00ddb127c895779d69227f00e6fd780569",
+      "redacted": false
+    },
+    {
+      "file": "benchmark/run3.log",
+      "raw_source": "g15-acceptance-16d57df485d4.EGHFJ4/benchmark-artifacts/benchmark_Linux-x86_64_20261115T043020Z_Rc2taY/run3.log",
+      "raw_sha256": "3217f81bbcb7d8536ac41ca69fa7a99546c0d9f67fda444593e8fdded32ece55",
+      "public_sha256": "3217f81bbcb7d8536ac41ca69fa7a99546c0d9f67fda444593e8fdded32ece55",
+      "redacted": false
+    },
+    {
+      "file": "benchmark/steps.tsv",
+      "raw_source": "g15-acceptance-16d57df485d4.EGHFJ4/benchmark-artifacts/benchmark_Linux-x86_64_20261115T043020Z_Rc2taY/steps.tsv",
+      "raw_sha256": "a1b9e51e28c93f7000886bc3343728904ac24482bf6a058c3a6f809705e9cbc5",
+      "public_sha256": "a1b9e51e28c93f7000886bc3343728904ac24482bf6a058c3a6f809705e9cbc5",
+      "redacted": false
+    },
+    {
+      "file": "storage-observation.json",
+      "raw_source": "separate_read_only_storage_observation",
+      "raw_sha256": "36fb2ae6b2cd3049e17600cb096a4aa22f8dca2074a609f2f6be77fdd1f56a2d",
+      "public_sha256": "36fb2ae6b2cd3049e17600cb096a4aa22f8dca2074a609f2f6be77fdd1f56a2d",
+      "redacted": false,
+      "collected_after_raw_archive": true
+    },
+    {
+      "file": "demo/demo.stdout.log",
+      "raw_source": "separate_demo_archive/demo-v2-evidence/demo.stdout.log",
+      "raw_sha256": "1d9dd0d5defcc3bc411703de38226630a4708e82f07ebb844c6cd6b802195279",
+      "public_sha256": "1d9dd0d5defcc3bc411703de38226630a4708e82f07ebb844c6cd6b802195279",
+      "redacted": false
+    },
+    {
+      "file": "demo/demo.stderr.log",
+      "raw_source": "separate_demo_archive/demo-v2-evidence/demo.stderr.log",
+      "raw_sha256": "c0ae459e3415027ff4ab9dd209b15472d869479e89a5a88de75f83dd24bfe811",
+      "public_sha256": "c0ae459e3415027ff4ab9dd209b15472d869479e89a5a88de75f83dd24bfe811",
+      "redacted": false
+    },
+    {
+      "file": "demo/demo-result.json",
+      "raw_source": "separate_demo_archive/demo-v2-evidence/demo-result.json",
+      "raw_sha256": "2e357b26bd2b7893164ea9c5087703a4cd73ca2215f6a385149595fbf3125fe6",
+      "public_sha256": "2e357b26bd2b7893164ea9c5087703a4cd73ca2215f6a385149595fbf3125fe6",
+      "redacted": false
+    },
+    {
+      "file": "demo/report-summary.json",
+      "raw_source": "separate_demo_archive/demo-v2-evidence/report-summary.json",
+      "raw_sha256": "7c4c7d6cb833faf90450b32d2e33168bed4ae96a78338ef6a46ceeafe4df5bba",
+      "public_sha256": "7c4c7d6cb833faf90450b32d2e33168bed4ae96a78338ef6a46ceeafe4df5bba",
+      "redacted": false
+    },
+    {
+      "file": "demo/report-summary.md",
+      "raw_source": "separate_demo_archive/demo-v2-evidence/report-summary.md",
+      "raw_sha256": "02c16266b26971432905c309260597863897855275b3ec9b4a91e7da536f678a",
+      "public_sha256": "02c16266b26971432905c309260597863897855275b3ec9b4a91e7da536f678a",
+      "redacted": false
+    },
+    {
+      "file": "demo/kernel-network-selfcheck.json",
+      "raw_source": "separate_demo_archive/demo-v2-evidence/kernel-network-selfcheck.json",
+      "raw_sha256": "22e00e936399aaa336a8a756df018382aa71f14bb8c2a70a1c835ab3de68565a",
+      "public_sha256": "22e00e936399aaa336a8a756df018382aa71f14bb8c2a70a1c835ab3de68565a",
+      "redacted": false
+    },
+    {
+      "file": "demo/status.json",
+      "raw_source": "separate_demo_archive/demo-v2-evidence/status.json",
+      "raw_sha256": "c61c8c4ab8ef3da7a093eed69a2b57aec24cfb33aeb2874cdd984027af4077e4",
+      "public_sha256": "c61c8c4ab8ef3da7a093eed69a2b57aec24cfb33aeb2874cdd984027af4077e4",
+      "redacted": false
+    }
+  ],
+  "derived_summaries": {
+    "test-summary.json": "fc634de04e7b4bb1185efda7a29f6841ad0461d1714f692c7a86bed372c73ab9"
+  },
+  "separate_demo_archive_sha256": "47d16061c30bfd4d193ae0b4d96949fffa6b0cb3ef0a18d6bd516d67ee27e378",
+  "demo_first_attempt": {
+    "exit_code": 3,
+    "cause": "External adapter used a runs symlink; demo.sh find does not traverse that link. Retried in a new external archive execution copy with real empty runs; candidate script unchanged.",
+    "raw_result_sha256": "00efe405aff0bb61963decd8741c4c0062c272b2455994e1f4dec68e32f796d4",
+    "raw_stderr_sha256": "80164501416547694f4908bfbafd045ac623cfc78b143b5c154c435a17d69409",
+    "raw_stdout_sha256": "ef69f3f6849c290bb2a3d822e835829fe4be986f05bd6fe2ed3684dd1b30a19c"
+  }
+}

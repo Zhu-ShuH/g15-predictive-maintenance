@@ -1,0 +1,27 @@
+uname=Linux <REMOTE-RHEL> 5.14.0-611.5.1.el9_7.x86_64 #1 SMP PREEMPT_DYNAMIC Fri Oct 17 14:16:35 EDT 2025 x86_64 x86_64 x86_64 GNU/Linux
+--- /etc/os-release ---
+NAME="Red Hat Enterprise Linux"
+VERSION="9.7 (Plow)"
+ID="rhel"
+ID_LIKE="fedora"
+VERSION_ID="9.7"
+PLATFORM_ID="platform:el9"
+PRETTY_NAME="Red Hat Enterprise Linux 9.7 (Plow)"
+ANSI_COLOR="0;31"
+LOGO="fedora-logo-icon"
+CPE_NAME="cpe:/o:redhat:enterprise_linux:9::baseos"
+HOME_URL="https://www.redhat.com/"
+DOCUMENTATION_URL="https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9"
+BUG_REPORT_URL="https://issues.redhat.com/"
+
+REDHAT_BUGZILLA_PRODUCT="Red Hat Enterprise Linux 9"
+REDHAT_BUGZILLA_PRODUCT_VERSION=9.7
+REDHAT_SUPPORT_PRODUCT="Red Hat Enterprise Linux"
+REDHAT_SUPPORT_PRODUCT_VERSION="9.7"
+--- tool versions ---
+conda 26.10.0
+git version 2.56.1
+python=3.12.16
+numpy=2.5.4
+pyyaml=6.0.3
+No broken requirements found.

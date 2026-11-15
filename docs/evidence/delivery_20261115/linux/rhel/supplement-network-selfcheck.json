@@ -1,0 +1,1 @@
+{"interfaces": ["lo"], "isolation": "unprivileged_user_and_network_namespace", "loopback_tcp_roundtrip": true, "net_namespace": "net:[4026532869]", "outbound_connect_errno": 101, "route_rows": 0}

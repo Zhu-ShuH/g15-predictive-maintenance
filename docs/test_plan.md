@@ -155,7 +155,7 @@ G15_RUN_STRESS=1 python -m pytest -q -s tests/integration/test_stress_repeatabil
 
 | 项 | 口径 |
 |---|---|
-| 被测入口 | `python -m g15 benchmark --config configs/benchmark_1m.yaml`（C3 的薄子命令，内部调 `produce_run_detailed` 与 `verify_run`，不在 CLI 重写公式） |
+| 被测入口 | 正式三轮入口 `bash scripts/benchmark.sh`；单轮为 `python -m g15 benchmark --config configs/benchmark_1m.yaml --max-production-seconds 60`。薄子命令内部调 `produce_run_detailed` 与 `verify_run`，按未舍入生产时间严格小于60判定；省略新参数只是普通测量，不自动代表性能达标 |
 | 配置 | `1,000,000` 点、`seed=42`、`chunk_points=102400`、无注入事件 → 10 分片（`9x102400+78400`）、`2,000,000` 标量值 |
 | 独立进程 | 每轮一个全新进程、一个独立空运行目录；不复用上一轮的 `runs/` |
 | 三项数字分开 | ①生产窗口 `perf_counter`（完整生成、分片/真值写入、哈希、最后 `complete` 原子发布）②CLI 总墙钟（**进程外**计时，覆盖解释器启动）③生产结束后独立校验耗时 |

@@ -1,0 +1,29 @@
+{
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "platform": "rhel",
+  "full_pytest": {
+    "passed": 2075,
+    "skipped": 15,
+    "seconds": 213.45
+  },
+  "black": {
+    "scope": "src tests (scripts/verify.sh)",
+    "files_unchanged": 125
+  },
+  "pylint_score": 9.67,
+  "fault_suite": {
+    "passed": 11,
+    "seconds": 2.67
+  },
+  "full_acceptance_external_network_isolated": true,
+  "ubuntu_full_acceptance_network": null,
+  "benchmark_cli_wallclock": "unmeasured",
+  "benchmark_peak_rss": "unmeasured",
+  "query_capacity_or_100k_run": false,
+  "raw_verify_log_sha256": "5149de28a7f5455953b09229620e7fa5299e2fa40fe9f0329bcef6a43d29f47d",
+  "raw_fault_log_sha256": "331412f3a3b3b4436e2346f72cf4137c64aacea28f81521240ab429a4b75ee15",
+  "raw_source_before_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+  "raw_source_after_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+  "source_before_after_manifest_identical": true
+}

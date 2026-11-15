@@ -1,0 +1,228 @@
+{
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "platforms": {
+    "ubuntu": {
+      "environment": {
+        "architecture": "x86_64",
+        "kernel_release": "7.0.0-43-generic",
+        "python": "3.12.16",
+        "logical_cpus": 16,
+        "cpu_affinity_count": 16,
+        "cpu_model": "AMD Ryzen 7 7435H",
+        "memory": "MemTotal:       16323992 kB",
+        "os_release": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n"
+      },
+      "acceptance": {
+        "issue": "144",
+        "entrypoint": "bash scripts/acceptance.sh",
+        "source_sha": "16d57df485d428c02914bac372b61c67917857da",
+        "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+        "source_short_sha": "16d57df485d4",
+        "source_worktree_dirty": "false",
+        "formal_evidence_eligible": "true",
+        "source_snapshot_mode": "git_archive",
+        "started_utc": "2026-11-15T04:24:40Z",
+        "source_repository_name": "source",
+        "temporary_copy": "external_mktemp",
+        "runtime_tmp": "external_mktemp",
+        "snapshot_manifest_sha256": "3e790fffdb0904df1e18d70c622ff27a0da4a98821343f9f674a02be3a63a8c3",
+        "environment_capture_exit_code": "0",
+        "finished_utc": "2026-11-15T04:30:30Z",
+        "overall_exit_code": "0"
+      },
+      "tests": {
+        "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+        "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+        "platform": "ubuntu",
+        "full_pytest": {
+          "passed": 2075,
+          "skipped": 15,
+          "seconds": 231.41
+        },
+        "black": {
+          "scope": "src tests (scripts/verify.sh)",
+          "files_unchanged": 125
+        },
+        "pylint_score": 9.67,
+        "fault_suite": {
+          "passed": 11,
+          "seconds": 3.86
+        },
+        "full_acceptance_external_network_isolated": false,
+        "ubuntu_full_acceptance_network": "normal networking; additional core+retained fault process tree runs with kernel seccomp",
+        "benchmark_cli_wallclock": "unmeasured",
+        "benchmark_peak_rss": "unmeasured",
+        "query_capacity_or_100k_run": false,
+        "raw_verify_log_sha256": "becbb5900fa3eb8ba432ff80dc99dcf4f457a3608e69d6eca9460030da5dc66a",
+        "raw_fault_log_sha256": "44ea388ee71bdb3199964f84d630ace775ad6ad91aa768b8f92f8f9aaaaeea0a",
+        "raw_source_before_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+        "raw_source_after_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+        "source_before_after_manifest_identical": true
+      },
+      "production_seconds_all_rounds": [
+        0.30987831999664195,
+        0.27854423799726646,
+        0.20871937499759952
+      ],
+      "production_seconds_median": 0.27854423799726646,
+      "production_seconds_max": 0.30987831999664195,
+      "benchmark_all_cli_and_tee_zero": true,
+      "supplement": {
+        "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+        "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+        "source_snapshot_unchanged": true,
+        "source_files": 480,
+        "original_clone_clean": true,
+        "isolation": "seccomp",
+        "config_ab_passed": true,
+        "retained_fault_tests_exit_code": 0,
+        "five_tables_equal": true,
+        "all_steps_exit_zero": true,
+        "all_runtime_outside_vault": true,
+        "rss_measured": false
+      },
+      "kill_checkpoint": {
+        "all_five_business_tables_match": true,
+        "checkpoint": "between_shard_transactions",
+        "committed_before_kill": 1,
+        "replayed_shards": 6,
+        "returncode": -9,
+        "total_shards": 7
+      },
+      "config_ab": [
+        {
+          "case": "healthy",
+          "seed": 42,
+          "total_points": 65536,
+          "alarm_count": 0,
+          "first_half_health_median": 99.74264251277272,
+          "second_half_health_median": 99.71990104195999
+        },
+        {
+          "case": "degradation",
+          "seed": 42,
+          "total_points": 65536,
+          "alarm_count": 1,
+          "first_half_health_median": 83.37154688718988,
+          "second_half_health_median": 50.93358084850047
+        }
+      ],
+      "published_files": 31,
+      "evidence_manifest_sha256": "82198d4cb48af3cb67cd9c817101488da0534de08f07c83b04b48a32b55ca0e3"
+    },
+    "rhel": {
+      "environment": {
+        "architecture": "x86_64",
+        "kernel_release": "5.14.0-611.5.1.el9_7.x86_64",
+        "python": "3.12.16",
+        "logical_cpus": 4,
+        "cpu_affinity_count": 4,
+        "cpu_model": "AMD Ryzen 7 7435H",
+        "memory": "MemTotal:       16077068 kB",
+        "os_release": "NAME=\"Red Hat Enterprise Linux\"\nVERSION=\"9.7 (Plow)\"\nID=\"rhel\"\nID_LIKE=\"fedora\"\nVERSION_ID=\"9.7\"\nPLATFORM_ID=\"platform:el9\"\nPRETTY_NAME=\"Red Hat Enterprise Linux 9.7 (Plow)\"\nANSI_COLOR=\"0;31\"\nLOGO=\"fedora-logo-icon\"\nCPE_NAME=\"cpe:/o:redhat:enterprise_linux:9::baseos\"\nHOME_URL=\"https://www.redhat.com/\"\nDOCUMENTATION_URL=\"https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9\"\nBUG_REPORT_URL=\"https://issues.redhat.com/\"\n\nREDHAT_BUGZILLA_PRODUCT=\"Red Hat Enterprise Linux 9\"\nREDHAT_BUGZILLA_PRODUCT_VERSION=9.7\nREDHAT_SUPPORT_PRODUCT=\"Red Hat Enterprise Linux\"\nREDHAT_SUPPORT_PRODUCT_VERSION=\"9.7\"\n"
+      },
+      "acceptance": {
+        "issue": "144",
+        "entrypoint": "bash scripts/acceptance.sh",
+        "source_sha": "16d57df485d428c02914bac372b61c67917857da",
+        "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+        "source_short_sha": "16d57df485d4",
+        "source_worktree_dirty": "false",
+        "formal_evidence_eligible": "true",
+        "source_snapshot_mode": "git_archive",
+        "started_utc": "2026-11-15T04:34:47Z",
+        "source_repository_name": "source",
+        "temporary_copy": "external_mktemp",
+        "runtime_tmp": "external_mktemp",
+        "snapshot_manifest_sha256": "3e790fffdb0904df1e18d70c622ff27a0da4a98821343f9f674a02be3a63a8c3",
+        "environment_capture_exit_code": "0",
+        "finished_utc": "2026-11-15T04:40:12Z",
+        "overall_exit_code": "0"
+      },
+      "tests": {
+        "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+        "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+        "platform": "rhel",
+        "full_pytest": {
+          "passed": 2075,
+          "skipped": 15,
+          "seconds": 213.45
+        },
+        "black": {
+          "scope": "src tests (scripts/verify.sh)",
+          "files_unchanged": 125
+        },
+        "pylint_score": 9.67,
+        "fault_suite": {
+          "passed": 11,
+          "seconds": 2.67
+        },
+        "full_acceptance_external_network_isolated": true,
+        "ubuntu_full_acceptance_network": null,
+        "benchmark_cli_wallclock": "unmeasured",
+        "benchmark_peak_rss": "unmeasured",
+        "query_capacity_or_100k_run": false,
+        "raw_verify_log_sha256": "5149de28a7f5455953b09229620e7fa5299e2fa40fe9f0329bcef6a43d29f47d",
+        "raw_fault_log_sha256": "331412f3a3b3b4436e2346f72cf4137c64aacea28f81521240ab429a4b75ee15",
+        "raw_source_before_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+        "raw_source_after_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+        "source_before_after_manifest_identical": true
+      },
+      "production_seconds_all_rounds": [
+        0.2411544540009345,
+        0.23643303800054127,
+        0.22548573200037936
+      ],
+      "production_seconds_median": 0.23643303800054127,
+      "production_seconds_max": 0.2411544540009345,
+      "benchmark_all_cli_and_tee_zero": true,
+      "supplement": {
+        "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+        "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+        "source_snapshot_unchanged": true,
+        "source_files": 480,
+        "original_clone_clean": true,
+        "isolation": "netns",
+        "config_ab_passed": true,
+        "retained_fault_tests_exit_code": 0,
+        "five_tables_equal": true,
+        "all_steps_exit_zero": true,
+        "all_runtime_outside_vault": true,
+        "rss_measured": false
+      },
+      "kill_checkpoint": {
+        "all_five_business_tables_match": true,
+        "checkpoint": "between_shard_transactions",
+        "committed_before_kill": 1,
+        "replayed_shards": 6,
+        "returncode": -9,
+        "total_shards": 7
+      },
+      "config_ab": [
+        {
+          "case": "healthy",
+          "seed": 42,
+          "total_points": 65536,
+          "alarm_count": 0,
+          "first_half_health_median": 99.74264251277272,
+          "second_half_health_median": 99.71990104195999
+        },
+        {
+          "case": "degradation",
+          "seed": 42,
+          "total_points": 65536,
+          "alarm_count": 1,
+          "first_half_health_median": 83.37154688718988,
+          "second_half_health_median": 50.93358084850047
+        }
+      ],
+      "published_files": 33,
+      "evidence_manifest_sha256": "dccd6d15578a5823b2ad74737de6d58d563c377c02b1fc4219cba79a7fa2a8bf"
+    }
+  },
+  "scope": "Fixed product commit; full target acceptance and separately identified kernel network isolation evidence. Later documentation-only commits do not change the tested product inputs.",
+  "capacity_100k_executed": false,
+  "independent_acceptance_claim": false,
+  "human_approval_claim": false
+}

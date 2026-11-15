@@ -880,3 +880,11 @@ Gate 0 已执行未通过、停止继续修复/容量重测、AND=false、100k�
 上述为提交前工作树核验，最终精确提交CI和目标机运行记录在#177按执行时间追加；不能将定向故障注入的假计时当成真实百万点性能。实际候选的Ubuntu/RHEL完整验收与OS网络隔离以其固定源码、系统、命令、退出码、所有轮次和隔离范围为准，不预填目标机成绩。
 
 公开审批盘点是文档/时间线核查，未运行容量数据：105个已合PR的原记录、同head批准、后补批准和#170整包覆盖分别保存在[盘点](evidence/delivery_20261115/pr-review-inventory.json)与[补证](evidence/delivery_20261115/pr-review-followup.json)。它不构成新非作者Review或教师对历史例外的认可。本次新PR仍须真实非作者批准后合并。
+
+### 14.1 固定产品版本的目标机复证
+
+产品提交 `16d57df485d428c02914bac372b61c67917857da` / tree `ff341152a41daa68cbc3d08597649c386f3332ca` 已完成Ubuntu24.04.5与RHEL9.7新克隆、pp03 Python3.12.16锁依赖安装和完整acceptance。两系统均2075 passed/15 skipped（231.41s/213.45s）、Pylint9.67/10、故障套件11 passed；三轮生产原值分别为Ubuntu 0.30987831999664195 / 0.27854423799726646 / 0.20871937499759952秒、RHEL 0.2411544540009345 / 0.23643303800054127 / 0.22548573200037936秒，六轮时间与完整性门禁均通过。
+
+同产品树CI在Python3.11/3.12各2075 passed/15 skipped，Black125+21文件、Pylint9.67/10、文档0问题、身份hook20项通过。[质量JSON](evidence/delivery_20261115/candidate-quality.json)区分CI head与临时merge checkout，二者tree一致。后续仅补文档/证据，不把受测SHA追写成新的文档提交；最终PR head CI与正式Review另核。
+
+RHEL完整验收在netns内，外网内核不可达且允许loopback；Ubuntu整包正常网络，另以seccomp内核禁止AF_INET/AF_INET6验证核心与保留故障进程树，不冒称整包或整机断网。两系统公开seed42配置A/B完成；真实强杀returncode=-9、1/7片已提交、重放6片，五表逐内容与不中断基线一致，坏分片拒收后特征表0行。环境、全部轮次、命令、原始/公开摘要及外部适配器准备失败见[完整实测记录](delivery_validation_20261115.md)。RSS与CLI总墙钟本轮未测；未重启容量或原独立集。

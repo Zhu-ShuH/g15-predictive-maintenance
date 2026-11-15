@@ -1,0 +1,29 @@
+[
+  {
+    "candidate": "16d57df485d428c02914bac372b61c67917857da",
+    "tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+    "phase": "acceptance",
+    "exit_code": 127,
+    "finished_utc": "2026-11-15T04:24:37Z",
+    "explanation": "External adapter omitted existing /usr/sbin from PATH; ip unavailable. No business acceptance ran.",
+    "raw_status_sha256": "b8c56a89377b31efb6db88768476665ea8007a775e5e2e316f4c682a2c2b908f"
+  },
+  {
+    "candidate": "16d57df485d428c02914bac372b61c67917857da",
+    "tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+    "exit_code": 1,
+    "finished_utc": "2026-11-15T04:31:56Z",
+    "adapter_fix": "include_existing_sbin_for_ip",
+    "explanation": "External selfcheck read host-mounted sysfs interface view. Native outbound connect was ENETUNREACH and routes empty; stopped before business acceptance.",
+    "raw_status_sha256": "38b55b2eabd00d5680680dbe457fc299d74f2225e522379754a67b5653c3c331"
+  },
+  {
+    "candidate": "16d57df485d428c02914bac372b61c67917857da",
+    "tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+    "exit_code": 0,
+    "finished_utc": "2026-11-15T04:40:12Z",
+    "adapter_fix": "namespace_native_if_nameindex_instead_of_host_mounted_sysfs",
+    "explanation": "External adapter used native if_nameindex for the current namespace; full acceptance result.",
+    "raw_status_sha256": "ac795eeb55be221bb2015a1e145506230dfabd0ee947b07de1eb2d89a636bdbb"
+  }
+]

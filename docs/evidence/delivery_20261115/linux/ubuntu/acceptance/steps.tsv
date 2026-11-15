@@ -1,0 +1,4 @@
+step	started_utc	command	exit_code	tee_exit_code
+verify	2026-11-15T04:24:45Z	bash scripts/verify.sh 	0	0
+fault_injection	2026-11-15T04:30:10Z	conda run --no-capture-output -n pp03 python -m pytest -q tests/fault_injection/test_offline_operation.py tests/fault_injection/test_pipeline_faults.py 	0	0
+benchmark	2026-11-15T04:30:17Z	bash scripts/benchmark.sh 	0	0

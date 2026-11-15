@@ -1,0 +1,38 @@
+[
+  {
+    "case": "healthy",
+    "configuration": "configs/acceptance_healthy_seed42.yaml",
+    "seed": 42,
+    "public_committed_fixture": true,
+    "independent_validation_claim": false,
+    "config_sha256": "8c3f6351e3caa971387d8a8fa264db2860130ba820031b24bc571440b5f6e3eb",
+    "consumer_config_sha256": "8006460052a9b741c1595ec94e5c487e99e54931315bc87482c9b197a5adde8c",
+    "health_rules_sha256": "2b3a2763c72e32abd276b2d2617224b8bb941ca5d82807d2258db8d4c3f92d8b",
+    "run_directory": "<WORK>/core-runs/healthy/20261115T044237Z-acceptance_healthy_seed42-2a7052",
+    "report_sha256": "3a63ed55840a6bfcaabd05bf5d4b26df6d3761d044f805d37778cf0d43ebc9f0",
+    "total_points": 65536,
+    "alarm_count": 0,
+    "detection_rate": null,
+    "report_passed": true,
+    "first_half_health_median": 99.74264251277272,
+    "second_half_health_median": 99.71990104195999
+  },
+  {
+    "case": "degradation",
+    "configuration": "configs/acceptance_degradation_seed42.yaml",
+    "seed": 42,
+    "public_committed_fixture": true,
+    "independent_validation_claim": false,
+    "config_sha256": "337ddb1670868ae3d58a9ab47e0890898f5a4b728ddaf425a40c21e9afd80896",
+    "consumer_config_sha256": "8006460052a9b741c1595ec94e5c487e99e54931315bc87482c9b197a5adde8c",
+    "health_rules_sha256": "2b3a2763c72e32abd276b2d2617224b8bb941ca5d82807d2258db8d4c3f92d8b",
+    "run_directory": "<WORK>/core-runs/degradation/20261115T044239Z-acceptance_degradation_seed42-002ba4",
+    "report_sha256": "57a38b16a7629e105a3b0371e81aef1c1661d2e598a2b8a49381e5094175fcfe",
+    "total_points": 65536,
+    "alarm_count": 1,
+    "detection_rate": null,
+    "report_passed": true,
+    "first_half_health_median": 83.37154688718988,
+    "second_half_health_median": 50.93358084850047
+  }
+]

@@ -4,7 +4,7 @@
 
 > **收尾范围（2026-11-15）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms`、实时仿真、设备风险注入、控制台与通知功能均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。#56→#9 原独立流程按 [A 的范围决定](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6881950509)停止，原独立验收条件未满足；工程验证单独留证。#135 只读授权查询已交付。#136 Gate 0 已执行但未通过，已停止修复并关闭留档，100k 未验证。
 
-**正式交付准备 #177**：基线为 `1cc3d5f2b9ea0b6f5ceb969a2637844feeb410e1`。最终候选、实际复证、审批例外及成员/教师确认统一见[交付清单](docs/delivery_readiness_20261115.md)。既有工程通过不等于课程全部验收通过；本轮不重启原独立批次或100k容量工作。
+**正式交付准备 #177 / PR #178**：基线为 `1cc3d5f2b9ea0b6f5ceb969a2637844feeb410e1`，受测产品提交为 `16d57df485d428c02914bac372b61c67917857da`。双Linux新克隆验收及三轮百万点均已通过，禁网范围分别说明；正文见[交付报告](docs/final_delivery_report.md)，原始结果见[本轮实测](docs/delivery_validation_20261115.md)。新PR仍待最终head真实非作者批准；成员/教师事项见[交付清单](docs/delivery_readiness_20261115.md)。本轮不重启原独立批次或100k容量工作。
 
 ## 从全新克隆开始
 

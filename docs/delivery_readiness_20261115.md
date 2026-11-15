@@ -2,6 +2,8 @@
 
 2026-11-15，整改入口 [#177](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/177)。当前基线为 `1cc3d5f2b9ea0b6f5ceb969a2637844feeb410e1`；本次修订是待真实非作者批准的交付候选。工程实物已可运行，课程终验与个人表现不能由 Issue 关闭或 CI 状态代填。
 
+本轮A侧整改与运行复证已形成[交付报告](final_delivery_report.md)和[双系统实测](delivery_validation_20261115.md)：受测产品为 `16d57df485d428c02914bac372b61c67917857da`，Ubuntu/RHEL完整验收和三轮百万点均通过；禁网覆盖范围明确分列。后续文档/证据提交不改受测产品输入，不追写受测SHA。提交入口为[PR #178](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/178)，正式批准与以下人工事项仍待完成。
+
 ## 1. 现场展示主线
 
 先展示设备总览与实时采集，再演示风险注入、健康趋势、告警定位和报告闭环，最后用一页说明恢复、性能与贡献。12分钟/12页讲稿、演示步骤及回退路线见 [答辩手册](presentation.md)。报告正文使用能现场解释的真实结果；详细命令、环境、哈希、失败记录及范围处置放入备查材料。
@@ -15,7 +17,7 @@
 | 百万点性能门禁 | `benchmark --max-production-seconds 60` 使用未舍入生产耗时、严格小于60；非法计时或不达标退出4；省略参数保留普通测量 | CLI、脚本和 [接口](interface.md)；不修改健康评分或仿真轮廓 |
 | 三轮失败传播 | 三轮均保留，CLI/tee退出码逐轮登记；任何轮次或证据写入失败使总入口失败 | `scripts/benchmark.sh`，通过 [acceptance入口](acceptance_runbook.md)继续汇总 |
 | 测试与环境 | 时间边界、异常计时、默认兼容、完整性失败、真实Bash三轮编排；完整回归、质量检查与锁定依赖核验 | 实测数字见 [测试报告](test_report.md) §14和#177执行记录；测试产物在规划库之外 |
-| 双Linux和禁网复证 | 固定受测提交，在可用Ubuntu/RHEL环境执行完整验收；网络隔离方式与覆盖范围逐项记录 | 结果只在实际完成后追加；内核隔离、Python守卫、整机断网不能互相冒称 |
+| 双Linux和禁网复证 | 两系统新克隆完整验收、各三轮百万点、配置A/B和真实强杀对账均完成 | [实测](delivery_validation_20261115.md)：RHEL整包netns；Ubuntu整包正常网络、另做seccomp核心链路；不冒称整机断网 |
 | 交付文档 | README、验收、需求追踪、贡献、复盘和答辩统一当前状态；历史记录保留 | 四件套与七阶段入口见 [合规矩阵](compliance.md) |
 | 历史审批盘点 | 对基线前105个已合PR读取正式Review、head与合并时间，并核查整包覆盖和特殊时间线 | [原始盘点](evidence/delivery_20261115/pr-review-inventory.json)、[覆盖与时间线补证](evidence/delivery_20261115/pr-review-followup.json) |
 | 贡献与演练准备 | 按固定基线重算真实贡献与周频；准备成员确认和3必答1抽答评分表 | [贡献表](contributions.md)、[答辩手册](presentation.md)；A不代填本人姓名/确认或演练成绩 |

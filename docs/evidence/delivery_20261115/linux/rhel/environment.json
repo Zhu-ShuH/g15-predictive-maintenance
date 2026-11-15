@@ -1,0 +1,10 @@
+{
+  "architecture": "x86_64",
+  "kernel_release": "5.14.0-611.5.1.el9_7.x86_64",
+  "python": "3.12.16",
+  "logical_cpus": 4,
+  "cpu_affinity_count": 4,
+  "cpu_model": "AMD Ryzen 7 7435H",
+  "memory": "MemTotal:       16077068 kB",
+  "os_release": "NAME=\"Red Hat Enterprise Linux\"\nVERSION=\"9.7 (Plow)\"\nID=\"rhel\"\nID_LIKE=\"fedora\"\nVERSION_ID=\"9.7\"\nPLATFORM_ID=\"platform:el9\"\nPRETTY_NAME=\"Red Hat Enterprise Linux 9.7 (Plow)\"\nANSI_COLOR=\"0;31\"\nLOGO=\"fedora-logo-icon\"\nCPE_NAME=\"cpe:/o:redhat:enterprise_linux:9::baseos\"\nHOME_URL=\"https://www.redhat.com/\"\nDOCUMENTATION_URL=\"https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9\"\nBUG_REPORT_URL=\"https://issues.redhat.com/\"\n\nREDHAT_BUGZILLA_PRODUCT=\"Red Hat Enterprise Linux 9\"\nREDHAT_BUGZILLA_PRODUCT_VERSION=9.7\nREDHAT_SUPPORT_PRODUCT=\"Red Hat Enterprise Linux\"\nREDHAT_SUPPORT_PRODUCT_VERSION=\"9.7\"\n"
+}

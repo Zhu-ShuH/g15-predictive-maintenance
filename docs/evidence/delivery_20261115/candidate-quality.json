@@ -1,0 +1,71 @@
+{
+  "record_kind": "candidate_quality_evidence",
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "pull_request": 178,
+  "ci": {
+    "run_id": 43676377920,
+    "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43676377920",
+    "head_sha": "16d57df485d428c02914bac372b61c67917857da",
+    "checkout_sha": "525179577104e5f3629e91cdd50e4357eb1f765b",
+    "checkout_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "skeleton (3.11)",
+        "id": 132697324078,
+        "passed": 2075,
+        "skipped": 15,
+        "seconds": 157.7,
+        "pylint": 9.67
+      },
+      {
+        "name": "skeleton (3.12)",
+        "id": 132697324032,
+        "passed": 2075,
+        "skipped": 15,
+        "seconds": 179.97,
+        "pylint": 9.67
+      },
+      {
+        "name": "docs-references-advisory",
+        "id": 132697324072,
+        "issues": 0,
+        "conclusion": "success"
+      },
+      {
+        "name": "identity-hook",
+        "id": 132697323889,
+        "passed": 20,
+        "conclusion": "success"
+      }
+    ],
+    "black_files": 146,
+    "push_run": {
+      "id": 43676375247,
+      "conclusion": "success"
+    }
+  },
+  "windows": {
+    "scope": "Pre-commit working-tree execution; product source and tests match candidate. Evidence prose was completed after execution. Not represented as execution of a final documentation commit.",
+    "python": "3.12.15",
+    "passed": 2067,
+    "skipped": 23,
+    "seconds": 331.73,
+    "pylint": 9.68,
+    "black_files": 146,
+    "locked_applicable_packages": 21,
+    "pip_check_exit": 0,
+    "benchmark_targeted": {
+      "passed": 35,
+      "deselected": 54,
+      "seconds": 19.92
+    }
+  },
+  "limitations": [
+    "CI is not a human approval or target RHEL evidence.",
+    "Skipped platform and explicit opt-in tests are not counted as executed.",
+    "Benchmark regression uses injected timing values; performance measurements are recorded separately.",
+    "Formal non-author approval on the final PR head remains required."
+  ]
+}

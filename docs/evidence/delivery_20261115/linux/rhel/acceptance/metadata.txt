@@ -1,0 +1,16 @@
+issue=144
+entrypoint=bash scripts/acceptance.sh
+source_sha=16d57df485d428c02914bac372b61c67917857da
+source_tree=ff341152a41daa68cbc3d08597649c386f3332ca
+source_short_sha=16d57df485d4
+source_worktree_dirty=false
+formal_evidence_eligible=true
+source_snapshot_mode=git_archive
+started_utc=2026-11-15T04:34:47Z
+source_repository_name=source
+temporary_copy=external_mktemp
+runtime_tmp=external_mktemp
+snapshot_manifest_sha256=3e790fffdb0904df1e18d70c622ff27a0da4a98821343f9f674a02be3a63a8c3
+environment_capture_exit_code=0
+finished_utc=2026-11-15T04:40:12Z
+overall_exit_code=0

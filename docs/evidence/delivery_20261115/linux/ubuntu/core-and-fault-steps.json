@@ -1,0 +1,141 @@
+[
+  {
+    "name": "healthy-validate",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "validate",
+      "--config",
+      "<WORK>/supplement-source/configs/acceptance_healthy_seed42.yaml"
+    ],
+    "started_unix": 1794717218.9097595,
+    "wall_seconds": 0.2864772199973231,
+    "exit_code": 0
+  },
+  {
+    "name": "healthy-simulate",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "simulate",
+      "--config",
+      "<WORK>/supplement-source/configs/acceptance_healthy_seed42.yaml",
+      "--output-root",
+      "<WORK>/core-runs/healthy"
+    ],
+    "started_unix": 1794717219.1964982,
+    "wall_seconds": 0.32265005099907285,
+    "exit_code": 0
+  },
+  {
+    "name": "healthy-consume",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "consume",
+      "--run-dir",
+      "<WORK>/core-runs/healthy/20261115T043339Z-acceptance_healthy_seed42-341b9c",
+      "--config",
+      "<WORK>/supplement-source/configs/consumer.yaml"
+    ],
+    "started_unix": 1794717219.5197053,
+    "wall_seconds": 0.39001584200013895,
+    "exit_code": 0
+  },
+  {
+    "name": "healthy-report",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "report",
+      "--run-dir",
+      "<WORK>/core-runs/healthy/20261115T043339Z-acceptance_healthy_seed42-341b9c"
+    ],
+    "started_unix": 1794717219.9104102,
+    "wall_seconds": 0.2744534840021515,
+    "exit_code": 0
+  },
+  {
+    "name": "degradation-validate",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "validate",
+      "--config",
+      "<WORK>/supplement-source/configs/acceptance_degradation_seed42.yaml"
+    ],
+    "started_unix": 1794717220.1872628,
+    "wall_seconds": 0.357992657001887,
+    "exit_code": 0
+  },
+  {
+    "name": "degradation-simulate",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "simulate",
+      "--config",
+      "<WORK>/supplement-source/configs/acceptance_degradation_seed42.yaml",
+      "--output-root",
+      "<WORK>/core-runs/degradation"
+    ],
+    "started_unix": 1794717220.5459592,
+    "wall_seconds": 0.3323916990048019,
+    "exit_code": 0
+  },
+  {
+    "name": "degradation-consume",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "consume",
+      "--run-dir",
+      "<WORK>/core-runs/degradation/20261115T043340Z-acceptance_degradation_seed42-e1dcc0",
+      "--config",
+      "<WORK>/supplement-source/configs/consumer.yaml"
+    ],
+    "started_unix": 1794717220.8791177,
+    "wall_seconds": 0.3858617040023091,
+    "exit_code": 0
+  },
+  {
+    "name": "degradation-report",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "g15",
+      "report",
+      "--run-dir",
+      "<WORK>/core-runs/degradation/20261115T043340Z-acceptance_degradation_seed42-e1dcc0"
+    ],
+    "started_unix": 1794717221.2654974,
+    "wall_seconds": 0.3065647170005832,
+    "exit_code": 0
+  },
+  {
+    "name": "retained-fault-tests",
+    "command": [
+      "<WORK>/pp03/bin/python",
+      "-m",
+      "pytest",
+      "-s",
+      "-q",
+      "--basetemp",
+      "<WORK>/fault-runtime",
+      "--junitxml",
+      "<WORK>/evidence/supplement/fault-results.xml",
+      "tests/fault_injection/test_pipeline_faults.py::test_corrupted_shard_bytes_are_refused_by_the_digest",
+      "tests/fault_injection/test_pipeline_faults.py::test_kill_dash_nine_replay_matches_an_uninterrupted_run"
+    ],
+    "started_unix": 1794717221.5744817,
+    "wall_seconds": 1.31417236100242,
+    "exit_code": 0
+  }
+]

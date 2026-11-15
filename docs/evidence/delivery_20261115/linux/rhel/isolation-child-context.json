@@ -1,0 +1,6 @@
+{
+  "mode": "netns",
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "no_external_route": true
+}

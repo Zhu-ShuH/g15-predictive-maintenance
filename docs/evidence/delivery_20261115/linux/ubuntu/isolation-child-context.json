@@ -1,0 +1,19 @@
+{
+  "mode": "seccomp",
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "native_child_socket_checks": {
+    "2": {
+      "result": -1,
+      "errno": 1
+    },
+    "10": {
+      "result": -1,
+      "errno": 1
+    }
+  },
+  "kernel_state": [
+    "NoNewPrivs:\t1",
+    "Seccomp:\t2"
+  ]
+}

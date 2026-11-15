@@ -1,0 +1,14 @@
+{
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "source_snapshot_unchanged": true,
+  "source_files": 480,
+  "original_clone_clean": true,
+  "isolation": "seccomp",
+  "config_ab_passed": true,
+  "retained_fault_tests_exit_code": 0,
+  "five_tables_equal": true,
+  "all_steps_exit_zero": true,
+  "all_runtime_outside_vault": true,
+  "rss_measured": false
+}
