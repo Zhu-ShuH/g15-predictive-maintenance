@@ -24,10 +24,12 @@ G15_ACCEPTANCE_EVIDENCE_ROOT="$HOME/g15-evidence" \
 
 1. `scripts/verify.sh`：Black、Pylint≥8.5、全量 pytest、配置和闭环；
 2. 离线自检、坏数据与进程中断故障集合；
-3. `scripts/benchmark.sh`：百万点三轮基准。
+3. `scripts/benchmark.sh`：百万点三轮基准，每轮显式传入 `--max-production-seconds 60`，以生产器未舍入计时严格 `<60` 判断；完整性校验同时通过才算该轮成功。
 
 任一门禁失败，总入口退出 4；前置条件或路径错误退出 2；验收框架、临时目录或
 日志写入失败退出 5。每个子命令与 `tee` 的原始退出码仍写入 `steps.tsv`。
+
+`benchmark.sh` 不因某轮失败提前停止，三轮均保留stdout/stderr日志，并在独立、不会覆盖旧批次的 `runs/evidence/benchmark_*/steps.tsv` 中记录每轮 `command_exit`、`tee_exit` 和命令。任一轮命令或tee失败，基准脚本整体退出 `3`，总入口据此拒绝通过。缺失/非法计时、恰好60秒及超时都不能通过；省略门槛参数的普通CLI测量不构成正式性能验收。该目录由总入口归档到外置证据目录的 `benchmark-artifacts/`。
 
 ## 3. 证据判定
 

@@ -24,6 +24,7 @@ elapsed time; it never re-derives either number from wall-clock arithmetic.
 from __future__ import annotations
 
 import argparse
+import math
 import sqlite3
 import sys
 from pathlib import Path
@@ -65,6 +66,27 @@ DATABASE_RELATIVE_PATH = Path("artifacts") / "results.sqlite"
 #: creates a fresh ``<run_id>``, which keeps the runs independent without an
 #: extra flag (a new public option would be a section 13 change).
 BENCHMARK_OUTPUT_ROOT = Path("runs")
+
+
+def _positive_finite_seconds(value: str) -> float:
+    """Parse an explicit performance limit without accepting NaN or infinity."""
+    try:
+        seconds = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a finite positive number") from exc
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise argparse.ArgumentTypeError("must be a finite positive number")
+    return seconds
+
+
+def _valid_production_seconds(value: object) -> bool:
+    """Only a finite, nonnegative numeric producer measurement is evidence."""
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value) and value >= 0
+    except OverflowError:
+        return False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -158,6 +180,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     benchmark.add_argument("--config", required=True, help="path to benchmark_1m.yaml")
+    benchmark.add_argument(
+        "--max-production-seconds",
+        type=_positive_finite_seconds,
+        help=(
+            "optional strict upper limit for the producer's unrounded time; "
+            "equal, slower or invalid measurements exit 4 (default: measurement only)"
+        ),
+    )
 
     subparsers.add_parser("doctor", help="check the environment (not implemented)")
 
@@ -426,7 +456,9 @@ def _run_reset_alarms(  # pylint: disable=R0911
     return EXIT_OK
 
 
-def _run_benchmark(config_path: Path) -> int:
+def _run_benchmark(
+    config_path: Path, max_production_seconds: float | None = None
+) -> int:
     """Publish one benchmark run and report the separated cost figures.
 
     ``docs/acceptance.md`` section 2 keeps the four numbers apart, and this
@@ -444,11 +476,13 @@ def _run_benchmark(config_path: Path) -> int:
 
     Args:
         config_path: Benchmark scenario YAML.
+        max_production_seconds: Optional strict upper bound for production only.
 
     Returns:
         ``0`` on success, ``2`` for an invalid configuration, ``3`` for an I/O
         or schema failure, ``4`` when the independent verification ran and did
-        not pass, ``5`` for an unexpected error.
+        not pass, a production measurement is invalid or an explicit time limit
+        was not met, ``5`` for an unexpected error.
     """
     try:
         config = load_config(config_path)
@@ -482,7 +516,32 @@ def _run_benchmark(config_path: Path) -> int:
         f"{summary.total_points} points, status={verification.status}, "
         f"verification={'passed' if verification.passed else 'failed'}"
     )
-    print(f"production_window_seconds={summary.elapsed_seconds:.4f}")
+    elapsed = getattr(summary, "elapsed_seconds", None)
+    timing_valid = _valid_production_seconds(elapsed)
+    gate_passed = timing_valid and (
+        max_production_seconds is None or elapsed < max_production_seconds
+    )
+    print(
+        f"production_window_seconds={elapsed:.4f}"
+        if timing_valid
+        else "production_window_seconds=invalid"
+    )
+    try:
+        raw_elapsed = repr(elapsed)
+    except (TypeError, ValueError):
+        # For example, an invalid huge int can exceed Python's decimal limit.
+        raw_elapsed = f"<unrepresentable {type(elapsed).__name__}>"
+    print(f"production_window_seconds_raw={raw_elapsed}")
+    print(f"production_timing_valid={'true' if timing_valid else 'false'}")
+    print(f"max_production_seconds={max_production_seconds!r}")
+    print(
+        "production_gate_passed="
+        + (
+            "not_requested"
+            if max_production_seconds is None
+            else ("true" if gate_passed else "false")
+        )
+    )
     print(f"verification_seconds={verification.elapsed_seconds:.4f}")
     print("cli_wallclock_seconds=unmeasured")
     print(f"parts={summary.part_count}")
@@ -500,6 +559,17 @@ def _run_benchmark(config_path: Path) -> int:
         print(
             "error: independent verification of the produced run did not pass: "
             + ", ".join(verification.failures),
+            file=sys.stderr,
+        )
+        return EXIT_ACCEPTANCE
+
+    if not timing_valid:
+        print("error: invalid producer elapsed_seconds measurement", file=sys.stderr)
+        return EXIT_ACCEPTANCE
+    if not gate_passed:
+        print(
+            f"error: production time {elapsed!r} must be strictly less than "
+            f"{max_production_seconds!r} seconds",
             file=sys.stderr,
         )
         return EXIT_ACCEPTANCE
@@ -538,7 +608,7 @@ def main(argv: list[str] | None = None) -> int:
                 confirmed=args.yes,
             )
         if args.command == "benchmark":
-            return _run_benchmark(Path(args.config))
+            return _run_benchmark(Path(args.config), args.max_production_seconds)
     except Exception as exc:  # pylint: disable=broad-except
         # Section 10 maps an unexpected failure to 5; a traceback would only
         # help the developer, not whoever ran the command.

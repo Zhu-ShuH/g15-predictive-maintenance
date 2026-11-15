@@ -565,6 +565,7 @@ def test_benchmark_help_documents_its_argument() -> None:
     assert "--config" in result.stdout
     assert "CLI total wall clock" in result.stdout
     assert "/usr/bin/time" in result.stdout
+    assert "--max-production-seconds" in result.stdout
 
 
 def test_benchmark_requires_its_config() -> None:
@@ -647,7 +648,7 @@ def test_benchmark_reports_a_missing_config(tmp_path: Path) -> None:
 
 
 def _run_injected_benchmark(
-    tmp_path: Path, config: Path, body: str
+    tmp_path: Path, config: Path, body: str, *extra_args: str
 ) -> subprocess.CompletedProcess[str]:
     """Run ``benchmark`` through a launcher that swaps ``cli.verify_run``.
 
@@ -673,6 +674,7 @@ def _run_injected_benchmark(
             "benchmark",
             "--config",
             str(config),
+            *extra_args,
         ],
         capture_output=True,
         text=True,
@@ -748,6 +750,131 @@ def test_benchmark_exits_five_on_an_unexpected_error(
     assert result.returncode == 5
     assert "unexpected" in result.stderr
     assert "RuntimeError" in result.stderr
+
+
+def _injected_production_time(expression: str) -> str:
+    """Override only the timing receipt after a real small production run."""
+    replacement = (
+        "    values.pop('elapsed_seconds')\n"
+        if expression == "missing"
+        else f"    values['elapsed_seconds'] = {expression}\n"
+    )
+    return (
+        "from dataclasses import asdict\n"
+        "from types import SimpleNamespace\n"
+        "original_produce = cli.produce_run_detailed\n"
+        "def timed(*args, **kwargs):\n"
+        "    values = asdict(original_produce(*args, **kwargs))\n"
+        + replacement
+        + "    return SimpleNamespace(**values)\n"
+        "cli.produce_run_detailed = timed\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "elapsed,expected", [("59.99999", 0), ("60.0", 4), ("60.00001", 4)]
+)
+def test_benchmark_limit_uses_unrounded_producer_time(
+    small_benchmark_config: Path, tmp_path: Path, elapsed: str, expected: int
+) -> None:
+    """All three round to 60.0000; only the actual sub-60 measurement passes."""
+    result = _run_injected_benchmark(
+        tmp_path,
+        small_benchmark_config,
+        _injected_production_time(elapsed),
+        "--max-production-seconds",
+        "60",
+    )
+    assert result.returncode == expected, result.stderr
+    assert text_field(result.stdout, "production_window_seconds") == "60.0000"
+    assert float(text_field(result.stdout, "production_window_seconds_raw")) == float(
+        elapsed
+    )
+    assert text_field(result.stdout, "production_gate_passed") == (
+        "true" if expected == 0 else "false"
+    )
+    assert text_field(result.stdout, "verification_passed") == "true"
+
+
+@pytest.mark.parametrize(
+    "elapsed",
+    [
+        "missing",
+        "None",
+        "'59.0'",
+        "True",
+        "float('nan')",
+        "float('inf')",
+        "float('-inf')",
+        "-0.1",
+        "10**400",
+        "10**10000",
+    ],
+)
+def test_benchmark_invalid_timing_never_passes(
+    small_benchmark_config: Path, tmp_path: Path, elapsed: str
+) -> None:
+    result = _run_injected_benchmark(
+        tmp_path,
+        small_benchmark_config,
+        _injected_production_time(elapsed),
+        "--max-production-seconds",
+        "60",
+    )
+    assert result.returncode == 4, result.stderr
+    assert "invalid producer elapsed_seconds" in result.stderr
+    assert text_field(result.stdout, "production_timing_valid") == "false"
+    assert text_field(result.stdout, "production_gate_passed") == "false"
+    assert text_field(result.stdout, "verification_passed") == "true"
+
+
+@pytest.mark.parametrize(
+    "limit", ["0", "-1", "nan", "inf", "-inf", "true", "text", "1e9999"]
+)
+def test_benchmark_invalid_limit_is_an_argument_error_without_production(
+    tmp_path: Path, limit: str
+) -> None:
+    result = run_cli(
+        "benchmark",
+        "--config",
+        str(BENCHMARK_CONFIG),
+        f"--max-production-seconds={limit}",
+        cwd=tmp_path,
+    )
+    assert result.returncode == 2
+    assert "finite positive number" in result.stderr
+    assert not (tmp_path / "runs").exists()
+
+
+def test_benchmark_without_limit_retains_measurement_only_behavior(
+    small_benchmark_config: Path, tmp_path: Path
+) -> None:
+    result = _run_injected_benchmark(
+        tmp_path, small_benchmark_config, _injected_production_time("61.0")
+    )
+    assert result.returncode == 0, result.stderr
+    assert text_field(result.stdout, "production_window_seconds_raw") == "61.0"
+    assert text_field(result.stdout, "production_gate_passed") == "not_requested"
+
+
+def test_verification_failure_survives_invalid_production_timing(
+    small_benchmark_config: Path, tmp_path: Path
+) -> None:
+    body = _injected_production_time("None") + (
+        "original_verify = cli.verify_run\n"
+        "def failed_verify(*args, **kwargs):\n"
+        "    values = asdict(original_verify(*args, **kwargs))\n"
+        "    values.update(passed=False, failures=('injected.hash_mismatch',))\n"
+        "    return SimpleNamespace(**values)\n"
+        "cli.verify_run = failed_verify\n"
+    )
+    result = _run_injected_benchmark(
+        tmp_path, small_benchmark_config, body, "--max-production-seconds", "60"
+    )
+    assert result.returncode == 4, result.stderr
+    assert "independent verification" in result.stderr
+    assert "injected.hash_mismatch" in result.stderr
+    assert text_field(result.stdout, "verification_passed") == "false"
 
 
 # --------------------------------------------------------------------------- #

@@ -4,6 +4,8 @@
 
 > **收尾范围（2026-11-15）**：`validate → simulate → consume → report` 主链、`benchmark`、`reset-alarms`、实时仿真、设备风险注入、控制台与通知功能均已进入 main。`g15 verify` / `g15 doctor` 两个 Python 子命令仍未接线；Shell 入口 `scripts/verify.sh` 已实现质量、测试、配置和闭环门禁。#56→#9 原独立流程按 [A 的范围决定](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6881950509)停止，原独立验收条件未满足；工程验证单独留证。#135 只读授权查询已交付。#136 Gate 0 已执行但未通过，已停止修复并关闭留档，100k 未验证。
 
+**正式交付准备 #177**：基线为 `1cc3d5f2b9ea0b6f5ceb969a2637844feeb410e1`。最终候选、实际复证、审批例外及成员/教师确认统一见[交付清单](docs/delivery_readiness_20261115.md)。既有工程通过不等于课程全部验收通过；本轮不重启原独立批次或100k容量工作。
+
 ## 从全新克隆开始
 
 目标环境为 Ubuntu 24.04 LTS 或 RHEL 9，Conda `pp03` / Python 3.12。安装阶段需要取得锁定依赖；安装完成后，运行阶段不依赖网络、云端 AI 或外部服务。
@@ -91,10 +93,13 @@ G15_ACCEPTANCE_EVIDENCE_ROOT="$HOME/g15-evidence" bash scripts/acceptance.sh
 - [测试计划](docs/test_plan.md)、[测试报告](docs/test_report.md)。
 - [部署说明](docs/deployment.md)、[运行手册](docs/operations.md)、[新人上手](docs/onboarding.md)。
 - [答辩材料](docs/presentation.md)、[复盘](docs/retrospective.md)、[贡献记录](docs/contributions.md)。
+- [正式交付清单](docs/delivery_readiness_20261115.md)：七阶段/四件套、真实执行、审批与个人/教师条件。
 
 ## 开发与合并
 
 遵循 Issue → feature/fix/test/docs 分支 → PR → 至少 1 位非作者 Approve → CI → 合并；禁止直接向 `main` 推送。质量命令：
+
+历史 #175/#176 无正式Review，A的接收不是教师豁免；全仓审批分类、其他整包覆盖路径和先合后审记录见[合规说明](docs/compliance.md#6-177-审批贡献与范围确认)。补审不倒填历史，本轮新PR必须真实非作者对最终head Approve且CI通过后合并。下面是检查命令，不表示本页已运行：
 
 ```sh
 python -m black --check src tests

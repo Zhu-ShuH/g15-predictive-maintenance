@@ -1,0 +1,3836 @@
+{
+  "audited_at_utc": "2026-11-15T04:05:30.773Z",
+  "baseline": "1cc3d5f2b9ea0b6f5ceb969a2637844feeb410e1",
+  "scope": "105 merged PR snapshots; raw review states and timestamps; classification is evidence inventory, not a claim of course compliance",
+  "limitations": [
+    "PR author is an identity proxy, not a full audit of all code authors",
+    "Current DISMISSED states alone do not reconstruct state at merge",
+    "Nested integration PRs may supply reviewed coverage; inspect before classifying as unreviewed code",
+    "Approvals after merge do not satisfy prior-approval history"
+  ],
+  "pull_requests": [
+    {
+      "number": 176,
+      "title": "docs: finalize engineering validation and preserve independent acceptance limits",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/176",
+      "author": "Zhu-ShuH",
+      "head": "acde0198dc0d26355d896bcfcd139ecb6f324246",
+      "merged_at": "2026-11-14T18:26:02Z",
+      "reviews": [],
+      "classification": "no_recorded_premerge_nonauthor_approval",
+      "page_limit_hit": false
+    },
+    {
+      "number": 175,
+      "title": "test: implement #56 selection ledger and final validation tooling",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/175",
+      "author": "Zhu-ShuH",
+      "head": "2892945949353d3a20f26d54369e0928cda0792a",
+      "merged_at": "2026-11-14T17:55:09Z",
+      "reviews": [],
+      "classification": "no_recorded_premerge_nonauthor_approval",
+      "page_limit_hit": false
+    },
+    {
+      "number": 174,
+      "title": "docs(#56): 更新当前排除集、独立入口与执行前门禁",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/174",
+      "author": "Zhu-ShuH",
+      "head": "8b03f876605959957e7decc8c5931142a9bd66f8",
+      "merged_at": "2026-11-14T15:15:13Z",
+      "reviews": [
+        {
+          "id": 5905206187,
+          "state": "APPROVED",
+          "commit_id": "8b03f876605959957e7decc8c5931142a9bd66f8",
+          "submitted_at": "2026-11-14T15:06:03Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 173,
+      "title": "fix(notifications): 在业务事务前恢复只读 WAL 写句柄",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/173",
+      "author": "Zhu-ShuH",
+      "head": "faf62208b6d826a93407dca556ba15cf2c6d6e50",
+      "merged_at": "2026-11-14T15:13:06Z",
+      "reviews": [
+        {
+          "id": 5905205953,
+          "state": "APPROVED",
+          "commit_id": "faf62208b6d826a93407dca556ba15cf2c6d6e50",
+          "submitted_at": "2026-11-14T15:06:02Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 171,
+      "title": "feat(live): 支持无时限仿真与指定设备风险控制",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/171",
+      "author": "Zhu-ShuH",
+      "head": "c6612016f28a4c29fa06bc0b69b490cb36a70b36",
+      "merged_at": "2026-11-14T13:59:41Z",
+      "reviews": [
+        {
+          "id": 5904566483,
+          "state": "APPROVED",
+          "commit_id": "c6612016f28a4c29fa06bc0b69b490cb36a70b36",
+          "submitted_at": "2026-11-14T13:40:48Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 170,
+      "title": "feat(platform): 集成诊断视图、手机与邮件通知、工业工作台",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/170",
+      "author": "Zhu-ShuH",
+      "head": "da4e16908defc7ea67d546213153aaa6846ded5f",
+      "merged_at": "2026-11-14T08:51:41Z",
+      "reviews": [
+        {
+          "id": 5902026335,
+          "state": "APPROVED",
+          "commit_id": "64c3053c454bad92c0e286b08a6f3d9caed9315d",
+          "submitted_at": "2026-11-14T05:45:57Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5903001870,
+          "state": "DISMISSED",
+          "commit_id": "d568971d96278c552f429010a572016c7b79e8c5",
+          "submitted_at": "2026-11-14T08:07:57Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5903247988,
+          "state": "APPROVED",
+          "commit_id": "da4e16908defc7ea67d546213153aaa6846ded5f",
+          "submitted_at": "2026-11-14T08:45:51Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 169,
+      "title": "feat(notifications): 支持163邮件报告与通知设置删除",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/169",
+      "author": "Zhu-ShuH",
+      "head": "33eacc0b4418d2d9f85856a8043d0a6c777020c8",
+      "merged_at": "2026-11-14T08:51:43Z",
+      "reviews": [],
+      "classification": "no_recorded_premerge_nonauthor_approval",
+      "page_limit_hit": false
+    },
+    {
+      "number": 168,
+      "title": "feat(notifications): 最新版控制台增加红色事件阈值手机通知",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/168",
+      "author": "Zhu-ShuH",
+      "head": "98712ea650a6cccc9039b32bfd6695726b33d762",
+      "merged_at": "2026-11-14T08:51:43Z",
+      "reviews": [],
+      "classification": "no_recorded_premerge_nonauthor_approval",
+      "page_limit_hit": false
+    },
+    {
+      "number": 165,
+      "title": "fix(Gate0): 选流分页、连接准备与无延后读取的selector调度",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/165",
+      "author": "Zhu-ShuH",
+      "head": "36f67fcc553c532233c9ab0b8f429cd09f629dee",
+      "merged_at": "2026-11-13T04:51:10Z",
+      "reviews": [
+        {
+          "id": 5886052333,
+          "state": "APPROVED",
+          "commit_id": "36f67fcc553c532233c9ab0b8f429cd09f629dee",
+          "submitted_at": "2026-11-13T04:25:31Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5886101128,
+          "state": "APPROVED",
+          "commit_id": "36f67fcc553c532233c9ab0b8f429cd09f629dee",
+          "submitted_at": "2026-11-13T04:30:26Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 164,
+      "title": "feat(console): 增加多视图诊断、五维解释与统一视觉",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/164",
+      "author": "Zhu-ShuH",
+      "head": "fa5eb3a795e39306e5d31741046a6f9dd0218d47",
+      "merged_at": "2026-11-14T08:51:43Z",
+      "reviews": [
+        {
+          "id": 5886052142,
+          "state": "APPROVED",
+          "commit_id": "f9085d662c97b8e80ba09dabea81d01e1f65a3f7",
+          "submitted_at": "2026-11-13T04:25:29Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5886129526,
+          "state": "COMMENTED",
+          "commit_id": "f9085d662c97b8e80ba09dabea81d01e1f65a3f7",
+          "submitted_at": "2026-11-13T04:33:15Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5903001689,
+          "state": "DISMISSED",
+          "commit_id": "fa5eb3a795e39306e5d31741046a6f9dd0218d47",
+          "submitted_at": "2026-11-14T08:07:56Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_earlier_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 161,
+      "title": "feat(live): 十台仿真设备持续采集分析接入控制台（#160）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/161",
+      "author": "Zhu-ShuH",
+      "head": "fd6b7e302b16dbaed84278649cd5a8a3ec0d9e1c",
+      "merged_at": "2026-11-14T08:21:53Z",
+      "reviews": [
+        {
+          "id": 5886051568,
+          "state": "DISMISSED",
+          "commit_id": "c85154113c24c4643ecd6e0bfa96ff11d6f20cc3",
+          "submitted_at": "2026-11-13T04:25:26Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5886144831,
+          "state": "COMMENTED",
+          "commit_id": "c85154113c24c4643ecd6e0bfa96ff11d6f20cc3",
+          "submitted_at": "2026-11-13T04:34:43Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5903001282,
+          "state": "APPROVED",
+          "commit_id": "fd6b7e302b16dbaed84278649cd5a8a3ec0d9e1c",
+          "submitted_at": "2026-11-14T08:07:53Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 159,
+      "title": "feat(console): 增加真实查询驱动的深色设备健康控制台（#158）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/159",
+      "author": "Zhu-ShuH",
+      "head": "4fa2d693757d2d8ab4a6b64d681c74c0e6fb3557",
+      "merged_at": "2026-11-14T07:06:27Z",
+      "reviews": [
+        {
+          "id": 5886051376,
+          "state": "DISMISSED",
+          "commit_id": "7144b37ce6a0861e1d01b63c5108482c7fe51798",
+          "submitted_at": "2026-11-13T04:25:25Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5902372462,
+          "state": "APPROVED",
+          "commit_id": "4fa2d693757d2d8ab4a6b64d681c74c0e6fb3557",
+          "submitted_at": "2026-11-14T06:43:33Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 157,
+      "title": "fix(capacity): 修复查询契约漏检并补三平台分钟证据（#136）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/157",
+      "author": "Zhu-ShuH",
+      "head": "fa45093499b73e0376afb42a14bc189aa9d5ce31",
+      "merged_at": "2026-11-13T14:25:08Z",
+      "reviews": [
+        {
+          "id": 5867462707,
+          "state": "COMMENTED",
+          "commit_id": "5d4e0428c7e077d2061e3cba386fcb466a056e60",
+          "submitted_at": "2026-11-12T01:04:53Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5869062668,
+          "state": "DISMISSED",
+          "commit_id": "2bcd639668c679c2b5f01ad10e6888fe454d3f00",
+          "submitted_at": "2026-11-12T04:19:46Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5869226274,
+          "state": "DISMISSED",
+          "commit_id": "0632e32f752119ec9a32da854b363a729490a8aa",
+          "submitted_at": "2026-11-12T04:40:32Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5869358104,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0632e32f752119ec9a32da854b363a729490a8aa",
+          "submitted_at": "2026-11-12T04:59:00Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5873323270,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0b043093e61170dc4719efbbf37ee56067ee4033",
+          "submitted_at": "2026-11-12T11:08:05Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5885915137,
+          "state": "DISMISSED",
+          "commit_id": "a10cab2f56cdd109632135ee21645b5c3b9ac064",
+          "submitted_at": "2026-11-13T04:11:24Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5886041102,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "a10cab2f56cdd109632135ee21645b5c3b9ac064",
+          "submitted_at": "2026-11-13T04:24:22Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5890180951,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0d97f51c0053fa8c259fd00a185c048dd76d4137",
+          "submitted_at": "2026-11-13T11:30:30Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5892387594,
+          "state": "APPROVED",
+          "commit_id": "fa45093499b73e0376afb42a14bc189aa9d5ce31",
+          "submitted_at": "2026-11-13T14:07:12Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 155,
+      "title": "docs(#56): seed 选择方法（方法层面）+ 接触声明与 C4 三项 P3 纠偏",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/155",
+      "author": "kittywent",
+      "head": "71ce61924d6497c00e82a2f7b0dbd42d71cee93c",
+      "merged_at": "2026-11-14T08:04:42Z",
+      "reviews": [
+        {
+          "id": 5861431830,
+          "state": "DISMISSED",
+          "commit_id": "d9c74da89f444dcab05c4f048c28a81d5fa56756",
+          "submitted_at": "2026-11-11T15:47:38Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5867231117,
+          "state": "DISMISSED",
+          "commit_id": "e8179d72a2e1df5b3c61d7783c5258f611cf30ad",
+          "submitted_at": "2026-11-12T00:34:41Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5867387225,
+          "state": "COMMENTED",
+          "commit_id": "0c4c3a8dd44d48ac26d68377aa6da225b1af133e",
+          "submitted_at": "2026-11-12T00:55:01Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5873324887,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0c4c3a8dd44d48ac26d68377aa6da225b1af133e",
+          "submitted_at": "2026-11-12T11:08:13Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5886043881,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "9a6c15eecefd69795e08bfe044d5dafb19c318ff",
+          "submitted_at": "2026-11-13T04:24:39Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5890019202,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "ea5b25c1bd1ffe56454018bcf4362d2cadcb261c",
+          "submitted_at": "2026-11-13T11:18:13Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5902137529,
+          "state": "DISMISSED",
+          "commit_id": "14997761cebf8b0109119e88a5fe6d1fb01d0f27",
+          "submitted_at": "2026-11-14T06:05:54Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5905751988,
+          "state": "APPROVED",
+          "commit_id": "71ce61924d6497c00e82a2f7b0dbd42d71cee93c",
+          "submitted_at": "2026-11-14T16:19:19Z",
+          "reviewer": "wzs-1234"
+        }
+      ],
+      "classification": "dismissed_history_needs_timeline",
+      "page_limit_hit": false
+    },
+    {
+      "number": 154,
+      "title": "docs(56): 修正保留集测试准备与首次运行的冻结顺序",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/154",
+      "author": "Zhu-ShuH",
+      "head": "8aaba3c90de53c61c9104df7ffb29d9485bc269a",
+      "merged_at": "2026-11-11T14:59:11Z",
+      "reviews": [
+        {
+          "id": 5860688330,
+          "state": "APPROVED",
+          "commit_id": "8aaba3c90de53c61c9104df7ffb29d9485bc269a",
+          "submitted_at": "2026-11-11T14:54:50Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5860702846,
+          "state": "APPROVED",
+          "commit_id": "8aaba3c90de53c61c9104df7ffb29d9485bc269a",
+          "submitted_at": "2026-11-11T14:55:39Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 153,
+      "title": "feat(query-capacity): Gate 0 harness, oracle, trusted accounting and D0 low-load tests (#136)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/153",
+      "author": "kittywent",
+      "head": "c6ff2cbcf02f2092d8024cd00233206ad3fe23e2",
+      "merged_at": "2026-11-11T14:26:39Z",
+      "reviews": [
+        {
+          "id": 5857914597,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "02e97891fccdf860659d1ed9b3cd7ef6c9d32e3e",
+          "submitted_at": "2026-11-11T11:19:01Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5858051790,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "02e97891fccdf860659d1ed9b3cd7ef6c9d32e3e",
+          "submitted_at": "2026-11-11T11:31:29Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5858732260,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "ebcbb2fe02179d497589930f5c7c0b514321e92f",
+          "submitted_at": "2026-11-11T12:30:57Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5859379777,
+          "state": "APPROVED",
+          "commit_id": "c6ff2cbcf02f2092d8024cd00233206ad3fe23e2",
+          "submitted_at": "2026-11-11T13:20:33Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5859659910,
+          "state": "APPROVED",
+          "commit_id": "c6ff2cbcf02f2092d8024cd00233206ad3fe23e2",
+          "submitted_at": "2026-11-11T13:41:46Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 152,
+      "title": "docs(142): 期末验收与答辩包（§9 保留集 + §10 现场验收）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/152",
+      "author": "Zhu-ShuH",
+      "head": "89f2ed17ff583122b71240cb9c3032d8b806932b",
+      "merged_at": "2026-11-11T12:46:05Z",
+      "reviews": [
+        {
+          "id": 5856640729,
+          "state": "APPROVED",
+          "commit_id": "4636ee0c20f2b9ec08db8bbf427b86d7de6a803e",
+          "submitted_at": "2026-11-11T09:34:23Z",
+          "reviewer": "Ran2149975600"
+        },
+        {
+          "id": 5856798611,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "4636ee0c20f2b9ec08db8bbf427b86d7de6a803e",
+          "submitted_at": "2026-11-11T09:47:12Z",
+          "reviewer": "Ran2149975600"
+        },
+        {
+          "id": 5857145884,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "4636ee0c20f2b9ec08db8bbf427b86d7de6a803e",
+          "submitted_at": "2026-11-11T10:15:23Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5857865117,
+          "state": "DISMISSED",
+          "commit_id": "4eb730633b23c095eacab75f742ce006ffffc457",
+          "submitted_at": "2026-11-11T11:14:58Z",
+          "reviewer": "Ran2149975600"
+        },
+        {
+          "id": 5857886559,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "4eb730633b23c095eacab75f742ce006ffffc457",
+          "submitted_at": "2026-11-11T11:16:40Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5858067784,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "4eb730633b23c095eacab75f742ce006ffffc457",
+          "submitted_at": "2026-11-11T11:33:00Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5858156533,
+          "state": "DISMISSED",
+          "commit_id": "4eb730633b23c095eacab75f742ce006ffffc457",
+          "submitted_at": "2026-11-11T11:41:15Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5858281718,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "21038e8c1c2dd43ba95fa42f72d61a40b487dc0f",
+          "submitted_at": "2026-11-11T11:52:35Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5858829282,
+          "state": "APPROVED",
+          "commit_id": "89f2ed17ff583122b71240cb9c3032d8b806932b",
+          "submitted_at": "2026-11-11T12:39:05Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5858836775,
+          "state": "APPROVED",
+          "commit_id": "89f2ed17ff583122b71240cb9c3032d8b806932b",
+          "submitted_at": "2026-11-11T12:39:42Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5859020950,
+          "state": "APPROVED",
+          "commit_id": "89f2ed17ff583122b71240cb9c3032d8b806932b",
+          "submitted_at": "2026-11-11T12:54:02Z",
+          "reviewer": "Ran2149975600"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 151,
+      "title": "docs(#56): 独立保留集计划（未执行）+ §1/§2 seed 矛盾纠偏",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/151",
+      "author": "kittywent",
+      "head": "2765d5c9129efee71a39d116acd08624ee8133f6",
+      "merged_at": "2026-11-11T08:38:20Z",
+      "reviews": [
+        {
+          "id": 5855768632,
+          "state": "APPROVED",
+          "commit_id": "2765d5c9129efee71a39d116acd08624ee8133f6",
+          "submitted_at": "2026-11-11T08:18:28Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 149,
+      "title": "feat(query): add authorized read-only health service",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/149",
+      "author": "Zhu-ShuH",
+      "head": "8e8e40ea5e8a44454f190506595229c94a5bcfef",
+      "merged_at": "2026-11-11T08:28:33Z",
+      "reviews": [
+        {
+          "id": 5844272470,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "f09b21ed6ddd9784f9d7749b78f179d494fa5e5e",
+          "submitted_at": "2026-11-10T15:17:03Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5853031374,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "f09b21ed6ddd9784f9d7749b78f179d494fa5e5e",
+          "submitted_at": "2026-11-11T02:43:32Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5853874021,
+          "state": "DISMISSED",
+          "commit_id": "c4fabad8330f60c72bb81a4cd2d2b168347fafc0",
+          "submitted_at": "2026-11-11T04:29:03Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5855493088,
+          "state": "APPROVED",
+          "commit_id": "8e8e40ea5e8a44454f190506595229c94a5bcfef",
+          "submitted_at": "2026-11-11T07:50:05Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5855702673,
+          "state": "APPROVED",
+          "commit_id": "8e8e40ea5e8a44454f190506595229c94a5bcfef",
+          "submitted_at": "2026-11-11T08:11:39Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 148,
+      "title": "test(acceptance): add offline on-site gate",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/148",
+      "author": "Zhu-ShuH",
+      "head": "d2b1723226ef4eefcc4153f26e05aa48fa025667",
+      "merged_at": "2026-11-11T04:07:55Z",
+      "reviews": [
+        {
+          "id": 5844331559,
+          "state": "APPROVED",
+          "commit_id": "d2b1723226ef4eefcc4153f26e05aa48fa025667",
+          "submitted_at": "2026-11-10T15:20:57Z",
+          "reviewer": "Ran2149975600"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 147,
+      "title": "feat(audit): add append-only audit chain",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/147",
+      "author": "Zhu-ShuH",
+      "head": "01f8a3fd538b856bdc87dd7c7161ae7ff7827f34",
+      "merged_at": "2026-11-11T04:07:50Z",
+      "reviews": [
+        {
+          "id": 5844271631,
+          "state": "APPROVED",
+          "commit_id": "01f8a3fd538b856bdc87dd7c7161ae7ff7827f34",
+          "submitted_at": "2026-11-10T15:16:59Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5852982751,
+          "state": "APPROVED",
+          "commit_id": "01f8a3fd538b856bdc87dd7c7161ae7ff7827f34",
+          "submitted_at": "2026-11-11T02:36:05Z",
+          "reviewer": "zty-78"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 140,
+      "title": "docs(117): roadmap #9 任务表统一报告层真值对账",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/140",
+      "author": "Zhu-ShuH",
+      "head": "1b9f9e9540d30a141f072b651e6c94995aa3f544",
+      "merged_at": "2026-11-10T09:49:00Z",
+      "reviews": [
+        {
+          "id": 5839816997,
+          "state": "APPROVED",
+          "commit_id": "1b9f9e9540d30a141f072b651e6c94995aa3f544",
+          "submitted_at": "2026-11-10T09:48:00Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 139,
+      "title": "feat(cli): 接线 reset-alarms，落地 §8.5 冻结契约与 16+2 验收 (#127)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/139",
+      "author": "Www9191",
+      "head": "4fd9b7ab942f17947c7832545f959ae1947ad5b6",
+      "merged_at": "2026-11-10T11:26:10Z",
+      "reviews": [
+        {
+          "id": 5839816733,
+          "state": "APPROVED",
+          "commit_id": "4fd9b7ab942f17947c7832545f959ae1947ad5b6",
+          "submitted_at": "2026-11-10T09:47:59Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5840078601,
+          "state": "APPROVED",
+          "commit_id": "4fd9b7ab942f17947c7832545f959ae1947ad5b6",
+          "submitted_at": "2026-11-10T10:09:42Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5840604050,
+          "state": "APPROVED",
+          "commit_id": "4fd9b7ab942f17947c7832545f959ae1947ad5b6",
+          "submitted_at": "2026-11-10T10:47:43Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 138,
+      "title": "docs(test_plan): 第1节匹配来源统一为报告层真值对账 (#117)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/138",
+      "author": "kittywent",
+      "head": "b4a4e768d29188b77c2a21a3d1416c039116d2bb",
+      "merged_at": "2026-11-10T09:28:02Z",
+      "reviews": [
+        {
+          "id": 5839570668,
+          "state": "APPROVED",
+          "commit_id": "b4a4e768d29188b77c2a21a3d1416c039116d2bb",
+          "submitted_at": "2026-11-10T09:27:59Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 137,
+      "title": "docs(133,135): 补齐查询冻结项与认证授权契约",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/137",
+      "author": "Zhu-ShuH",
+      "head": "deac27f09713d0d1f617e3110f05fdc51d4ef4e0",
+      "merged_at": "2026-11-10T11:26:06Z",
+      "reviews": [
+        {
+          "id": 5839188346,
+          "state": "DISMISSED",
+          "commit_id": "5f8cb96775c0a6489ac140b149c6c9964d4c3afb",
+          "submitted_at": "2026-11-10T08:56:14Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5839474397,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "5f8cb96775c0a6489ac140b149c6c9964d4c3afb",
+          "submitted_at": "2026-11-10T09:20:08Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5839829307,
+          "state": "DISMISSED",
+          "commit_id": "a6da965f1f80b7980316b6ad97d42743a7cf9639",
+          "submitted_at": "2026-11-10T09:49:02Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5840114167,
+          "state": "APPROVED",
+          "commit_id": "deac27f09713d0d1f617e3110f05fdc51d4ef4e0",
+          "submitted_at": "2026-11-10T10:12:46Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5840609388,
+          "state": "APPROVED",
+          "commit_id": "deac27f09713d0d1f617e3110f05fdc51d4ef4e0",
+          "submitted_at": "2026-11-10T10:48:06Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 134,
+      "title": "docs(133): 提议十万用户查询语义与分级容量验证",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/134",
+      "author": "Zhu-ShuH",
+      "head": "3d4c35dfdf592859de833eb959e9420e97e1e7f2",
+      "merged_at": "2026-11-10T08:28:52Z",
+      "reviews": [
+        {
+          "id": 5838600368,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "f564d6528565fbacc9b4007833b054a0fa3ba09e",
+          "submitted_at": "2026-11-10T08:10:51Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5838667129,
+          "state": "APPROVED",
+          "commit_id": "3d4c35dfdf592859de833eb959e9420e97e1e7f2",
+          "submitted_at": "2026-11-10T08:15:36Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5838698681,
+          "state": "APPROVED",
+          "commit_id": "3d4c35dfdf592859de833eb959e9420e97e1e7f2",
+          "submitted_at": "2026-11-10T08:17:49Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 132,
+      "title": "docs(127): 冻结 reset-alarms consumer 契约与审计边界",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/132",
+      "author": "Zhu-ShuH",
+      "head": "1a1adfdb659a9c7c15af6b7ff2782417cdf4b5a7",
+      "merged_at": "2026-11-10T07:45:17Z",
+      "reviews": [
+        {
+          "id": 5837854092,
+          "state": "APPROVED",
+          "commit_id": "1a1adfdb659a9c7c15af6b7ff2782417cdf4b5a7",
+          "submitted_at": "2026-11-10T06:50:56Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5837982919,
+          "state": "APPROVED",
+          "commit_id": "1a1adfdb659a9c7c15af6b7ff2782417cdf4b5a7",
+          "submitted_at": "2026-11-10T07:05:46Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 131,
+      "title": "docs(117): A 属地真值读者残余统一为报告层真值对账",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/131",
+      "author": "Zhu-ShuH",
+      "head": "855937e32132f11c4dd5941b826ea92ca25a8687",
+      "merged_at": "2026-11-10T07:45:13Z",
+      "reviews": [
+        {
+          "id": 5837474485,
+          "state": "APPROVED",
+          "commit_id": "855937e32132f11c4dd5941b826ea92ca25a8687",
+          "submitted_at": "2026-11-10T06:03:52Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5837982756,
+          "state": "APPROVED",
+          "commit_id": "855937e32132f11c4dd5941b826ea92ca25a8687",
+          "submitted_at": "2026-11-10T07:05:45Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 130,
+      "title": "docs(117): 统一 C4 角色文件真值读者措辞为「真值对账」（C4 名下最后一处）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/130",
+      "author": "wxm-1",
+      "head": "cfb6e544e196f56722b4c90d29ed94dace18812b",
+      "merged_at": "2026-11-10T05:01:45Z",
+      "reviews": [
+        {
+          "id": 5836618990,
+          "state": "APPROVED",
+          "commit_id": "cfb6e544e196f56722b4c90d29ed94dace18812b",
+          "submitted_at": "2026-11-10T04:06:12Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5836982850,
+          "state": "APPROVED",
+          "commit_id": "cfb6e544e196f56722b4c90d29ed94dace18812b",
+          "submitted_at": "2026-11-10T05:01:17Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 129,
+      "title": "docs(117): 统一真值读者口径为报告层真值对账（B1 承接最后两处）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/129",
+      "author": "kittywent",
+      "head": "20a7ce5f254d6166047ff94ffd20c2237bf61330",
+      "merged_at": "2026-11-10T05:01:42Z",
+      "reviews": [
+        {
+          "id": 5836628304,
+          "state": "APPROVED",
+          "commit_id": "20a7ce5f254d6166047ff94ffd20c2237bf61330",
+          "submitted_at": "2026-11-10T04:07:43Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5836982515,
+          "state": "APPROVED",
+          "commit_id": "20a7ce5f254d6166047ff94ffd20c2237bf61330",
+          "submitted_at": "2026-11-10T05:01:14Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 128,
+      "title": "docs: 同步 simulate/report 已合入后的实现状态表述 (#110/#125)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/128",
+      "author": "zty-78",
+      "head": "9d08c4dbe99ef42ebb6c7bc057a35971ad4f420c",
+      "merged_at": "2026-11-09T13:11:54Z",
+      "reviews": [
+        {
+          "id": 5826277203,
+          "state": "APPROVED",
+          "commit_id": "9d08c4dbe99ef42ebb6c7bc057a35971ad4f420c",
+          "submitted_at": "2026-11-09T13:07:51Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5826318900,
+          "state": "APPROVED",
+          "commit_id": "9d08c4dbe99ef42ebb6c7bc057a35971ad4f420c",
+          "submitted_at": "2026-11-09T13:11:37Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 126,
+      "title": "fix(scripts): setup.sh 安装改为「先装锁、再装项目、pip check」两步口径 (#94/D1)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/126",
+      "author": "zty-78",
+      "head": "fe7874a9d4fdf02264a19f56ff5bd6e7483d13fd",
+      "merged_at": "2026-11-09T12:36:37Z",
+      "reviews": [
+        {
+          "id": 5825917451,
+          "state": "APPROVED",
+          "commit_id": "fe7874a9d4fdf02264a19f56ff5bd6e7483d13fd",
+          "submitted_at": "2026-11-09T12:36:26Z",
+          "reviewer": "ryj-teach1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 125,
+      "title": "feat(cli): 接入 simulate/report，解锁 G4 双 Linux 闭环 (#110)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/125",
+      "author": "Www9191",
+      "head": "49a4dfed2b0aa677dca431d8a8342e4186380f8f",
+      "merged_at": "2026-11-09T12:34:19Z",
+      "reviews": [
+        {
+          "id": 5825164531,
+          "state": "DISMISSED",
+          "commit_id": "847287befb00768adf27e7bf5afcb9b0cd689f83",
+          "submitted_at": "2026-11-09T11:24:09Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5825248069,
+          "state": "APPROVED",
+          "commit_id": "847287befb00768adf27e7bf5afcb9b0cd689f83",
+          "submitted_at": "2026-11-09T11:32:21Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5825286785,
+          "state": "DISMISSED",
+          "commit_id": "847287befb00768adf27e7bf5afcb9b0cd689f83",
+          "submitted_at": "2026-11-09T11:36:08Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5825891712,
+          "state": "APPROVED",
+          "commit_id": "49a4dfed2b0aa677dca431d8a8342e4186380f8f",
+          "submitted_at": "2026-11-09T12:34:03Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5826188679,
+          "state": "APPROVED",
+          "commit_id": "49a4dfed2b0aa677dca431d8a8342e4186380f8f",
+          "submitted_at": "2026-11-09T13:00:20Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5836627534,
+          "state": "APPROVED",
+          "commit_id": "49a4dfed2b0aa677dca431d8a8342e4186380f8f",
+          "submitted_at": "2026-11-10T04:07:35Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 124,
+      "title": "fix(storage): 写者校验 WAL 句柄可写性，修复概率性 SQLITE_READONLY (#123)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/124",
+      "author": "zty-78",
+      "head": "1ec61024a16c970038774110e923d23585b74c58",
+      "merged_at": "2026-11-09T12:36:05Z",
+      "reviews": [
+        {
+          "id": 5825013213,
+          "state": "DISMISSED",
+          "commit_id": "70ab8b15c75e1b0dac92bdd385fb99ec26c64bd8",
+          "submitted_at": "2026-11-09T11:09:29Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5825279722,
+          "state": "COMMENTED",
+          "commit_id": "70ab8b15c75e1b0dac92bdd385fb99ec26c64bd8",
+          "submitted_at": "2026-11-09T11:35:32Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5825911126,
+          "state": "APPROVED",
+          "commit_id": "1ec61024a16c970038774110e923d23585b74c58",
+          "submitted_at": "2026-11-09T12:35:53Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5836627934,
+          "state": "APPROVED",
+          "commit_id": "1ec61024a16c970038774110e923d23585b74c58",
+          "submitted_at": "2026-11-10T04:07:39Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 122,
+      "title": "docs(117): A 侧残余三处真值读者口径统一（ai_prompts:9/workflows:57/00_先读:27）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/122",
+      "author": "Zhu-ShuH",
+      "head": "73600298a59baaa0558b6f2f9313fb6065276965",
+      "merged_at": "2026-11-09T12:09:37Z",
+      "reviews": [
+        {
+          "id": 5820915937,
+          "state": "APPROVED",
+          "commit_id": "73600298a59baaa0558b6f2f9313fb6065276965",
+          "submitted_at": "2026-11-09T02:13:52Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5821718706,
+          "state": "APPROVED",
+          "commit_id": "73600298a59baaa0558b6f2f9313fb6065276965",
+          "submitted_at": "2026-11-09T04:41:54Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 121,
+      "title": "docs(interface): 刷新 #57 契约正文过期表述（T74 已合入 + 版本句清单/配置区分）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/121",
+      "author": "Zhu-ShuH",
+      "head": "f2689edc5d5cd15bf1af62ca015e3cddc396ef28",
+      "merged_at": "2026-11-08T15:08:40Z",
+      "reviews": [
+        {
+          "id": 5818383325,
+          "state": "APPROVED",
+          "commit_id": "f2689edc5d5cd15bf1af62ca015e3cddc396ef28",
+          "submitted_at": "2026-11-08T15:07:17Z",
+          "reviewer": "zty-78"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 120,
+      "title": "docs(117): 统一真值读者为报告层对账口径（members/AGENTS/docs）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/120",
+      "author": "Zhu-ShuH",
+      "head": "49a8473811913834ebd0ece50b6e5a66d5b83654",
+      "merged_at": "2026-11-08T14:32:30Z",
+      "reviews": [
+        {
+          "id": 5817889211,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "feae4f0ed95d1d251d6f07d98ab08ab5cf5c0349",
+          "submitted_at": "2026-11-08T12:34:05Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5817907321,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "feae4f0ed95d1d251d6f07d98ab08ab5cf5c0349",
+          "submitted_at": "2026-11-08T12:40:08Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5818172802,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "feae4f0ed95d1d251d6f07d98ab08ab5cf5c0349",
+          "submitted_at": "2026-11-08T14:02:29Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5818186295,
+          "state": "APPROVED",
+          "commit_id": "49a8473811913834ebd0ece50b6e5a66d5b83654",
+          "submitted_at": "2026-11-08T14:06:40Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5818290846,
+          "state": "APPROVED",
+          "commit_id": "49a8473811913834ebd0ece50b6e5a66d5b83654",
+          "submitted_at": "2026-11-08T14:39:02Z",
+          "reviewer": "zty-78"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 119,
+      "title": "docs(C2): 角色文件真值读者表述对齐 #113 裁定（仅 members/C2/AGENT.md）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/119",
+      "author": "zty-78",
+      "head": "86ce26b9ec497ae3e4c51742cb2acdcfd273e553",
+      "merged_at": "2026-11-08T11:36:11Z",
+      "reviews": [
+        {
+          "id": 5817607071,
+          "state": "APPROVED",
+          "commit_id": "86ce26b9ec497ae3e4c51742cb2acdcfd273e553",
+          "submitted_at": "2026-11-08T10:57:07Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 118,
+      "title": "fix(storage): 分离「连接」与「写入」，提供只读连接入口并点名只读错误 (#101)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/118",
+      "author": "zty-78",
+      "head": "d1f1d66ba2b276d1b1f0f41856d1edae3c931d2e",
+      "merged_at": "2026-11-08T15:21:01Z",
+      "reviews": [
+        {
+          "id": 5817403038,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "8f15e617e967c50b72665b30fc5ac7a113570219",
+          "submitted_at": "2026-11-08T09:42:33Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5817607177,
+          "state": "COMMENTED",
+          "commit_id": "8f15e617e967c50b72665b30fc5ac7a113570219",
+          "submitted_at": "2026-11-08T10:57:10Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5817728045,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "8f15e617e967c50b72665b30fc5ac7a113570219",
+          "submitted_at": "2026-11-08T11:41:06Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5817899913,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0e692a04687cf2e96b76451dc5e457bde5096e44",
+          "submitted_at": "2026-11-08T12:37:36Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5818022269,
+          "state": "DISMISSED",
+          "commit_id": "7efd0f08604b276dee53efaa833cff524d784e83",
+          "submitted_at": "2026-11-08T13:14:16Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5818172577,
+          "state": "DISMISSED",
+          "commit_id": "7efd0f08604b276dee53efaa833cff524d784e83",
+          "submitted_at": "2026-11-08T14:02:25Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5818379175,
+          "state": "COMMENTED",
+          "commit_id": "d1f1d66ba2b276d1b1f0f41856d1edae3c931d2e",
+          "submitted_at": "2026-11-08T15:06:00Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5818423790,
+          "state": "APPROVED",
+          "commit_id": "d1f1d66ba2b276d1b1f0f41856d1edae3c931d2e",
+          "submitted_at": "2026-11-08T15:19:41Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 116,
+      "title": "docs(C4): 角色文件真值读者表述对齐 #113 裁定（仅 members/C4/AGENT.md）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/116",
+      "author": "wxm-1",
+      "head": "8d03e499c926287532a16b5ac911509e7bd5172c",
+      "merged_at": "2026-11-08T11:38:49Z",
+      "reviews": [
+        {
+          "id": 5817721138,
+          "state": "APPROVED",
+          "commit_id": "8d03e499c926287532a16b5ac911509e7bd5172c",
+          "submitted_at": "2026-11-08T11:38:36Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 115,
+      "title": "docs(test_report): fix pylint base score (9.91) and R0912 removal note",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/115",
+      "author": "kittywent",
+      "head": "7d2c365e75da15065b613351820568531261c3c9",
+      "merged_at": "2026-11-08T07:36:02Z",
+      "reviews": [
+        {
+          "id": 5817024198,
+          "state": "APPROVED",
+          "commit_id": "7d2c365e75da15065b613351820568531261c3c9",
+          "submitted_at": "2026-11-08T07:20:10Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 114,
+      "title": "docs(contract): clarify verify/report and truth boundaries",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/114",
+      "author": "Zhu-ShuH",
+      "head": "09709252b585fde7bc73b116b41ec6792fd9f71b",
+      "merged_at": "2026-11-08T11:36:02Z",
+      "reviews": [
+        {
+          "id": 5817024429,
+          "state": "COMMENTED",
+          "commit_id": "c413d0069f174b84e97aa6756e428926e6b45d29",
+          "submitted_at": "2026-11-08T07:20:16Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5817606954,
+          "state": "APPROVED",
+          "commit_id": "09709252b585fde7bc73b116b41ec6792fd9f71b",
+          "submitted_at": "2026-11-08T10:57:05Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 112,
+      "title": "fix(docs): restore AGENTS.md as readable UTF-8 Markdown",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/112",
+      "author": "Zhu-ShuH",
+      "head": "1d72856338dc85463b1740679f598c7495d26728",
+      "merged_at": "2026-11-08T07:32:50Z",
+      "reviews": [
+        {
+          "id": 5817024295,
+          "state": "APPROVED",
+          "commit_id": "1d72856338dc85463b1740679f598c7495d26728",
+          "submitted_at": "2026-11-08T07:20:13Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 109,
+      "title": "fix(cli): 纠正 verify --help 与 verify_run 语义相反的描述（#65 / #106 P3-5）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/109",
+      "author": "Www9191",
+      "head": "421186b462f770e1a5f63622a625e0d27db19bb3",
+      "merged_at": "2026-11-08T07:23:45Z",
+      "reviews": [
+        {
+          "id": 5810000274,
+          "state": "APPROVED",
+          "commit_id": "421186b462f770e1a5f63622a625e0d27db19bb3",
+          "submitted_at": "2026-11-07T04:10:16Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5816648608,
+          "state": "APPROVED",
+          "commit_id": "421186b462f770e1a5f63622a625e0d27db19bb3",
+          "submitted_at": "2026-11-08T04:46:27Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5816752736,
+          "state": "APPROVED",
+          "commit_id": "421186b462f770e1a5f63622a625e0d27db19bb3",
+          "submitted_at": "2026-11-08T05:25:03Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 108,
+      "title": "docs(test): 报告与计划同步 main 195f5aa，改写已补证的全新克隆表述（#9）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/108",
+      "author": "kittywent",
+      "head": "0d242794a96221fa0cb5000bc669bbf35644aba3",
+      "merged_at": "2026-11-06T08:59:36Z",
+      "reviews": [
+        {
+          "id": 5770380082,
+          "state": "COMMENTED",
+          "commit_id": "0d242794a96221fa0cb5000bc669bbf35644aba3",
+          "submitted_at": "2026-11-04T14:52:35Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5770572430,
+          "state": "APPROVED",
+          "commit_id": "0d242794a96221fa0cb5000bc669bbf35644aba3",
+          "submitted_at": "2026-11-04T15:03:47Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 107,
+      "title": "docs(interface): 同步 manifest schema 2.0 与 scenario_kind 契约（#83 方案 A，§13 第 3 步）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/107",
+      "author": "wxm-1",
+      "head": "3d92c13ed6d3959fab88029f515d7392c3712d2e",
+      "merged_at": "2026-11-06T08:59:27Z",
+      "reviews": [
+        {
+          "id": 5753899026,
+          "state": "DISMISSED",
+          "commit_id": "1b5ad413466455ba82aeaab91a8fcb137d11670a",
+          "submitted_at": "2026-11-03T14:28:10Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5763891300,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "1b5ad413466455ba82aeaab91a8fcb137d11670a",
+          "submitted_at": "2026-11-04T05:55:54Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5783296592,
+          "state": "APPROVED",
+          "commit_id": "3d92c13ed6d3959fab88029f515d7392c3712d2e",
+          "submitted_at": "2026-11-05T10:18:47Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5783514576,
+          "state": "APPROVED",
+          "commit_id": "3d92c13ed6d3959fab88029f515d7392c3712d2e",
+          "submitted_at": "2026-11-05T10:35:59Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 106,
+      "title": "feat(pipeline): manifest schema 2.0 with an optional scenario_kind (#83)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/106",
+      "author": "kittywent",
+      "head": "847953ac162eeb7fea7b06f5af5a0ec5eaca7a03",
+      "merged_at": "2026-11-06T08:59:15Z",
+      "reviews": [
+        {
+          "id": 5752001442,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "e9fb099b05517ecb7b65de3912fc8d772ccc262b",
+          "submitted_at": "2026-11-03T12:17:05Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5753882925,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "169ff521f4e74c82d9091ecf763a637586691bcd",
+          "submitted_at": "2026-11-03T14:27:14Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5754046205,
+          "state": "COMMENTED",
+          "commit_id": "169ff521f4e74c82d9091ecf763a637586691bcd",
+          "submitted_at": "2026-11-03T14:36:18Z",
+          "reviewer": "Www9191"
+        },
+        {
+          "id": 5769548091,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "169ff521f4e74c82d9091ecf763a637586691bcd",
+          "submitted_at": "2026-11-04T13:58:08Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5781081138,
+          "state": "APPROVED",
+          "commit_id": "847953ac162eeb7fea7b06f5af5a0ec5eaca7a03",
+          "submitted_at": "2026-11-05T07:10:21Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5781547371,
+          "state": "APPROVED",
+          "commit_id": "847953ac162eeb7fea7b06f5af5a0ec5eaca7a03",
+          "submitted_at": "2026-11-05T07:58:18Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5781634683,
+          "state": "APPROVED",
+          "commit_id": "847953ac162eeb7fea7b06f5af5a0ec5eaca7a03",
+          "submitted_at": "2026-11-05T08:07:08Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 104,
+      "title": "fix(sim): burst duration_points<3 改为显式拒绝，替代半采样点兜底 (#6)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/104",
+      "author": "wzs-1234",
+      "head": "96cb6bc7bd6f8f41fc116f7dfd54bcb6e0a411f8",
+      "merged_at": "2026-11-03T12:21:51Z",
+      "reviews": [],
+      "classification": "no_recorded_premerge_nonauthor_approval",
+      "page_limit_hit": false
+    },
+    {
+      "number": 103,
+      "title": "test(config): 配置/内核上界防漂移断言（#58 N2）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/103",
+      "author": "Www9191",
+      "head": "3f9bf7d47d9fb52309ad78622d9a4dc6c71315b1",
+      "merged_at": "2026-11-03T12:21:48Z",
+      "reviews": [
+        {
+          "id": 5751780806,
+          "state": "APPROVED",
+          "commit_id": "3f9bf7d47d9fb52309ad78622d9a4dc6c71315b1",
+          "submitted_at": "2026-11-03T11:58:13Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 102,
+      "title": "chore(ci): 按 #94 AC2 在 CI 显式使用 --no-deps --no-build-isolation（Ref #94）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/102",
+      "author": "zty-78",
+      "head": "774abde59ffc5e0cf2e0472b935f0960fde48b67",
+      "merged_at": "2026-11-03T09:14:47Z",
+      "reviews": [
+        {
+          "id": 5749549303,
+          "state": "APPROVED",
+          "commit_id": "774abde59ffc5e0cf2e0472b935f0960fde48b67",
+          "submitted_at": "2026-11-03T09:12:06Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 100,
+      "title": "chore(codeowners): C5 转派后的五条路径归属改为 B1 (#9)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/100",
+      "author": "Zhu-ShuH",
+      "head": "b8d42f7c63a2c0366fa18592ee0cc065ecb7d37d",
+      "merged_at": "2026-11-03T05:42:05Z",
+      "reviews": [
+        {
+          "id": 5747464487,
+          "state": "APPROVED",
+          "commit_id": "b8d42f7c63a2c0366fa18592ee0cc065ecb7d37d",
+          "submitted_at": "2026-11-03T05:01:42Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 99,
+      "title": "docs(readme): 同步主分支状态与依赖锁定表述 (#98)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/99",
+      "author": "Zhu-ShuH",
+      "head": "dab16d3edac9f5f00c9639cdb7116e4afc755f31",
+      "merged_at": "2026-11-03T14:21:31Z",
+      "reviews": [
+        {
+          "id": 5747466254,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "6dbd58529a89cd9020562170e983112393431290",
+          "submitted_at": "2026-11-03T05:02:01Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5748268416,
+          "state": "DISMISSED",
+          "commit_id": "2112edb1080e42487801fd18236f32ca95bec6aa",
+          "submitted_at": "2026-11-03T06:59:04Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5748529062,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "e1db0b9ecb0480600167ef84ef924d443776ff7a",
+          "submitted_at": "2026-11-03T07:27:36Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5748552867,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "62815aa0c78d2a7bc842849c57ad36a6d37989f7",
+          "submitted_at": "2026-11-03T07:30:33Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5751004070,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "5f99d993d5ff8a66c56210791d82a9a6d04ae00b",
+          "submitted_at": "2026-11-03T11:01:04Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5751695844,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "5f99d993d5ff8a66c56210791d82a9a6d04ae00b",
+          "submitted_at": "2026-11-03T11:51:05Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5753021176,
+          "state": "APPROVED",
+          "commit_id": "dab16d3edac9f5f00c9639cdb7116e4afc755f31",
+          "submitted_at": "2026-11-03T13:31:02Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5753047410,
+          "state": "APPROVED",
+          "commit_id": "dab16d3edac9f5f00c9639cdb7116e4afc755f31",
+          "submitted_at": "2026-11-03T13:32:53Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 97,
+      "title": "docs(deployment): benchmark 状态同步与双机基准实测回填（Ref #10）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/97",
+      "author": "Ran2149975600",
+      "head": "4f0bb00ed174b499dac3801d94d2811cc48a164b",
+      "merged_at": "2026-11-03T14:21:27Z",
+      "reviews": [
+        {
+          "id": 5739049404,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "c25e8c35c2879a33ec7552e1a6bc54b8042c67be",
+          "submitted_at": "2026-11-02T15:35:17Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5748300315,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "e5afae490fd3aee9b1c3368c2defb8eaa626b176",
+          "submitted_at": "2026-11-03T07:03:07Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5751825122,
+          "state": "APPROVED",
+          "commit_id": "4f0bb00ed174b499dac3801d94d2811cc48a164b",
+          "submitted_at": "2026-11-03T12:01:52Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5753048321,
+          "state": "APPROVED",
+          "commit_id": "4f0bb00ed174b499dac3801d94d2811cc48a164b",
+          "submitted_at": "2026-11-03T13:32:56Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 96,
+      "title": "docs(test): 登记百万点生产基准口径与双 Linux 实测数字 (#51)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/96",
+      "author": "kittywent",
+      "head": "fca4dffab5f0b215fa9c6de89402ee835eb6fc2d",
+      "merged_at": "2026-11-03T04:03:13Z",
+      "reviews": [
+        {
+          "id": 5739034880,
+          "state": "APPROVED",
+          "commit_id": "fca4dffab5f0b215fa9c6de89402ee835eb6fc2d",
+          "submitted_at": "2026-11-02T15:34:15Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 95,
+      "title": "chore(deps): 接入双解释器锁定依赖的文档化安装路径 (#94)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/95",
+      "author": "Zhu-ShuH",
+      "head": "941e1a9ee0a594f7c218ea8437eb71cdc3069f98",
+      "merged_at": "2026-11-03T07:18:12Z",
+      "reviews": [
+        {
+          "id": 5734576389,
+          "state": "COMMENTED",
+          "commit_id": "57cbd5ce8cefdc0220bba624fc8f4669cf14fef2",
+          "submitted_at": "2026-11-02T09:39:39Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5735011982,
+          "state": "COMMENTED",
+          "commit_id": "57cbd5ce8cefdc0220bba624fc8f4669cf14fef2",
+          "submitted_at": "2026-11-02T10:15:55Z",
+          "reviewer": "Ran2149975600"
+        },
+        {
+          "id": 5735669158,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "57cbd5ce8cefdc0220bba624fc8f4669cf14fef2",
+          "submitted_at": "2026-11-02T11:12:05Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5737062291,
+          "state": "DISMISSED",
+          "commit_id": "3f70a50d17af2b4202ea4c2bd8c10c2e58cbe058",
+          "submitted_at": "2026-11-02T13:13:03Z",
+          "reviewer": "Ran2149975600"
+        },
+        {
+          "id": 5737954511,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "3f70a50d17af2b4202ea4c2bd8c10c2e58cbe058",
+          "submitted_at": "2026-11-02T14:20:21Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5739074630,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "3f70a50d17af2b4202ea4c2bd8c10c2e58cbe058",
+          "submitted_at": "2026-11-02T15:37:02Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5739226700,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "3f70a50d17af2b4202ea4c2bd8c10c2e58cbe058",
+          "submitted_at": "2026-11-02T15:47:48Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5747467304,
+          "state": "APPROVED",
+          "commit_id": "941e1a9ee0a594f7c218ea8437eb71cdc3069f98",
+          "submitted_at": "2026-11-03T05:02:13Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5748290978,
+          "state": "APPROVED",
+          "commit_id": "941e1a9ee0a594f7c218ea8437eb71cdc3069f98",
+          "submitted_at": "2026-11-03T07:01:53Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 93,
+      "title": "docs(governance): 按 1.2 同步掩码历史表述 (#82)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/93",
+      "author": "Zhu-ShuH",
+      "head": "bafa51098939a17a2ba01840be7269303ddebc43",
+      "merged_at": "2026-11-02T03:38:28Z",
+      "reviews": [
+        {
+          "id": 5731354117,
+          "state": "APPROVED",
+          "commit_id": "bafa51098939a17a2ba01840be7269303ddebc43",
+          "submitted_at": "2026-11-02T01:55:23Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 92,
+      "title": "feat(cli): 实现基准数字的 benchmark 子命令 (#51)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/92",
+      "author": "Www9191",
+      "head": "479fc49f41c462e92dd26eb8c88301fd993ce8b8",
+      "merged_at": "2026-11-02T05:42:39Z",
+      "reviews": [
+        {
+          "id": 5731211050,
+          "state": "APPROVED",
+          "commit_id": "479fc49f41c462e92dd26eb8c88301fd993ce8b8",
+          "submitted_at": "2026-11-02T01:21:48Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5732143854,
+          "state": "APPROVED",
+          "commit_id": "479fc49f41c462e92dd26eb8c88301fd993ce8b8",
+          "submitted_at": "2026-11-02T04:39:38Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5732520147,
+          "state": "APPROVED",
+          "commit_id": "479fc49f41c462e92dd26eb8c88301fd993ce8b8",
+          "submitted_at": "2026-11-02T05:42:37Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 91,
+      "title": "fix(analysis): 掩码非空时明确拒收，不静默丢弃掩码下的值（#82）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/91",
+      "author": "ryj-teach1",
+      "head": "6335fdf7ade9d650e24c32f7bf05c798ac3eb22b",
+      "merged_at": "2026-11-02T01:31:39Z",
+      "reviews": [
+        {
+          "id": 5731114701,
+          "state": "COMMENTED",
+          "commit_id": "6335fdf7ade9d650e24c32f7bf05c798ac3eb22b",
+          "submitted_at": "2026-11-02T00:58:07Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5731248579,
+          "state": "APPROVED",
+          "commit_id": "6335fdf7ade9d650e24c32f7bf05c798ac3eb22b",
+          "submitted_at": "2026-11-02T01:30:59Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 90,
+      "title": "chore(deps): 锁定全部依赖并完成双系统双解释器可复现安装验证 (#28)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/90",
+      "author": "Ran2149975600",
+      "head": "d89cfecfdf7d56066a746bca0a87032762b421a8",
+      "merged_at": "2026-11-02T05:42:02Z",
+      "reviews": [
+        {
+          "id": 5732140988,
+          "state": "APPROVED",
+          "commit_id": "d89cfecfdf7d56066a746bca0a87032762b421a8",
+          "submitted_at": "2026-11-02T04:39:11Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5732516735,
+          "state": "APPROVED",
+          "commit_id": "d89cfecfdf7d56066a746bca0a87032762b421a8",
+          "submitted_at": "2026-11-02T05:42:00Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 89,
+      "title": "chore(repo): 固定 shell 脚本检出为 LF",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/89",
+      "author": "Zhu-ShuH",
+      "head": "61bd1c9aea61a1344911e6fcef754e14035546d2",
+      "merged_at": "2026-11-01T14:54:07Z",
+      "reviews": [
+        {
+          "id": 5728159130,
+          "state": "APPROVED",
+          "commit_id": "61bd1c9aea61a1344911e6fcef754e14035546d2",
+          "submitted_at": "2026-11-01T12:53:46Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5728548762,
+          "state": "APPROVED",
+          "commit_id": "61bd1c9aea61a1344911e6fcef754e14035546d2",
+          "submitted_at": "2026-11-01T14:19:57Z",
+          "reviewer": "Ran2149975600"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 86,
+      "title": "feat(scripts): 实现 Issue #10 部署脚本与部署/运维文档（RHEL 9.7 实测）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/86",
+      "author": "Ran2149975600",
+      "head": "14f1a125243369dcb1c104dba818a11d254d3ce2",
+      "merged_at": "2026-11-02T01:48:49Z",
+      "reviews": [
+        {
+          "id": 5726749700,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "3a2a11433225f0a71b362077769b17cc8a93dd6a",
+          "submitted_at": "2026-11-01T06:21:27Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727695664,
+          "state": "DISMISSED",
+          "commit_id": "b2b0a70d5cbc74060a2395b464648e220eeeef07",
+          "submitted_at": "2026-11-01T10:58:24Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727902230,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "23655dd6c56ad19e4b4588b874898a3458b2d19a",
+          "submitted_at": "2026-11-01T11:49:22Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5728155410,
+          "state": "DISMISSED",
+          "commit_id": "23655dd6c56ad19e4b4588b874898a3458b2d19a",
+          "submitted_at": "2026-11-01T12:52:40Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5728194778,
+          "state": "COMMENTED",
+          "commit_id": "23655dd6c56ad19e4b4588b874898a3458b2d19a",
+          "submitted_at": "2026-11-01T13:04:13Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5728448512,
+          "state": "DISMISSED",
+          "commit_id": "f3ce10e0ac195d5e39fca0b847ee8afce7ed91bf",
+          "submitted_at": "2026-11-01T14:07:40Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5731145683,
+          "state": "APPROVED",
+          "commit_id": "14f1a125243369dcb1c104dba818a11d254d3ce2",
+          "submitted_at": "2026-11-02T01:05:44Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5731325494,
+          "state": "APPROVED",
+          "commit_id": "14f1a125243369dcb1c104dba818a11d254d3ce2",
+          "submitted_at": "2026-11-02T01:48:47Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 85,
+      "title": "test(stress): 把 #51 的重复执行与并发/中断恢复做成 opt-in 用例",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/85",
+      "author": "kittywent",
+      "head": "c65b468631e83663179b7d16c714b6dd449f594a",
+      "merged_at": "2026-11-02T12:55:36Z",
+      "reviews": [
+        {
+          "id": 5726710339,
+          "state": "APPROVED",
+          "commit_id": "e9226c39ce2df456cb9c46055dfe8311933899d6",
+          "submitted_at": "2026-11-01T06:07:30Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727022860,
+          "state": "APPROVED",
+          "commit_id": "0e943da48ecbfcacde4fd46ebadd4db7e3353ad4",
+          "submitted_at": "2026-11-01T07:49:51Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727689559,
+          "state": "APPROVED",
+          "commit_id": "38b4556e99441a335f336b6153348a87a02c59d6",
+          "submitted_at": "2026-11-01T10:57:18Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727902077,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "c07c664acffba06df93df38f75783d25e3d0109b",
+          "submitted_at": "2026-11-01T11:49:19Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5728116316,
+          "state": "DISMISSED",
+          "commit_id": "c07c664acffba06df93df38f75783d25e3d0109b",
+          "submitted_at": "2026-11-01T12:45:21Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5728404196,
+          "state": "DISMISSED",
+          "commit_id": "c07c664acffba06df93df38f75783d25e3d0109b",
+          "submitted_at": "2026-11-01T13:59:56Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5731143461,
+          "state": "DISMISSED",
+          "commit_id": "1c3c2a451b5563b25605f40b6b53fe787e2e830b",
+          "submitted_at": "2026-11-02T01:05:13Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5732512876,
+          "state": "APPROVED",
+          "commit_id": "c65b468631e83663179b7d16c714b6dd449f594a",
+          "submitted_at": "2026-11-02T05:41:18Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5734565913,
+          "state": "APPROVED",
+          "commit_id": "c65b468631e83663179b7d16c714b6dd449f594a",
+          "submitted_at": "2026-11-02T09:38:44Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 84,
+      "title": "docs(reporting): 补齐 #72 独立校验器的测试计划与实测证据 (#51)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/84",
+      "author": "kittywent",
+      "head": "d34b425ae9058d269e1b611cb964132a2b2bc150",
+      "merged_at": "2026-11-01T14:00:09Z",
+      "reviews": [
+        {
+          "id": 5722786413,
+          "state": "APPROVED",
+          "commit_id": "a41e4523baf81e44e98a76310dc12e79f8b7363c",
+          "submitted_at": "2026-10-31T12:54:43Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5722916020,
+          "state": "DISMISSED",
+          "commit_id": "a41e4523baf81e44e98a76310dc12e79f8b7363c",
+          "submitted_at": "2026-10-31T13:32:51Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5723452073,
+          "state": "DISMISSED",
+          "commit_id": "a41e4523baf81e44e98a76310dc12e79f8b7363c",
+          "submitted_at": "2026-10-31T15:04:16Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5726700105,
+          "state": "DISMISSED",
+          "commit_id": "a41e4523baf81e44e98a76310dc12e79f8b7363c",
+          "submitted_at": "2026-11-01T06:02:52Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727039665,
+          "state": "COMMENTED",
+          "commit_id": "a41e4523baf81e44e98a76310dc12e79f8b7363c",
+          "submitted_at": "2026-11-01T07:53:22Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727688292,
+          "state": "DISMISSED",
+          "commit_id": "5b1e315e8c86d45deaec9bd2002a57d7a5de3e47",
+          "submitted_at": "2026-11-01T10:57:05Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727901918,
+          "state": "APPROVED",
+          "commit_id": "d34b425ae9058d269e1b611cb964132a2b2bc150",
+          "submitted_at": "2026-11-01T11:49:15Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5728129790,
+          "state": "APPROVED",
+          "commit_id": "d34b425ae9058d269e1b611cb964132a2b2bc150",
+          "submitted_at": "2026-11-01T12:47:40Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 81,
+      "title": "docs(governance): 补齐九角色贡献、评审与候选证据台账",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/81",
+      "author": "Zhu-ShuH",
+      "head": "7e254a2bfb40ef2bc5f5e8138efb935411173127",
+      "merged_at": "2026-10-30T14:31:54Z",
+      "reviews": [
+        {
+          "id": 5683090703,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "247698592c32ec75394a986d19751a580e78f696",
+          "submitted_at": "2026-10-28T13:10:56Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5684307262,
+          "state": "COMMENTED",
+          "commit_id": "247698592c32ec75394a986d19751a580e78f696",
+          "submitted_at": "2026-10-28T14:29:25Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5700633257,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "09296e119db2b5cef43058ae8c8981ef12414410",
+          "submitted_at": "2026-10-29T15:44:13Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701604110,
+          "state": "DISMISSED",
+          "commit_id": "fb561ea04d89498fcf7a4b4b35ad4d239e9872fd",
+          "submitted_at": "2026-10-29T16:49:37Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5711998269,
+          "state": "APPROVED",
+          "commit_id": "7e254a2bfb40ef2bc5f5e8138efb935411173127",
+          "submitted_at": "2026-10-30T12:07:25Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5712315054,
+          "state": "APPROVED",
+          "commit_id": "7e254a2bfb40ef2bc5f5e8138efb935411173127",
+          "submitted_at": "2026-10-30T12:35:39Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 80,
+      "title": "docs(planning): 按当前主线更新需求追踪、架构与可行性",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/80",
+      "author": "Zhu-ShuH",
+      "head": "69ad96d91f4736016f93ae050caf31850b944e09",
+      "merged_at": "2026-10-30T14:29:37Z",
+      "reviews": [
+        {
+          "id": 5683084049,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "071ec8d57148d082e5e37e996ec97d9cdfb19697",
+          "submitted_at": "2026-10-28T13:10:25Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5684314912,
+          "state": "COMMENTED",
+          "commit_id": "071ec8d57148d082e5e37e996ec97d9cdfb19697",
+          "submitted_at": "2026-10-28T14:29:56Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5700630243,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "1cc43fdfe2feb774347f3480748311e83d8f66f7",
+          "submitted_at": "2026-10-29T15:44:01Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701502687,
+          "state": "DISMISSED",
+          "commit_id": "798826045e5b3fc04437dd7e779a2c4e12d59223",
+          "submitted_at": "2026-10-29T16:43:23Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5711994945,
+          "state": "APPROVED",
+          "commit_id": "69ad96d91f4736016f93ae050caf31850b944e09",
+          "submitted_at": "2026-10-30T12:07:07Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5712313572,
+          "state": "APPROVED",
+          "commit_id": "69ad96d91f4736016f93ae050caf31850b944e09",
+          "submitted_at": "2026-10-30T12:35:33Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 78,
+      "title": "docs(evidence): 补存 A 历史测试与诊断记录（10月18日至28日）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/78",
+      "author": "Zhu-ShuH",
+      "head": "83b01bd59a3f768b39ba0590df72ea416f4079a6",
+      "merged_at": "2026-10-29T17:48:16Z",
+      "reviews": [
+        {
+          "id": 5679927916,
+          "state": "DISMISSED",
+          "commit_id": "405cae53aaaf85fb5602e5c175d56507ef55c934",
+          "submitted_at": "2026-10-28T08:44:45Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5683039485,
+          "state": "APPROVED",
+          "commit_id": "83b01bd59a3f768b39ba0590df72ea416f4079a6",
+          "submitted_at": "2026-10-28T13:07:12Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701296527,
+          "state": "APPROVED",
+          "commit_id": "83b01bd59a3f768b39ba0590df72ea416f4079a6",
+          "submitted_at": "2026-10-29T16:29:13Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 76,
+      "title": "fix(consumer): 验证多片运行末片行数上界并保留整除末片 (#69)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/76",
+      "author": "zty-78",
+      "head": "dfd5fd7984831f88f394f978be84db5d1117e98f",
+      "merged_at": "2026-10-29T17:50:48Z",
+      "reviews": [
+        {
+          "id": 5678464233,
+          "state": "APPROVED",
+          "commit_id": "dfd5fd7984831f88f394f978be84db5d1117e98f",
+          "submitted_at": "2026-10-28T06:02:18Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5679886714,
+          "state": "APPROVED",
+          "commit_id": "dfd5fd7984831f88f394f978be84db5d1117e98f",
+          "submitted_at": "2026-10-28T08:41:02Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701254246,
+          "state": "APPROVED",
+          "commit_id": "dfd5fd7984831f88f394f978be84db5d1117e98f",
+          "submitted_at": "2026-10-29T16:26:17Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 75,
+      "title": "docs(evidence): 留存 A 侧 #70–#73 实测日志与诊断证据",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/75",
+      "author": "Zhu-ShuH",
+      "head": "6b61617ff1bd75d86052e945f2d1d5945609625d",
+      "merged_at": "2026-10-29T17:47:58Z",
+      "reviews": [
+        {
+          "id": 5679923734,
+          "state": "DISMISSED",
+          "commit_id": "6e96588f678a66fbc307c067ea470e738b78e642",
+          "submitted_at": "2026-10-28T08:44:26Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5683037430,
+          "state": "APPROVED",
+          "commit_id": "6b61617ff1bd75d86052e945f2d1d5945609625d",
+          "submitted_at": "2026-10-28T13:07:02Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701296081,
+          "state": "APPROVED",
+          "commit_id": "6b61617ff1bd75d86052e945f2d1d5945609625d",
+          "submitted_at": "2026-10-29T16:29:12Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 73,
+      "title": "fix(analysis): 拒收复数输入并按 2 的幂定标计算各阶矩 (#66)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/73",
+      "author": "ryj-teach1",
+      "head": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+      "merged_at": "2026-11-01T14:18:12Z",
+      "reviews": [
+        {
+          "id": 5677021053,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "ca83aec31d64d1ec8dd7c4fad7f000ee56e4b713",
+          "submitted_at": "2026-10-28T02:27:44Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5679870416,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "ca83aec31d64d1ec8dd7c4fad7f000ee56e4b713",
+          "submitted_at": "2026-10-28T08:39:26Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5685422639,
+          "state": "DISMISSED",
+          "commit_id": "5314f905e92adb3cfcdd03dde6d20463b138cc30",
+          "submitted_at": "2026-10-28T15:40:36Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5698393421,
+          "state": "COMMENTED",
+          "commit_id": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+          "submitted_at": "2026-10-29T13:24:20Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5698393894,
+          "state": "COMMENTED",
+          "commit_id": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+          "submitted_at": "2026-10-29T13:24:22Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5698934386,
+          "state": "APPROVED",
+          "commit_id": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+          "submitted_at": "2026-10-29T13:59:30Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5700184005,
+          "state": "APPROVED",
+          "commit_id": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+          "submitted_at": "2026-10-29T15:16:43Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701409871,
+          "state": "APPROVED",
+          "commit_id": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+          "submitted_at": "2026-10-29T16:37:06Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5722834352,
+          "state": "APPROVED",
+          "commit_id": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+          "submitted_at": "2026-10-31T13:10:15Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5722900346,
+          "state": "APPROVED",
+          "commit_id": "e4814b65769fa6da45ca070daac89af02d03d0e9",
+          "submitted_at": "2026-10-31T13:28:49Z",
+          "reviewer": "zty-78"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 72,
+      "title": "feat(reporting): 新增生产结束后独立校验入口 verify_run (#51)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/72",
+      "author": "kittywent",
+      "head": "91bfb76c5490c8e9956d4dc59e78cad6b2fc625f",
+      "merged_at": "2026-10-30T14:33:38Z",
+      "reviews": [
+        {
+          "id": 5668814813,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "abc6dfa49136a0ddb02d960a5ee6e1e8ed95ca23",
+          "submitted_at": "2026-10-27T14:32:45Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5669551972,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "e97c2efaf3853090d7e584e1ffc7cbc519ea6ef0",
+          "submitted_at": "2026-10-27T15:15:53Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5670400729,
+          "state": "APPROVED",
+          "commit_id": "80e9f8960c94f5060ac0ab5f7703f3e61e26341f",
+          "submitted_at": "2026-10-27T16:08:59Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5677015028,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "80e9f8960c94f5060ac0ab5f7703f3e61e26341f",
+          "submitted_at": "2026-10-28T02:26:43Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5678464755,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "80e9f8960c94f5060ac0ab5f7703f3e61e26341f",
+          "submitted_at": "2026-10-28T06:02:23Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5680893031,
+          "state": "APPROVED",
+          "commit_id": "91bfb76c5490c8e9956d4dc59e78cad6b2fc625f",
+          "submitted_at": "2026-10-28T10:06:00Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5684239091,
+          "state": "APPROVED",
+          "commit_id": "91bfb76c5490c8e9956d4dc59e78cad6b2fc625f",
+          "submitted_at": "2026-10-28T14:25:08Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5701198624,
+          "state": "COMMENTED",
+          "commit_id": "91bfb76c5490c8e9956d4dc59e78cad6b2fc625f",
+          "submitted_at": "2026-10-29T16:22:32Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5712664028,
+          "state": "APPROVED",
+          "commit_id": "91bfb76c5490c8e9956d4dc59e78cad6b2fc625f",
+          "submitted_at": "2026-10-30T13:06:06Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 71,
+      "title": "feat(cli): wire the consume subcommand to the public consumer entry (#65)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/71",
+      "author": "Www9191",
+      "head": "6c1461094585bc63fee9a25ab3cd1f3b33fa9e14",
+      "merged_at": "2026-10-31T15:05:14Z",
+      "reviews": [
+        {
+          "id": 5665711439,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "c0743033f91954cf36fc288fedba8a79a4f7bda3",
+          "submitted_at": "2026-10-27T10:39:03Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5668822279,
+          "state": "COMMENTED",
+          "commit_id": "6c1461094585bc63fee9a25ab3cd1f3b33fa9e14",
+          "submitted_at": "2026-10-27T14:33:09Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5669032252,
+          "state": "APPROVED",
+          "commit_id": "6c1461094585bc63fee9a25ab3cd1f3b33fa9e14",
+          "submitted_at": "2026-10-27T14:45:06Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701679907,
+          "state": "APPROVED",
+          "commit_id": "6c1461094585bc63fee9a25ab3cd1f3b33fa9e14",
+          "submitted_at": "2026-10-29T16:54:34Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5722837791,
+          "state": "APPROVED",
+          "commit_id": "6c1461094585bc63fee9a25ab3cd1f3b33fa9e14",
+          "submitted_at": "2026-10-31T13:10:58Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5722895942,
+          "state": "APPROVED",
+          "commit_id": "6c1461094585bc63fee9a25ab3cd1f3b33fa9e14",
+          "submitted_at": "2026-10-31T13:27:41Z",
+          "reviewer": "zty-78"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 70,
+      "title": "feat(reporting): 实现独立验证器与闭环报告 (#9)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/70",
+      "author": "kittywent",
+      "head": "08461fa9eb31edaf0bd391d5cf07ba303cb73419",
+      "merged_at": "2026-10-30T14:08:49Z",
+      "reviews": [
+        {
+          "id": 5646201287,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "d6fe35112ca91207d7ca9c1f82f0746885264604",
+          "submitted_at": "2026-10-26T00:37:53Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5648161588,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "80b95d8c726daa6c95ac26aca5a64e1724399433",
+          "submitted_at": "2026-10-26T06:30:54Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5648720609,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0fbcc87f0d336af9ab1f02e35343f79e8d0e76d8",
+          "submitted_at": "2026-10-26T07:33:51Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5650335018,
+          "state": "APPROVED",
+          "commit_id": "144f7ae20f5be73f3bde37026fe6118087aae8d8",
+          "submitted_at": "2026-10-26T10:08:28Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5684361833,
+          "state": "COMMENTED",
+          "commit_id": "144f7ae20f5be73f3bde37026fe6118087aae8d8",
+          "submitted_at": "2026-10-28T14:32:46Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5685423787,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "144f7ae20f5be73f3bde37026fe6118087aae8d8",
+          "submitted_at": "2026-10-28T15:40:40Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5712626653,
+          "state": "APPROVED",
+          "commit_id": "08461fa9eb31edaf0bd391d5cf07ba303cb73419",
+          "submitted_at": "2026-10-30T13:02:36Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5713083797,
+          "state": "APPROVED",
+          "commit_id": "08461fa9eb31edaf0bd391d5cf07ba303cb73419",
+          "submitted_at": "2026-10-30T13:40:15Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 68,
+      "title": "docs(contracts): 修正末片行数上界为含等号 (#34)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/68",
+      "author": "wxm-1",
+      "head": "82bafa437e6b35f56f9c034ce1cc5402ceb3e7a2",
+      "merged_at": "2026-10-24T14:44:52Z",
+      "reviews": [
+        {
+          "id": 5638625920,
+          "state": "APPROVED",
+          "commit_id": "82bafa437e6b35f56f9c034ce1cc5402ceb3e7a2",
+          "submitted_at": "2026-10-24T14:39:22Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5638637752,
+          "state": "COMMENTED",
+          "commit_id": "82bafa437e6b35f56f9c034ce1cc5402ceb3e7a2",
+          "submitted_at": "2026-10-24T14:42:57Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 67,
+      "title": "docs(interface): 明确消费持久化与单片校验责任 (#2/#57)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/67",
+      "author": "Zhu-ShuH",
+      "head": "ebf1ac955b44a2f1d6f824af30bcc039cfd867ed",
+      "merged_at": "2026-11-03T12:14:44Z",
+      "reviews": [
+        {
+          "id": 5638374181,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "c5fb16900a254528ea0aff255a722ca6d2e9a990",
+          "submitted_at": "2026-10-24T13:13:23Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5638649938,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "fe7e8df6eb5a279173a0d48fe12ca6ffcb166a73",
+          "submitted_at": "2026-10-24T14:47:03Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5638659364,
+          "state": "DISMISSED",
+          "commit_id": "c2824ec21ae0eab81cc761377d434b51da9f40fb",
+          "submitted_at": "2026-10-24T14:50:13Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5638783292,
+          "state": "DISMISSED",
+          "commit_id": "c2824ec21ae0eab81cc761377d434b51da9f40fb",
+          "submitted_at": "2026-10-24T15:28:13Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5642691204,
+          "state": "DISMISSED",
+          "commit_id": "6871657c3d4b8a007f74b5b912c00e91c2164289",
+          "submitted_at": "2026-10-25T10:12:41Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5684327266,
+          "state": "COMMENTED",
+          "commit_id": "6871657c3d4b8a007f74b5b912c00e91c2164289",
+          "submitted_at": "2026-10-28T14:30:43Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5700636876,
+          "state": "DISMISSED",
+          "commit_id": "57f52d7fefb1b51b0598f0c53b71eb71a41f2a7c",
+          "submitted_at": "2026-10-29T15:44:28Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5701214981,
+          "state": "DISMISSED",
+          "commit_id": "57f52d7fefb1b51b0598f0c53b71eb71a41f2a7c",
+          "submitted_at": "2026-10-29T16:23:36Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5711956431,
+          "state": "DISMISSED",
+          "commit_id": "946ee7fa536f828243e3f8a5253da97a72a6bfb6",
+          "submitted_at": "2026-10-30T12:03:38Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5711990295,
+          "state": "DISMISSED",
+          "commit_id": "946ee7fa536f828243e3f8a5253da97a72a6bfb6",
+          "submitted_at": "2026-10-30T12:06:42Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5722839150,
+          "state": "APPROVED",
+          "commit_id": "946ee7fa536f828243e3f8a5253da97a72a6bfb6",
+          "submitted_at": "2026-10-31T13:11:20Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5722907060,
+          "state": "DISMISSED",
+          "commit_id": "946ee7fa536f828243e3f8a5253da97a72a6bfb6",
+          "submitted_at": "2026-10-31T13:31:08Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5723557461,
+          "state": "DISMISSED",
+          "commit_id": "7b992642072a79bcde02194100c555ac1bbc770f",
+          "submitted_at": "2026-10-31T15:31:19Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5726665965,
+          "state": "DISMISSED",
+          "commit_id": "6e5d47dc0281463ae9f9eee8868d8be7e486ddb0",
+          "submitted_at": "2026-11-01T05:50:52Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5727582650,
+          "state": "DISMISSED",
+          "commit_id": "6e5d47dc0281463ae9f9eee8868d8be7e486ddb0",
+          "submitted_at": "2026-11-01T10:22:40Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5728435480,
+          "state": "DISMISSED",
+          "commit_id": "6e5d47dc0281463ae9f9eee8868d8be7e486ddb0",
+          "submitted_at": "2026-11-01T14:05:49Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5728625997,
+          "state": "DISMISSED",
+          "commit_id": "99c4843dd634b929123b8d87340b77df7f06c887",
+          "submitted_at": "2026-11-01T14:32:20Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5728735739,
+          "state": "DISMISSED",
+          "commit_id": "d363332357f37a4a48eb540a07bef89c6eceae01",
+          "submitted_at": "2026-11-01T15:03:39Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5731151178,
+          "state": "DISMISSED",
+          "commit_id": "d363332357f37a4a48eb540a07bef89c6eceae01",
+          "submitted_at": "2026-11-02T01:07:02Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5731295646,
+          "state": "COMMENTED",
+          "commit_id": "d363332357f37a4a48eb540a07bef89c6eceae01",
+          "submitted_at": "2026-11-02T01:42:18Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5731359390,
+          "state": "APPROVED",
+          "commit_id": "ebf1ac955b44a2f1d6f824af30bcc039cfd867ed",
+          "submitted_at": "2026-11-02T01:56:23Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5731797399,
+          "state": "APPROVED",
+          "commit_id": "ebf1ac955b44a2f1d6f824af30bcc039cfd867ed",
+          "submitted_at": "2026-11-02T03:26:28Z",
+          "reviewer": "ryj-teach1"
+        },
+        {
+          "id": 5732149737,
+          "state": "APPROVED",
+          "commit_id": "ebf1ac955b44a2f1d6f824af30bcc039cfd867ed",
+          "submitted_at": "2026-11-02T04:40:41Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5747565188,
+          "state": "APPROVED",
+          "commit_id": "ebf1ac955b44a2f1d6f824af30bcc039cfd867ed",
+          "submitted_at": "2026-11-03T05:19:13Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5747687830,
+          "state": "APPROVED",
+          "commit_id": "ebf1ac955b44a2f1d6f824af30bcc039cfd867ed",
+          "submitted_at": "2026-11-03T05:39:55Z",
+          "reviewer": "zty-78"
+        },
+        {
+          "id": 5750761829,
+          "state": "APPROVED",
+          "commit_id": "ebf1ac955b44a2f1d6f824af30bcc039cfd867ed",
+          "submitted_at": "2026-11-03T10:43:33Z",
+          "reviewer": "Www9191"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 64,
+      "title": "feat(consumer): 实现消费入口与 SQLite 存储 (#8)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/64",
+      "author": "zty-78",
+      "head": "8b47fe307ffeacffd7381e917afa1daed53b6e2b",
+      "merged_at": "2026-10-24T10:24:21Z",
+      "reviews": [
+        {
+          "id": 5625590637,
+          "state": "COMMENTED",
+          "commit_id": "e1593ff707925cf4ebee2758a332be6996783d25",
+          "submitted_at": "2026-10-23T08:09:55Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5626397996,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "e1593ff707925cf4ebee2758a332be6996783d25",
+          "submitted_at": "2026-10-23T09:29:01Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5627004337,
+          "state": "APPROVED",
+          "commit_id": "8b47fe307ffeacffd7381e917afa1daed53b6e2b",
+          "submitted_at": "2026-10-23T10:28:46Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5637899740,
+          "state": "COMMENTED",
+          "commit_id": "8b47fe307ffeacffd7381e917afa1daed53b6e2b",
+          "submitted_at": "2026-10-24T10:19:43Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 62,
+      "title": "docs(validation): 提交独立验证协议与审阅摘要 (#56)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/62",
+      "author": "Zhu-ShuH",
+      "head": "995e503af2644afa8e6efe397f7ee0cd25354c70",
+      "merged_at": "2026-10-24T14:40:26Z",
+      "reviews": [
+        {
+          "id": 5637840805,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "606065e7cd340863e20fe3c0c2d05d3866425d4e",
+          "submitted_at": "2026-10-24T09:59:17Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5638417297,
+          "state": "APPROVED",
+          "commit_id": "995e503af2644afa8e6efe397f7ee0cd25354c70",
+          "submitted_at": "2026-10-24T13:29:53Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 61,
+      "title": "docs(architecture): 提交分析持久化契约候选 (#57)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/61",
+      "author": "Zhu-ShuH",
+      "head": "0c18b0fb8ccade062b63c342d4204fd3f1da1d42",
+      "merged_at": "2026-10-24T14:39:26Z",
+      "reviews": [
+        {
+          "id": 5637837447,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "7e9e7c32d3d198dba8c353c69c9dc01ee071c489",
+          "submitted_at": "2026-10-24T09:58:11Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5638416658,
+          "state": "APPROVED",
+          "commit_id": "0c18b0fb8ccade062b63c342d4204fd3f1da1d42",
+          "submitted_at": "2026-10-24T13:29:38Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 60,
+      "title": "docs(config): 补齐配置层采样率上限公开常量（#58 N1）",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/60",
+      "author": "Zhu-ShuH",
+      "head": "29889a014d1cce316fc0f2106c394061b09c8ce4",
+      "merged_at": "2026-10-21T14:56:12Z",
+      "reviews": [
+        {
+          "id": 5601426590,
+          "state": "APPROVED",
+          "commit_id": "29889a014d1cce316fc0f2106c394061b09c8ce4",
+          "submitted_at": "2026-10-21T14:36:05Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 59,
+      "title": "fix(scripts): 为 scripts/*.sh 补上可执行位",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/59",
+      "author": "Ran2149975600",
+      "head": "83f9451505f44c88e3f851d2e876a1e0cd4d3882",
+      "merged_at": "2026-10-21T14:54:23Z",
+      "reviews": [
+        {
+          "id": 5601102423,
+          "state": "COMMENTED",
+          "commit_id": "83f9451505f44c88e3f851d2e876a1e0cd4d3882",
+          "submitted_at": "2026-10-21T14:12:23Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5601426226,
+          "state": "APPROVED",
+          "commit_id": "83f9451505f44c88e3f851d2e876a1e0cd4d3882",
+          "submitted_at": "2026-10-21T14:36:04Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 55,
+      "title": "fix(config): enforce the 1 GHz sampling-rate ceiling at load time",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/55",
+      "author": "Www9191",
+      "head": "b80caa6b6107a75c2b2ba1d5e1e224f2baf98abe",
+      "merged_at": "2026-10-21T11:44:36Z",
+      "reviews": [
+        {
+          "id": 5598661014,
+          "state": "APPROVED",
+          "commit_id": "b80caa6b6107a75c2b2ba1d5e1e224f2baf98abe",
+          "submitted_at": "2026-10-21T11:01:11Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 54,
+      "title": "feat(analysis): 特征 / 健康评分 / 告警与可配置规则 (#7)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/54",
+      "author": "ryj-teach1",
+      "head": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+      "merged_at": "2026-10-23T06:05:34Z",
+      "reviews": [
+        {
+          "id": 5599099762,
+          "state": "COMMENTED",
+          "commit_id": "a4b3e477b3782b75bc19e366b9fbcd1a6bf5c9f9",
+          "submitted_at": "2026-10-21T11:41:37Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5601276570,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "a4b3e477b3782b75bc19e366b9fbcd1a6bf5c9f9",
+          "submitted_at": "2026-10-21T14:24:19Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5608826313,
+          "state": "COMMENTED",
+          "commit_id": "490a42ed8249970c4aa3e6378cbffddb3d34fc82",
+          "submitted_at": "2026-10-22T03:10:57Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5609640253,
+          "state": "DISMISSED",
+          "commit_id": "490a42ed8249970c4aa3e6378cbffddb3d34fc82",
+          "submitted_at": "2026-10-22T05:27:14Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5613570008,
+          "state": "APPROVED",
+          "commit_id": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+          "submitted_at": "2026-10-22T11:40:33Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5613579233,
+          "state": "COMMENTED",
+          "commit_id": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+          "submitted_at": "2026-10-22T11:41:25Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5624565510,
+          "state": "APPROVED",
+          "commit_id": "da3a52b9105edfd0c418c7c29369fd6c68aab01d",
+          "submitted_at": "2026-10-23T06:07:39Z",
+          "reviewer": "zty-78"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 53,
+      "title": "docs(sim): 用真实生产入口补出完整百万点口径的三次连测 (#5)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/53",
+      "author": "kittywent",
+      "head": "713108138edb7c5d70b1432a7df60d76012a6a1b",
+      "merged_at": "2026-10-24T15:45:58Z",
+      "reviews": [
+        {
+          "id": 5588750078,
+          "state": "COMMENTED",
+          "commit_id": "8561014c2fecd14ce065eb52de77f083f9c13cc2",
+          "submitted_at": "2026-10-20T17:09:13Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5599100429,
+          "state": "COMMENTED",
+          "commit_id": "604bc99b7da4bb6327f88e068342ef51a7fde17f",
+          "submitted_at": "2026-10-21T11:41:41Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5601179758,
+          "state": "COMMENTED",
+          "commit_id": "7a25a9e8ead89a5335457cdfee4e3c5bbb4598d8",
+          "submitted_at": "2026-10-21T14:17:36Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5613652392,
+          "state": "COMMENTED",
+          "commit_id": "5608437ecb3c45568fdfea9b1860fba4873f5955",
+          "submitted_at": "2026-10-22T11:48:09Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5638661261,
+          "state": "COMMENTED",
+          "commit_id": "713108138edb7c5d70b1432a7df60d76012a6a1b",
+          "submitted_at": "2026-10-24T14:50:46Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5638781450,
+          "state": "APPROVED",
+          "commit_id": "713108138edb7c5d70b1432a7df60d76012a6a1b",
+          "submitted_at": "2026-10-24T15:27:35Z",
+          "reviewer": "wxm-1"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 50,
+      "title": "docs(contracts): 冻结采样率上界 1 GHz 并补齐 timestamp_ns_for 契约 (#46)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/50",
+      "author": "Zhu-ShuH",
+      "head": "30b3e769f718a5cff085ffd397e7cb298c35cd93",
+      "merged_at": "2026-10-20T11:55:46Z",
+      "reviews": [
+        {
+          "id": 5584119399,
+          "state": "APPROVED",
+          "commit_id": "30b3e769f718a5cff085ffd397e7cb298c35cd93",
+          "submitted_at": "2026-10-20T11:00:59Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 49,
+      "title": "chore(git): 收口身份钩子说明、shell查找与独立CI复验 (#44)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/49",
+      "author": "Zhu-ShuH",
+      "head": "e27e9f94fa6a53c5c28db9ffcee9c9b4621a46da",
+      "merged_at": "2026-10-20T17:08:15Z",
+      "reviews": [
+        {
+          "id": 5584173230,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "e27e9f94fa6a53c5c28db9ffcee9c9b4621a46da",
+          "submitted_at": "2026-10-20T11:06:50Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5587622027,
+          "state": "APPROVED",
+          "commit_id": "e27e9f94fa6a53c5c28db9ffcee9c9b4621a46da",
+          "submitted_at": "2026-10-20T15:43:08Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 48,
+      "title": "fix(producer): 真值写入失败时不得发布 complete 清单 (#45)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/48",
+      "author": "wxm-1",
+      "head": "161f7529874312d96f24440d5f9d44c3efa477c4",
+      "merged_at": "2026-10-20T08:10:32Z",
+      "reviews": [
+        {
+          "id": 5582410666,
+          "state": "APPROVED",
+          "commit_id": "161f7529874312d96f24440d5f9d44c3efa477c4",
+          "submitted_at": "2026-10-20T08:10:16Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 47,
+      "title": "fix(sim): 采样率超过 1e9 Hz 时明确拒绝，避免时间戳中间量回绕 (#46)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/47",
+      "author": "kittywent",
+      "head": "48936ecc420aa9ad6ccdedc0d6abea8c4a5427e1",
+      "merged_at": "2026-10-20T12:26:40Z",
+      "reviews": [
+        {
+          "id": 5581997554,
+          "state": "COMMENTED",
+          "commit_id": "a07da1a3bcdb457221879616732cd18310202148",
+          "submitted_at": "2026-10-20T07:30:34Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5584665879,
+          "state": "COMMENTED",
+          "commit_id": "48936ecc420aa9ad6ccdedc0d6abea8c4a5427e1",
+          "submitted_at": "2026-10-20T11:59:04Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5584943287,
+          "state": "APPROVED",
+          "commit_id": "48936ecc420aa9ad6ccdedc0d6abea8c4a5427e1",
+          "submitted_at": "2026-10-20T12:26:17Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 43,
+      "title": "fix(contracts): 收口 #34 的编号、时间、归属与失败语义",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/43",
+      "author": "wxm-1",
+      "head": "b2feacfb312f77af4d8f7fb33c9512032ee72608",
+      "merged_at": "2026-10-20T11:57:10Z",
+      "reviews": [
+        {
+          "id": 5572564562,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "8042e5194d60d56866d1dd351de58b2842908daa",
+          "submitted_at": "2026-10-19T13:52:17Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5583068160,
+          "state": "APPROVED",
+          "commit_id": "b2feacfb312f77af4d8f7fb33c9512032ee72608",
+          "submitted_at": "2026-10-20T09:13:31Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5584138624,
+          "state": "APPROVED",
+          "commit_id": "b2feacfb312f77af4d8f7fb33c9512032ee72608",
+          "submitted_at": "2026-10-20T11:03:05Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 42,
+      "title": "fix(sim): timestamp_ns_for 显式拒绝 int64 溢出 (#5)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/42",
+      "author": "kittywent",
+      "head": "3c5bf86a479a9e1b1f2b35fa913bffce0302c189",
+      "merged_at": "2026-10-20T07:37:29Z",
+      "reviews": [
+        {
+          "id": 5573156791,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "39a90758770c5a9f77fac3dc11b07af8fe714b2a",
+          "submitted_at": "2026-10-19T14:34:15Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5581958152,
+          "state": "APPROVED",
+          "commit_id": "3c5bf86a479a9e1b1f2b35fa913bffce0302c189",
+          "submitted_at": "2026-10-20T07:26:19Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 41,
+      "title": "chore(git): 入仓可启用的提交身份检查与隔离复验工具",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/41",
+      "author": "Zhu-ShuH",
+      "head": "4f7c936b68a7e928fe8fa602b8949270c30bf5d6",
+      "merged_at": "2026-10-19T13:01:50Z",
+      "reviews": [
+        {
+          "id": 5570546278,
+          "state": "APPROVED",
+          "commit_id": "4f7c936b68a7e928fe8fa602b8949270c30bf5d6",
+          "submitted_at": "2026-10-19T10:59:06Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 39,
+      "title": "docs(adr): 将 ADR-0003 的 CRLF 行尾规范为 LF",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/39",
+      "author": "Zhu-ShuH",
+      "head": "bcb6c10b9deafcc2173046de852b9a1ca8b3367a",
+      "merged_at": "2026-10-19T13:07:16Z",
+      "reviews": [
+        {
+          "id": 5570540652,
+          "state": "APPROVED",
+          "commit_id": "bcb6c10b9deafcc2173046de852b9a1ca8b3367a",
+          "submitted_at": "2026-10-19T10:58:31Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 37,
+      "title": "docs(contracts): 明示 count=0 空块与非空分片边界",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/37",
+      "author": "Zhu-ShuH",
+      "head": "42e2ae3c970d5079bb3068ad92eadd7da2087c2d",
+      "merged_at": "2026-10-19T14:34:32Z",
+      "reviews": [
+        {
+          "id": 5570538697,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "42e2ae3c970d5079bb3068ad92eadd7da2087c2d",
+          "submitted_at": "2026-10-19T10:58:19Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5572447528,
+          "state": "APPROVED",
+          "commit_id": "42e2ae3c970d5079bb3068ad92eadd7da2087c2d",
+          "submitted_at": "2026-10-19T13:43:22Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5572827645,
+          "state": "APPROVED",
+          "commit_id": "42e2ae3c970d5079bb3068ad92eadd7da2087c2d",
+          "submitted_at": "2026-10-19T14:11:34Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 33,
+      "title": "docs(sim): 回填 ADR-0001 已定稿未决项并加噪声黄金值契约断言 (#32)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/33",
+      "author": "kittywent",
+      "head": "7798dda5bceba96be5ae7fbae24f6ba014a91f02",
+      "merged_at": "2026-10-20T07:36:54Z",
+      "reviews": [
+        {
+          "id": 5567633730,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "9a3e62b0cdb160a60aef25ad4d0774ab3e56606e",
+          "submitted_at": "2026-10-19T06:23:07Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5572334840,
+          "state": "DISMISSED",
+          "commit_id": "f872ce42e624138b7f6cf32cd96eeb5bc4306ded",
+          "submitted_at": "2026-10-19T13:34:27Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5573178109,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "f872ce42e624138b7f6cf32cd96eeb5bc4306ded",
+          "submitted_at": "2026-10-19T14:35:53Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5581933080,
+          "state": "APPROVED",
+          "commit_id": "7798dda5bceba96be5ae7fbae24f6ba014a91f02",
+          "submitted_at": "2026-10-20T07:23:43Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 31,
+      "title": "refactor(contracts): unify SimulationChunk and clarify RNG (#17)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/31",
+      "author": "Zhu-ShuH",
+      "head": "3c562df7d227a3665fc04d66458f9986443df521",
+      "merged_at": "2026-10-18T13:05:26Z",
+      "reviews": [
+        {
+          "id": 5562527811,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "7d65614873ddbfe3b434d508afe70383a8d2837e",
+          "submitted_at": "2026-10-18T10:21:12Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562770112,
+          "state": "APPROVED",
+          "commit_id": "3c562df7d227a3665fc04d66458f9986443df521",
+          "submitted_at": "2026-10-18T11:37:18Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 30,
+      "title": "feat(pipeline): 实现仿真生产入口 produce_run (#11)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/30",
+      "author": "wxm-1",
+      "head": "2c20de33d0cf0d56ae45559db4ad008d3a585a10",
+      "merged_at": "2026-10-20T07:19:31Z",
+      "reviews": [
+        {
+          "id": 5562132034,
+          "state": "COMMENTED",
+          "commit_id": "13dc736a03d811ecbd6cb69df2835f27ba10f5a7",
+          "submitted_at": "2026-10-18T08:33:50Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562146105,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "13dc736a03d811ecbd6cb69df2835f27ba10f5a7",
+          "submitted_at": "2026-10-18T08:38:50Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5562451995,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0e46b4e7b89e8e268b90302bdc7f71f08388f3b6",
+          "submitted_at": "2026-10-18T09:53:56Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562769909,
+          "state": "APPROVED",
+          "commit_id": "24591add587c2de00c48de253a8117badba9c0ca",
+          "submitted_at": "2026-10-18T11:37:16Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562800608,
+          "state": "DISMISSED",
+          "commit_id": "24591add587c2de00c48de253a8117badba9c0ca",
+          "submitted_at": "2026-10-18T11:43:06Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5571281975,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "552786ed13f0dba2336b5075a625814a11fa53d1",
+          "submitted_at": "2026-10-19T12:06:51Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5572757897,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "2c20de33d0cf0d56ae45559db4ad008d3a585a10",
+          "submitted_at": "2026-10-19T14:06:47Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5573175616,
+          "state": "APPROVED",
+          "commit_id": "2c20de33d0cf0d56ae45559db4ad008d3a585a10",
+          "submitted_at": "2026-10-19T14:35:42Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5579435580,
+          "state": "APPROVED",
+          "commit_id": "2c20de33d0cf0d56ae45559db4ad008d3a585a10",
+          "submitted_at": "2026-10-20T00:38:12Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 29,
+      "title": "feat(pipeline): 实现 NPZ 分片原子写入与 SHA-256 校验读取 (#3)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/29",
+      "author": "wxm-1",
+      "head": "d20c32b446f8674f11f54dd5fe3afb0b84f3ca5a",
+      "merged_at": "2026-10-19T06:25:26Z",
+      "reviews": [
+        {
+          "id": 5562099114,
+          "state": "COMMENTED",
+          "commit_id": "ca8ec93c98d637f1ee2a18d9bfff74cdeb33a397",
+          "submitted_at": "2026-10-18T08:22:27Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562134707,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "ca8ec93c98d637f1ee2a18d9bfff74cdeb33a397",
+          "submitted_at": "2026-10-18T08:34:46Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5562445653,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "a9bf2d942465299df9597e7f32681e241c89cd95",
+          "submitted_at": "2026-10-18T09:51:32Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5567083471,
+          "state": "APPROVED",
+          "commit_id": "d20c32b446f8674f11f54dd5fe3afb0b84f3ca5a",
+          "submitted_at": "2026-10-19T04:52:24Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5567642964,
+          "state": "APPROVED",
+          "commit_id": "d20c32b446f8674f11f54dd5fe3afb0b84f3ca5a",
+          "submitted_at": "2026-10-19T06:24:29Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 27,
+      "title": "feat(sim): 实现 spike/step/burst 可控故障注入 (#6)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/27",
+      "author": "wzs-1234",
+      "head": "cb0d7963841ac5f59f6970a6d2a95e0e91fc160e",
+      "merged_at": "2026-10-19T07:44:59Z",
+      "reviews": [
+        {
+          "id": 5562044117,
+          "state": "COMMENTED",
+          "commit_id": "8a72138ef8dbf45abb65fe8415efcb4da4fab0bd",
+          "submitted_at": "2026-10-18T08:04:39Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562123292,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "8a72138ef8dbf45abb65fe8415efcb4da4fab0bd",
+          "submitted_at": "2026-10-18T08:30:42Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5562772267,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "8a72138ef8dbf45abb65fe8415efcb4da4fab0bd",
+          "submitted_at": "2026-10-18T11:37:43Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5567083038,
+          "state": "APPROVED",
+          "commit_id": "cb0d7963841ac5f59f6970a6d2a95e0e91fc160e",
+          "submitted_at": "2026-10-19T04:52:20Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5567632794,
+          "state": "APPROVED",
+          "commit_id": "cb0d7963841ac5f59f6970a6d2a95e0e91fc160e",
+          "submitted_at": "2026-10-19T06:22:58Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 26,
+      "title": "feat(config): 按 interface.md §4 重写配置契约并实现 validate 命令",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/26",
+      "author": "Www9191",
+      "head": "a84ca883d7110fd63c2eddbd2debad49515d7977",
+      "merged_at": "2026-10-18T15:01:47Z",
+      "reviews": [
+        {
+          "id": 5561970733,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "f57ea72279cf5b85014debee1ece202f7cb7b453",
+          "submitted_at": "2026-10-18T07:39:40Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5562042824,
+          "state": "COMMENTED",
+          "commit_id": "f57ea72279cf5b85014debee1ece202f7cb7b453",
+          "submitted_at": "2026-10-18T08:04:18Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562772076,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "f57ea72279cf5b85014debee1ece202f7cb7b453",
+          "submitted_at": "2026-10-18T11:37:41Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5563130806,
+          "state": "APPROVED",
+          "commit_id": "a84ca883d7110fd63c2eddbd2debad49515d7977",
+          "submitted_at": "2026-10-18T13:12:59Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5563271503,
+          "state": "APPROVED",
+          "commit_id": "a84ca883d7110fd63c2eddbd2debad49515d7977",
+          "submitted_at": "2026-10-18T13:55:31Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 25,
+      "title": "chore(ci): 非阻断文档引用检查 (#24)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/25",
+      "author": "Zhu-ShuH",
+      "head": "360c8582a54b7d5148e5676d62ae57ea614fb4c1",
+      "merged_at": "2026-10-19T06:24:18Z",
+      "reviews": [
+        {
+          "id": 5562426016,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "0bf1513e5f3ff702560f13d246cdf31eedf97f69",
+          "submitted_at": "2026-10-18T09:44:09Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562531024,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "360c8582a54b7d5148e5676d62ae57ea614fb4c1",
+          "submitted_at": "2026-10-18T10:22:25Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5563271363,
+          "state": "APPROVED",
+          "commit_id": "360c8582a54b7d5148e5676d62ae57ea614fb4c1",
+          "submitted_at": "2026-10-18T13:55:29Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5567173164,
+          "state": "APPROVED",
+          "commit_id": "360c8582a54b7d5148e5676d62ae57ea614fb4c1",
+          "submitted_at": "2026-10-19T05:09:39Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 23,
+      "title": "docs(A): 共享 G15 开发原型、Skill 与角色任务卡",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/23",
+      "author": "Zhu-ShuH",
+      "head": "d1358fba0f87ccf34a0d4bf442df6a78715c6873",
+      "merged_at": "2026-10-16T08:56:04Z",
+      "reviews": [
+        {
+          "id": 5545298492,
+          "state": "APPROVED",
+          "commit_id": "d1358fba0f87ccf34a0d4bf442df6a78715c6873",
+          "submitted_at": "2026-10-16T08:52:05Z",
+          "reviewer": "Ran2149975600"
+        },
+        {
+          "id": 5567294373,
+          "state": "APPROVED",
+          "commit_id": "d1358fba0f87ccf34a0d4bf442df6a78715c6873",
+          "submitted_at": "2026-10-19T05:29:51Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 21,
+      "title": "docs(A): 确定默认验收标准与 pp03 Python 3.12 环境 (#20)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/21",
+      "author": "Zhu-ShuH",
+      "head": "831d7cc0bd40e0a2d9e04b4ca71635194c88c8df",
+      "merged_at": "2026-10-16T11:04:08Z",
+      "reviews": [
+        {
+          "id": 5546391644,
+          "state": "APPROVED",
+          "commit_id": "831d7cc0bd40e0a2d9e04b4ca71635194c88c8df",
+          "submitted_at": "2026-10-16T10:24:02Z",
+          "reviewer": "Ran2149975600"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 19,
+      "title": "chore(governance): 填写 CODEOWNERS 并修正已建仓状态 (#16)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/19",
+      "author": "Zhu-ShuH",
+      "head": "0b03931b6b2dffee60cdcbb67e019b4117bbe1fc",
+      "merged_at": "2026-10-18T15:01:01Z",
+      "reviews": [
+        {
+          "id": 5562274084,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "ed03c4f7924b3312bb319a6a08e5924dff898de7",
+          "submitted_at": "2026-10-18T09:13:49Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562530968,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "30f9afbe3d8f18b9f1d7e2a86531813d8b03aa0c",
+          "submitted_at": "2026-10-18T10:22:23Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5563280190,
+          "state": "APPROVED",
+          "commit_id": "0b03931b6b2dffee60cdcbb67e019b4117bbe1fc",
+          "submitted_at": "2026-10-18T13:57:28Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 18,
+      "title": "docs(planning): 补齐可行性、需求、架构与 ADR 评审草稿 (#2)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/18",
+      "author": "Zhu-ShuH",
+      "head": "649455f1cafc6ffbf89d1dbea8e073f835cf3690",
+      "merged_at": "2026-10-18T15:00:13Z",
+      "reviews": [
+        {
+          "id": 5562261280,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "fc30a7f98ea98ef14936a7247cf389e97dd342ef",
+          "submitted_at": "2026-10-18T09:11:15Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562533049,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "58b6de2435c4f99d3a7a9c71e4f1da073d1f360c",
+          "submitted_at": "2026-10-18T10:23:11Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5563239012,
+          "state": "APPROVED",
+          "commit_id": "649455f1cafc6ffbf89d1dbea8e073f835cf3690",
+          "submitted_at": "2026-10-18T13:46:53Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5563280117,
+          "state": "APPROVED",
+          "commit_id": "649455f1cafc6ffbf89d1dbea8e073f835cf3690",
+          "submitted_at": "2026-10-18T13:57:27Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 15,
+      "title": "feat(sim): 实现仿真内核（退化趋势 + 噪声）(#5)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/15",
+      "author": "kittywent",
+      "head": "0e5021277d7adbbc21a3d35ebe4da370633e95ef",
+      "merged_at": "2026-10-17T09:23:46Z",
+      "reviews": [
+        {
+          "id": 5543947109,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "79593ecddee57b74f2a105d9dba6a2e51d399da9",
+          "submitted_at": "2026-10-16T06:41:12Z",
+          "reviewer": "Zhu-ShuH"
+        },
+        {
+          "id": 5557169800,
+          "state": "APPROVED",
+          "commit_id": "0e5021277d7adbbc21a3d35ebe4da370633e95ef",
+          "submitted_at": "2026-10-17T09:13:43Z",
+          "reviewer": "Zhu-ShuH"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 14,
+      "title": "docs(guides): 新增全程开发指南、组员操作手册与 AI 提示词手册 (#12)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/14",
+      "author": "Zhu-ShuH",
+      "head": "8457b59680e7366d2ed26b65986dd2a87b51f782",
+      "merged_at": "2026-10-19T06:21:30Z",
+      "reviews": [
+        {
+          "id": 5542896931,
+          "state": "COMMENTED",
+          "commit_id": "0e9e535be750c7caa042c29fa3424f0d7fee436b",
+          "submitted_at": "2026-10-16T03:56:26Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562254539,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "3309de0a8486fc1427678518ab058f14ab9d682b",
+          "submitted_at": "2026-10-18T09:09:58Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5562532942,
+          "state": "CHANGES_REQUESTED",
+          "commit_id": "8457b59680e7366d2ed26b65986dd2a87b51f782",
+          "submitted_at": "2026-10-18T10:23:09Z",
+          "reviewer": "kittywent"
+        },
+        {
+          "id": 5563278151,
+          "state": "APPROVED",
+          "commit_id": "8457b59680e7366d2ed26b65986dd2a87b51f782",
+          "submitted_at": "2026-10-18T13:56:53Z",
+          "reviewer": "wxm-1"
+        },
+        {
+          "id": 5567173047,
+          "state": "APPROVED",
+          "commit_id": "8457b59680e7366d2ed26b65986dd2a87b51f782",
+          "submitted_at": "2026-10-19T05:09:38Z",
+          "reviewer": "kittywent"
+        }
+      ],
+      "classification": "recorded_approval_on_final_head",
+      "page_limit_hit": false
+    },
+    {
+      "number": 1,
+      "title": "chore(repo): 建立 G15 仓库骨架与真实 CI 门禁 (#1)",
+      "url": "https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/1",
+      "author": "Zhu-ShuH",
+      "head": "6f62a99c10950491e3ab8361d0db89b0349b7838",
+      "merged_at": "2026-10-15T03:44:05Z",
+      "reviews": [],
+      "classification": "no_recorded_premerge_nonauthor_approval",
+      "page_limit_hit": false
+    }
+  ]
+}
