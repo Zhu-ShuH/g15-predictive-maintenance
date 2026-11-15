@@ -1,0 +1,20 @@
+{
+  "scope": "process_tree_kernel_seccomp_AF_INET_AF_INET6_socket_and_socketpair_denied",
+  "full_acceptance_offline": false,
+  "no_python_audit_hook": true,
+  "native_libc_socket_checks": {
+    "2": {
+      "result": -1,
+      "errno": 1
+    },
+    "10": {
+      "result": -1,
+      "errno": 1
+    }
+  },
+  "AF_UNIX_allowed": true,
+  "preexisting_socket_descriptors": [],
+  "NoNewPrivs": "1",
+  "Seccomp": "2",
+  "exec_program": "python"
+}

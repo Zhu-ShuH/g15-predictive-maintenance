@@ -1,0 +1,127 @@
+{
+  "python": "3.12.16 (main, Oct 26 2026, 11:37:43) [GCC 15.3.0]",
+  "prefix_matches": true,
+  "locked_count": 20,
+  "packages": [
+    {
+      "name": "astroid",
+      "expected": "4.3.4",
+      "installed": "4.3.4",
+      "match": true
+    },
+    {
+      "name": "black",
+      "expected": "26.10.1",
+      "installed": "26.10.1",
+      "match": true
+    },
+    {
+      "name": "click",
+      "expected": "8.5.0",
+      "installed": "8.5.0",
+      "match": true
+    },
+    {
+      "name": "dill",
+      "expected": "0.4.1",
+      "installed": "0.4.1",
+      "match": true
+    },
+    {
+      "name": "iniconfig",
+      "expected": "2.3.1",
+      "installed": "2.3.1",
+      "match": true
+    },
+    {
+      "name": "isort",
+      "expected": "9.0.2",
+      "installed": "9.0.2",
+      "match": true
+    },
+    {
+      "name": "mccabe",
+      "expected": "0.7.0",
+      "installed": "0.7.0",
+      "match": true
+    },
+    {
+      "name": "mypy_extensions",
+      "expected": "1.1.0",
+      "installed": "1.1.0",
+      "match": true
+    },
+    {
+      "name": "packaging",
+      "expected": "26.3",
+      "installed": "26.3",
+      "match": true
+    },
+    {
+      "name": "pathspec",
+      "expected": "1.1.1",
+      "installed": "1.1.1",
+      "match": true
+    },
+    {
+      "name": "platformdirs",
+      "expected": "4.14.2",
+      "installed": "4.14.2",
+      "match": true
+    },
+    {
+      "name": "pluggy",
+      "expected": "1.7.0",
+      "installed": "1.7.0",
+      "match": true
+    },
+    {
+      "name": "Pygments",
+      "expected": "2.21.0",
+      "installed": "2.21.0",
+      "match": true
+    },
+    {
+      "name": "pylint",
+      "expected": "4.1.3",
+      "installed": "4.1.3",
+      "match": true
+    },
+    {
+      "name": "pytest",
+      "expected": "9.2.0",
+      "installed": "9.2.0",
+      "match": true
+    },
+    {
+      "name": "pytokens",
+      "expected": "0.4.1",
+      "installed": "0.4.1",
+      "match": true
+    },
+    {
+      "name": "PyYAML",
+      "expected": "6.0.3",
+      "installed": "6.0.3",
+      "match": true
+    },
+    {
+      "name": "setuptools",
+      "expected": "84.2.1",
+      "installed": "84.2.1",
+      "match": true
+    },
+    {
+      "name": "tomlkit",
+      "expected": "0.15.2",
+      "installed": "0.15.2",
+      "match": true
+    },
+    {
+      "name": "wheel",
+      "expected": "0.48.0",
+      "installed": "0.48.0",
+      "match": true
+    }
+  ]
+}

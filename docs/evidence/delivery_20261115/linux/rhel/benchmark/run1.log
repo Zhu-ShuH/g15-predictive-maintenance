@@ -1,0 +1,16 @@
+Benchmarked 20261115T044004Z-benchmark_1m-5356b0: 10 parts, 1000000 points, status=complete, verification=passed
+production_window_seconds=0.2412
+production_window_seconds_raw=0.2411544540009345
+production_timing_valid=true
+max_production_seconds=60.0
+production_gate_passed=true
+verification_seconds=0.1368
+cli_wallclock_seconds=unmeasured
+parts=10
+total_points=1000000
+scalar_value_count=2000000
+shard_shape=9x102400+78400
+status=complete
+verification_passed=true
+run_id=20261115T044004Z-benchmark_1m-5356b0
+run_dir=runs/20261115T044004Z-benchmark_1m-5356b0

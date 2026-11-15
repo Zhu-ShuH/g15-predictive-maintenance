@@ -1,0 +1,21 @@
+{
+  "command": [
+    "bash",
+    "scripts/demo.sh"
+  ],
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "isolation": "netns",
+  "started_unix": 1794718432.1747978,
+  "cli_wallclock_seconds": 13.195033841999248,
+  "exit_code": 0,
+  "runs_empty_before": true,
+  "runs_location": "real empty runs directory inside dedicated external archive execution copy, outside original clone and vault",
+  "source_files": 480,
+  "source_files_unchanged": true,
+  "report_generated": true,
+  "report_passed": true,
+  "report_verifiable": true,
+  "alarm_count": 10,
+  "total_points": 1000000
+}

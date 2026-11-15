@@ -1,0 +1,13 @@
+{
+  "collected_utc": "2026-11-15T04:42:17.640120+00:00",
+  "collection_phase": "after business acceptance launch; read-only filesystem observation",
+  "target_scope": "same filesystem as external VM temporary job",
+  "filesystem_type": "ext4",
+  "mountpoint": "/",
+  "block_fragment_bytes": 4096,
+  "total_bytes": 105086115840,
+  "free_bytes": 57658122240,
+  "available_to_user_bytes": 52272795648,
+  "physical_media_type": "unmeasured; no SSD/HDD claim",
+  "method": "os.statvfs and findmnt FSTYPE,TARGET"
+}

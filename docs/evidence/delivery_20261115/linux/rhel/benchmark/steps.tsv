@@ -1,0 +1,4 @@
+run	command_exit	tee_exit	command
+1	0	0	python -m g15 benchmark --config configs/benchmark_1m.yaml --max-production-seconds 60
+2	0	0	python -m g15 benchmark --config configs/benchmark_1m.yaml --max-production-seconds 60
+3	0	0	python -m g15 benchmark --config configs/benchmark_1m.yaml --max-production-seconds 60

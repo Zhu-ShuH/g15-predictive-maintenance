@@ -1,0 +1,55 @@
+{
+  "scope": "Supplement to raw PR review inventory; parent-integration coverage and timeline checked without rewriting historical reviews.",
+  "integration": {
+    "pr": 170,
+    "head": "da4e16908defc7ea67d546213153aaa6846ded5f",
+    "approved_review_id": 5903247988,
+    "approved_at": "2026-11-14T08:45:51Z",
+    "merged_at": "2026-11-14T08:51:41Z",
+    "included_heads": [
+      {
+        "pr": 164,
+        "sha": "fa5eb3a795e39306e5d31741046a6f9dd0218d47"
+      },
+      {
+        "pr": 168,
+        "sha": "98712ea650a6cccc9039b32bfd6695726b33d762"
+      },
+      {
+        "pr": 169,
+        "sha": "33eacc0b4418d2d9f85856a8043d0a6c777020c8"
+      }
+    ],
+    "ancestor_check": "git merge-base --is-ancestor: exit 0 for all three; this establishes source inclusion, not separate approvals on their own PRs"
+  },
+  "pr155": {
+    "merged_at": "2026-11-14T08:04:42Z",
+    "same_head_approval_at": "2026-11-14T16:19:19Z",
+    "approval_review_id": 5905751988,
+    "head": "71ce61924d6497c00e82a2f7b0dbd42d71cee93c",
+    "previous_approval_dismissed_at": "2026-11-14T06:35:07Z",
+    "conclusion": "Same-head approval exists only after merge; it cannot satisfy prior-approval chronology."
+  },
+  "pr164": {
+    "review_id": 5903001689,
+    "dismissed_at": "2026-11-14T08:21:59Z",
+    "dismissal_reason": "The base branch was changed.",
+    "conclusion": "Current-head approval was dismissed before merge; final combined PR170 has a separate exact-head approval."
+  },
+  "no_formal_review_on_own_pr": [
+    1,
+    104,
+    168,
+    169,
+    175,
+    176
+  ],
+  "teacher_disposition_needed": [
+    1,
+    104,
+    155,
+    175,
+    176
+  ],
+  "limitations": "Current snapshots do not certify all historical rule compliance or reviewer independence. Nested PR approvals must be distinguished from approved integration coverage; teacher decides treatment."
+}

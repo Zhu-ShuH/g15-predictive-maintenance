@@ -1,6 +1,10 @@
 # G15 收尾状态与交付入口
 
-2026-11-15：A 按已确认的工程验证范围完成交付收尾。**工程矩阵10/10通过、事件6/6检出；原独立验收未满足。** [范围决定](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6881950509)在数据生成前记录；#56/#9 的原独立目标停止并按 not_planned 关闭，关闭状态不代表原终验通过。
+2026-11-15：已完成的是 #56 工程验证收尾，**工程矩阵10/10通过、事件6/6检出；原独立验收未满足。** [范围决定](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/56#issuecomment-6881950509)在数据生成前记录；#56/#9 的原独立目标停止并按 not_planned 关闭，关闭状态不代表原终验通过。
+
+当前 [#177](https://github.com/Zhu-ShuH/g15-predictive-maintenance/issues/177) 基于 `1cc3d5f2b9ea0b6f5ceb969a2637844feeb410e1` 准备正式交付。统一入口为[交付清单](delivery_readiness_20261115.md)：A可执行的文档与工程复证、真实非作者Review、成员贡献/讲解和教师范围裁定分别记录，不预填本轮新测试或最终通过。
+
+本轮A侧整改与工程复证已完成并形成[交付报告](final_delivery_report.md)：产品提交16d57df4完成双系统新克隆、完整验收、三轮百万点、配置A/B及强杀五表对账；网络隔离范围见[实测](delivery_validation_20261115.md)。[PR #178](https://github.com/Zhu-ShuH/g15-predictive-maintenance/pull/178)尚须最终head真实非作者批准，当前未合并；下面旧工程批次与本次产品复证分别归档。
 
 | 项目 | 最终事实 | 交付或证据入口 |
 |---|---|---|
@@ -9,13 +13,17 @@
 | #56 实施 | PR #175 交付持久选择账本、固定源码审计绑定及冻结执行工具；原选择流程停止在三事件/pending，未伪造声明 | [执行说明](holdout_execution.md)、[原基线](adr/0006-independent-validation-baseline.json) |
 | 工程验证 | 源码0292cc04，4065886415+公开对照42，10配置/40命令成功、TP6/FN0；正常零告警，退化各1告警完整列出 | [冻结、逐例、逐事件证据](engineering_validation_20261115.md) |
 | #9 独立验收 | 报告实现和工程结果已交付；原独立验收未满足，independent_acceptance=false | [测试报告](test_report.md)、[原独立协议](adr/0006-independent-validation-protocol.md) |
-| 质量 | 被测源码CI806四job成功，Python3.11/3.12各2048 passed/15 skipped；文档收尾PR另有自身CI | [CI806](https://github.com/Zhu-ShuH/g15-predictive-maintenance/actions/runs/43623695752) |
+| 质量 | 本轮产品16d57df4的Python3.11/3.12 CI各2075 passed/15 skipped，四job成功；Windows2067/23；后续文档head CI另核 | [本轮质量记录](evidence/delivery_20261115/candidate-quality.json) |
 | 容量 | Gate0 FAILED、AND=false，原9/新26失败保留；停止修复与重测，#136关闭留档；100k未验证 | [测试报告](test_report.md) §10 |
-| 双系统与现场 | Ubuntu/RHEL已有历史主链、质量、故障恢复和百万点证据；最终候选整包复证、教师注入、个人讲解未完成 | 按具体SHA和环境使用历史证据，不预先标通过 |
+| 双系统与现场 | 固定产品16d57df4两系统完整验收、三轮百万点和恢复对账通过；教师现场注入与个人讲解仍待完成 | [真实结果与隔离范围](delivery_validation_20261115.md) |
 
 ## 保存与使用
 
 源码、报告和部署入口可按README与现场手册交付；本次收尾不代替课程/教师验收。未来恢复独立验证、容量或现场工作须另立受控范围，不把已停止事项留成默认后台待办。
+
+#177已承接交付准备与授权复证；原独立批次及100k仍不恢复。#175/#176合并时无正式Review，其他审批路径见[全仓盘点](evidence/delivery_20261115/pr-review-inventory.json)与[合规说明](compliance.md#6-177-审批贡献与范围确认)。补审不能改写合并前未批准的历史，新PR必须真实非作者Approve和CI后合并；教师是否接受历史例外另记真实结论。
+
+贡献基线203提交（160非merge、43merge）、C5=0；私有姓名映射和真实贡献须成员确认，周频不擅自按人人每周3次加码。答辩三必答、一抽答和70%记录见[演练模板](presentation.md#7-三必答一抽答的要点与本人演练记录)，均待真实本人完成。L3实物、协议与分布式考量见[矩阵](compliance.md#7-l3-实物协议与分布式考量)，不把100k设为统一课纲前提；原独立性或双系统承诺未获教师接受缩减前仍保留未满足。
 
 测试及完整运行目录、SQLite、原始NPZ、pytest缓存和临时目录始终位于Obsidian规划库之外。output只保存普通用户可读的摘要与证据。公开材料不含个人机器路径、凭据、原始数据库或大型数据。
 

@@ -1,0 +1,7 @@
+{
+  "test_asserted_ConsumptionError_matching_sha256_is": true,
+  "expected_sha256": "a53d95a6b5d994aec8e991509fc8abae6b85fdcfe3ea7c686a35a08b057a6e8b",
+  "corrupted_sha256": "6b399d7b74a8cd7e65b99d1cb2adde942ad5f7d0f4cae9327afe6580aac0c5e8",
+  "database_exists": true,
+  "feature_windows_after_refusal": 0
+}

@@ -1,0 +1,29 @@
+{
+  "source_commit": "16d57df485d428c02914bac372b61c67917857da",
+  "source_tree": "ff341152a41daa68cbc3d08597649c386f3332ca",
+  "platform": "ubuntu",
+  "full_pytest": {
+    "passed": 2075,
+    "skipped": 15,
+    "seconds": 231.41
+  },
+  "black": {
+    "scope": "src tests (scripts/verify.sh)",
+    "files_unchanged": 125
+  },
+  "pylint_score": 9.67,
+  "fault_suite": {
+    "passed": 11,
+    "seconds": 3.86
+  },
+  "full_acceptance_external_network_isolated": false,
+  "ubuntu_full_acceptance_network": "normal networking; additional core+retained fault process tree runs with kernel seccomp",
+  "benchmark_cli_wallclock": "unmeasured",
+  "benchmark_peak_rss": "unmeasured",
+  "query_capacity_or_100k_run": false,
+  "raw_verify_log_sha256": "becbb5900fa3eb8ba432ff80dc99dcf4f457a3608e69d6eca9460030da5dc66a",
+  "raw_fault_log_sha256": "44ea388ee71bdb3199964f84d630ace775ad6ad91aa768b8f92f8f9aaaaeea0a",
+  "raw_source_before_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+  "raw_source_after_manifest_sha256": "c648ea08043a30f0f2cbe57d128aa6545bc9c7b13b1dd8c2fc94e29a88983a50",
+  "source_before_after_manifest_identical": true
+}
