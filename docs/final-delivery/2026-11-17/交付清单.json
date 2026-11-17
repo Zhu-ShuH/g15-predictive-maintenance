@@ -95,11 +95,6 @@
     "sha256": "f91e7efe4a8f177c79e281806c7bcfd18f6e89b3bfe1f99a008077e50246bf11"
   },
   {
-    "file": "交付清单.json",
-    "bytes": 3257,
-    "sha256": "9ae0436fdc7b8e5d82f8e1d6b76b27be1d641a5a05a5ecd4f3346f2b7608d828"
-  },
-  {
     "file": "交付说明.txt",
     "bytes": 339,
     "sha256": "0f5d1e75d7c7cb85d80e48040482c8b3171e94345ce4c334f514ef85076d9591"
