@@ -1,0 +1,102 @@
+[
+  {
+    "file": "G15_01_可行性分析报告.docx",
+    "bytes": 42647,
+    "sha256": "96163df0dd3a4d2ad1f24ebdedd94ad444592cd318781de56649f84303ab9aab"
+  },
+  {
+    "file": "G15_01_可行性分析报告.pdf",
+    "bytes": 444359,
+    "sha256": "a5f2b17dd898988375638ba54cd414a8a7e663d63c07e3c96213ed6e99c78b80"
+  },
+  {
+    "file": "G15_02_需求分析报告.docx",
+    "bytes": 44411,
+    "sha256": "71bf34e4396de7cc2cf5efbf350fa1ddb221fdba12ca67274c3531d4bd89ab72"
+  },
+  {
+    "file": "G15_02_需求分析报告.pdf",
+    "bytes": 471663,
+    "sha256": "b671ac3744a622d893a787e5b60208cc94bfe366cd303cb28585d183e90363b5"
+  },
+  {
+    "file": "G15_03_软件概要设计报告.docx",
+    "bytes": 436723,
+    "sha256": "e168af70461b3bc28e8ff6f030536757d23956d5a3fd21589aaceecc5bc6c184"
+  },
+  {
+    "file": "G15_03_软件概要设计报告.pdf",
+    "bytes": 859542,
+    "sha256": "d2f074d73054797ffef936d2b1e4a6075d442246d6d4bcfffd058e90bfd3dc78"
+  },
+  {
+    "file": "G15_04_软件详细设计报告.docx",
+    "bytes": 381882,
+    "sha256": "6984448773bd04d2825d943782fb8b5d3d9985185cf8f7695db2c98356bcfc67"
+  },
+  {
+    "file": "G15_04_软件详细设计报告.pdf",
+    "bytes": 1013051,
+    "sha256": "e8f267767a3b018d4f0bc93b9b017f905784e272d1405cc319723f1ccdc8e017"
+  },
+  {
+    "file": "G15_05_软件测试报告.docx",
+    "bytes": 59115,
+    "sha256": "30f67892ba4e9ef6fcf5c03c2241ddd9fb3fdbe7c3d021092d3faaad0497844a"
+  },
+  {
+    "file": "G15_05_软件测试报告.pdf",
+    "bytes": 639375,
+    "sha256": "c1c91d1e7d2a96f39770f3050f5b4e91ad70eca55c5b761fa1f9ed2712de944b"
+  },
+  {
+    "file": "G15_06_Ubuntu 24.04 LTS 部署与运维报告.docx",
+    "bytes": 54368,
+    "sha256": "5830fd444aed718c18ca4e9d1d0648b6117f5346dcfcb31bd5887fed77a6c789"
+  },
+  {
+    "file": "G15_06_Ubuntu 24.04 LTS 部署与运维报告.pdf",
+    "bytes": 635400,
+    "sha256": "d55315fa0b7c42503892a0058139ed37619ac67028cf67825625b856a437ea38"
+  },
+  {
+    "file": "G15_07_RHEL 9 部署与运维报告.docx",
+    "bytes": 54553,
+    "sha256": "7b4dd15596438108f80916e4e00c43495378a6b78f2b8d3766d46f0dcb359538"
+  },
+  {
+    "file": "G15_07_RHEL 9 部署与运维报告.pdf",
+    "bytes": 635775,
+    "sha256": "df619c8b014e58131f9d1752c76247c6739cc1499f7c14aa9b62fa305cdbc779"
+  },
+  {
+    "file": "G15_汇报讲稿.txt",
+    "bytes": 5238,
+    "sha256": "5795ff2b4e96142f512967b2e96b618da95306b8edf817801a0c281d17b7c437"
+  },
+  {
+    "file": "G15_项目汇报.html",
+    "bytes": 10928892,
+    "sha256": "d33cc7533834e9a3d49ec88823f844b121485ad2b7da1a044256417bc377e98c"
+  },
+  {
+    "file": "G15_项目汇报.pptx",
+    "bytes": 1526078,
+    "sha256": "2587777268ec27acff72392b21b9266d7096f572a8d1cef7c006699f9ea2d0fa"
+  },
+  {
+    "file": "processon-knowledge.jpg",
+    "bytes": 92713,
+    "sha256": "77171770953e91c14fd79942a7180390262ab0ae81a37a43d590ac0f6641a2f8"
+  },
+  {
+    "file": "processon-sqlite.jpg",
+    "bytes": 91024,
+    "sha256": "f91e7efe4a8f177c79e281806c7bcfd18f6e89b3bfe1f99a008077e50246bf11"
+  },
+  {
+    "file": "交付说明.txt",
+    "bytes": 339,
+    "sha256": "0f5d1e75d7c7cb85d80e48040482c8b3171e94345ce4c334f514ef85076d9591"
+  }
+]
