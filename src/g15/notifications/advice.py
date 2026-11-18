@@ -2,24 +2,9 @@
 
 from __future__ import annotations
 
-import math
-import re
 from typing import Mapping, Sequence
 
-_CHECKS = {
-    "mean": "复核振动均值偏移、传感器零点与当前工况。",
-    "std": "复核振动波动、运行稳定性与负载变化，并安排复测。",
-    "rms": "复核振动 RMS、传感器安装、设备紧固与负载变化。",
-    "ptp": "检查峰峰值对应的冲击区段，复核紧固情况和异常工况。",
-    "kurtosis_excess": "结合原始波形复核冲击性成分与异常采样点。",
-    "dominant_freq_hz": "复核主频变化、转速与采样配置，不直接归因到具体零部件。",
-    "crest_factor": "复核峰值因子与冲击区段，检查传感器安装和设备紧固。",
-    "zero_crossing_rate": "复核过零率变化、频谱特征与采样质量。",
-}
-_NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
-_MEASUREMENT = re.compile(
-    rf"^\s*([a-z][a-z0-9_]*)=({_NUMBER})\s*\(risk\s+({_NUMBER})\)", re.I
-)
+from g15.knowledge.catalog import describe_match, match_knowledge
 
 
 def maintenance_advice(
@@ -62,22 +47,7 @@ def maintenance_advice(
             if active in ("yellow", "red"):
                 actions.append("活动告警的来源记录缺失，先复核告警证据。")
             continue
-        found = []
-        match = re.search(
-            r"(?:^|;\s*)drivers:\s*([^;]+)", str(source.get("reason", ""))
-        )
-        if match:
-            for part in match[1].split(","):
-                value = _MEASUREMENT.match(part)
-                if value:
-                    feature, number, risk = value.groups()
-                    if (
-                        math.isfinite(float(number))
-                        and math.isfinite(float(risk))
-                        and 0 <= float(risk) <= 1
-                        and feature.lower() in _CHECKS
-                    ):
-                        found.append(_CHECKS[feature.lower()])
+        found = [describe_match(item) for item in match_knowledge(source)]
         actions.extend(
             found
             or ["查看来源告警原因，复核对应特征、采样质量、传感器安装与当前工况。"]

@@ -131,6 +131,9 @@ def _service(tmp_path, public_runs):
     assets.mkdir()
     for name in (
         "index.html",
+        "knowledge.html",
+        "knowledge.js",
+        "knowledge.css",
         "screen.html",
         "operations.html",
         "diagnosis.html",
@@ -216,6 +219,9 @@ def test_catalog_assets_head_and_secret_redaction(service, caplog):
     assert "Access-Control-Allow-Origin" not in headers
     for route in (
         "/",
+        "/knowledge",
+        "/assets/knowledge.js",
+        "/assets/knowledge.css",
         "/screen",
         "/operations",
         "/diagnosis",

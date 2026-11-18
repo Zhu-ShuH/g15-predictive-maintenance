@@ -1,3 +1,4 @@
+import { maintenanceCatalog } from "./maintenance-catalog.js";
 /* State and same-origin data operations for the read-only G15 console. */
 export const VIEWS = ["health", "alarms", "maintenance", "reports", "notifications"];
 export const deviceKey = (device) => JSON.stringify([device.run_id, device.device_id]);
@@ -46,21 +47,15 @@ export function filterAlarms(rows, level, search) {
       .some((value) => String(value ?? "").toLocaleLowerCase().includes(needle))));
 }
 
-const FEATURE_CHECKS = Object.freeze({
-  mean: "复核振动均值偏移、传感器零点与当前工况。",
-  std: "复核振动波动、运行稳定性与负载变化，并安排复测。",
-  rms: "复核振动 RMS、传感器安装、设备紧固与负载变化。",
-  ptp: "检查峰峰值对应的冲击区段，复核紧固情况和异常工况。",
-  kurtosis_excess: "结合原始波形复核冲击性成分与异常采样点。",
-  dominant_freq_hz: "复核主频变化、转速与采样配置，不直接归因到具体零部件。",
-  crest_factor: "复核峰值因子与冲击区段，检查传感器安装和设备紧固。",
-  zero_crossing_rate: "复核过零率变化、频谱特征与采样质量。",
-});
+const KNOWLEDGE_ENTRIES = Object.freeze(Object.fromEntries(
+  maintenanceCatalog.entries.map((entry) => [entry.feature, entry])));
+const FEATURE_CHECKS = Object.freeze(Object.fromEntries(maintenanceCatalog.entries.map(
+  (entry) => [entry.feature, `${entry.action} [知识 ${entry.id} / ${maintenanceCatalog.version} / ${maintenanceCatalog.source_id}；课程示例]`])));
 const ACTIVE_LEVELS = new Set(["yellow", "red"]);
 
 const NUMBER_PATTERN = String.raw`[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?`;
 const MEASUREMENT_PATTERN = new RegExp(
-  `^\\s*([a-z][a-z0-9_]*)=(${NUMBER_PATTERN})\\s*\\(risk\\s+(${NUMBER_PATTERN})\\)`, "i"
+  `^\\s*([a-z][a-z0-9_]*)=(${NUMBER_PATTERN})\\s*\\(risk\\s+(${NUMBER_PATTERN})\\)(?:\\s+<=\\s+(?:red|yellow) threshold ${NUMBER_PATTERN})?\\s*$`, "i"
 );
 export function alarmMeasurements(alarm) {
   if (typeof alarm.reason !== "string") return [];
@@ -74,7 +69,7 @@ export function alarmMeasurements(alarm) {
   return [...new Map(rows.map((row) => [row.name, row])).values()];
 }
 function alarmDrivers(alarm) {
-  return [...new Set(alarmMeasurements(alarm).map((row) => row.name)
+  return [...new Set(alarmMeasurements(alarm).filter((row) => row.risk > 0).map((row) => row.name)
     .filter((name) => Object.hasOwn(FEATURE_CHECKS, name)))];
 }
 
@@ -93,7 +88,7 @@ export function maintenanceAdvice(state) {
   const alarmsByRule = new Map();
   for (const alarm of Array.isArray(state.alarms) ? state.alarms : []) {
     if (!alarm || typeof alarm.rule_id !== "string" ||
-        !Number.isSafeInteger(alarm.start_seq) || !ACTIVE_LEVELS.has(alarm.level)) continue;
+        !Number.isSafeInteger(alarm.start_seq) || alarm.start_seq < 0 || !ACTIVE_LEVELS.has(alarm.level)) continue;
     const rows = alarmsByRule.get(alarm.rule_id) || [];
     rows.push(alarm); alarmsByRule.set(alarm.rule_id, rows);
   }
@@ -126,6 +121,10 @@ export function maintenanceAdvice(state) {
       urgency: activeLevel === "red" ? "优先现场核查" : activeLevel === "yellow" ? "安排近期点检" : "历史告警复核",
       drivers, basis: typeof source.reason === "string" ? source.reason : "来源未提供原因",
       actions,
+      knowledge: drivers.map((name) => ({ entryId: KNOWLEDGE_ENTRIES[name].id,
+        version: maintenanceCatalog.version, source: maintenanceCatalog.source,
+        sourceId: maintenanceCatalog.source_id, exampleOnly: true,
+        evidence: alarmMeasurements(source).find((row) => row.name === name) })),
     });
   }
   for (const [ruleId, level] of activeLevels) {
@@ -620,4 +619,9 @@ export function plotLayout(containerWidth, containerHeight) {
   const height = Math.max(180, Math.round(finite(containerHeight) ? containerHeight : 180));
   return { width, height, left: 38, right: width - 16, top: 20, bottom: height - 36,
     plotWidth: width - 54, plotHeight: height - 56 };
+}
+
+// Presentation-only shortening; canonical provenance remains intact.
+export function maintenanceSourceLabel(source) {
+  return String(source ?? "").replace(/，课程示例，未经设备厂商验证$/, "");
 }

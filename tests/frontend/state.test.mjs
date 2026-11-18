@@ -727,3 +727,25 @@ for (const frozen of ["history", "full", "reports"]) {
     store.destroy();
   });
 }
+
+test("maintenance knowledge exposes provenance and rejects zero/invalid drivers", () => {
+  const input = {healthStatus: "ready", states: [{rule_id: "rule", state: {active_level: "red"}}],
+    alarms: [{...alarm(10, "red"), reason: "health 30; drivers: rms=2 (risk 0.9), mean=0 (risk 0)"}]};
+  const item = maintenanceAdvice(input).items[0];
+  assert.deepEqual(item.drivers, ["rms"]);
+  assert.equal(item.knowledge[0].entryId, "KB-003");
+  assert.equal(item.knowledge[0].exampleOnly, true);
+  assert.match(item.actions[0], /2026-11-17.1.*G15-EXAMPLE-001/);
+  input.alarms[0].reason = "drivers: rms=2 (risk 0.9)garbage";
+  assert.equal(maintenanceAdvice(input).items[0].knowledge.length, 0);
+});
+
+test("maintenance duplicate drivers follow last valid evidence and reject negative windows", () => {
+  const input = {healthStatus: "ready", states: [], alarms: [{...alarm(10, "red"),
+    reason: "drivers: rms=2 (risk 0.9), rms=0 (risk 0)"}]};
+  assert.equal(maintenanceAdvice(input).items[0].knowledge.length, 0);
+  input.alarms[0].reason = "drivers: rms=0 (risk 0), rms=2 (risk 0.9)";
+  assert.equal(maintenanceAdvice(input).items[0].knowledge[0].evidence.risk, 0.9);
+  input.alarms[0].start_seq = -1;
+  assert.equal(maintenanceAdvice(input).items.length, 0);
+});

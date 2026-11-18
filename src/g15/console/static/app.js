@@ -1,5 +1,5 @@
 import { createConsoleStore, deviceKey, latestWindow, chronological, activeStatus,
-  reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout, liveDevice, liveStatus, deviceStatus, selectedDeviceStatus, VIEWS, maintenanceAdvice } from "./state.js";
+  reportVerdict, detectionText, filterAlarms, locationSelection, apiUrl, finite, plotLayout, liveDevice, liveStatus, deviceStatus, selectedDeviceStatus, VIEWS, maintenanceAdvice, maintenanceSourceLabel } from "./state.js";
 import { mountNotifications } from "./notifications.js";
 
 const $ = (id) => document.getElementById(id);
@@ -264,7 +264,13 @@ export function startConsole() {
         store.setAlarmFilter("all", item.ruleId); store.setView("alarms");
       });
       footer.append(sourceButton);
-      card.append(heading, source, basis, drivers, actions, footer);
+      for (const match of item.knowledge) {
+        const link = node("a", `查看规则 ${match.entryId}`, "text-button");
+        link.href = `/knowledge#${encodeURIComponent(match.entryId)}`;
+        footer.append(link);
+      }
+      const knowledge = node("p", item.knowledge.length ? `知识来源：${maintenanceSourceLabel(item.knowledge[0].source)}` : "未匹配知识条目，仅提供通用复核提示。", "maintenance-basis");
+      card.append(heading, source, basis, drivers, actions, knowledge, footer);
       return card;
     });
     $("maintenance-list").replaceChildren(...(cards.length ? cards : [node("p",

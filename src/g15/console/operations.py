@@ -22,6 +22,7 @@ from typing import Callable
 from g15.live.runtime import _WriterLock
 from g15.live.schema import load_live_session
 from g15.notifications.advice import maintenance_advice
+from g15.knowledge.catalog import match_knowledge
 from g15.pipeline.schema import DataContractError, ManifestStatus, manifest_from_dict
 from g15.storage.database import connect_readonly
 from g15.storage.repository import StorageError, decode_features_json
@@ -539,6 +540,7 @@ class OperationsController:
                     [item], [{"rule_id": rule, "state": {"active_level": level}}]
                 )
             )
+            item["knowledge_matches"] = list(match_knowledge(item))
             alarms.append(item)
         return alarms
 

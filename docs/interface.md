@@ -878,3 +878,11 @@ POST 200 另带 `request={request_id,action,event_id,replayed}`。同会话相�
 - 新增live CLI可选 `--operations-root`，缺省 `<output-root>/workbench`；启动时注册有界、已结束的本机历史会话。服务停止关闭处置写入锁，异常不跳过其他清理。
 
 具体字段、限额、导出与验收边界见[回放与运行对比](workbench.md)。本地自动复核不代替正式接口Review、用户整体体验验收或项目Gate0结论。
+
+## 维护建议知识库增补（2026-11-17，待人工评审）
+
+保持评分、告警、SQLite 核心契约不变。建议层使用版本化文件知识源，
+来源和条目标识随建议展示；运营回放告警新增只读 `knowledge_matches`，
+结构及限制见 [维护知识库](maintenance_knowledge.md)。
+匹配仅使用已存公开告警证据，不读真值，不自动诊断或控制设备。
+这是冻结版之后的增补，尚未成为已评审或已验收的功能。

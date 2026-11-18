@@ -98,6 +98,14 @@ def test_replay_is_real_complete_analysis_and_no_truth_read(experiment, monkeypa
     assert detail["configuration"]["parameters"] == PRESETS[2]
     assert detail["configuration"]["rule_ids"]
     assert all(row["advice"] for row in detail["alarms"])
+    matches = [match for row in detail["alarms"] for match in row["knowledge_matches"]]
+    assert matches
+    assert all(match["example_only"] for match in matches)
+    assert all(match["knowledge_version"] == "2026-11-17.1" for match in matches)
+    for row in detail["alarms"]:
+        for match in row["knowledge_matches"]:
+            assert match["evidence"]["start_seq"] == row["start_seq"]
+            assert match["evidence"]["reason"] == row["reason"]
     by_start = {row[0]: row[1] for row in windows}
     for alarm in detail["alarms"]:
         assert alarm["end_seq_exclusive"] == by_start[alarm["start_seq"]]
